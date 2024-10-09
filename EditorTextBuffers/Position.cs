@@ -5,7 +5,7 @@
 /// </summary>
 /// <param name="LineNumber">Line number (starts at 1)</param>
 /// <param name="Column">Column (the first character in a line is between column 1 and column 2)</param>
-public record class Position(int LineNumber, int Column) : IPosition
+public readonly record struct Position(int LineNumber, int Column) : IPosition
 {
     /// <summary>
     /// Derive a new position from this position.

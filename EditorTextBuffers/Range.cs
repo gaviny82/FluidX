@@ -1,6 +1,6 @@
 ﻿namespace EditorTextBuffers;
 
-public class Range : IRange
+public readonly record struct Range : IRange
 {
     public int StartLineNumber { get; }
     public int StartColumn { get; }
@@ -216,8 +216,8 @@ public class Range : IRange
 
     public static Range FromPositions(Position start, Position? end = null)
     {
-        end ??= start;
-        return new Range(start.LineNumber, start.Column, end.LineNumber, end.Column);
+        Position endPos = end ?? start;
+        return new Range(start.LineNumber, start.Column, endPos.LineNumber, endPos.Column);
     }
 
     public static Range? Lift(IRange? range)
