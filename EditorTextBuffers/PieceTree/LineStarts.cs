@@ -8,7 +8,6 @@ internal class LineStarts
     public required int CRLF { get; init; }
     public required bool IsBasicAscii { get; init; }
 
-    // TODO: Review usage of this function and the readonly implementation
     public static List<int> CreateFast(string str)
     {
         List<int> r = [0];
