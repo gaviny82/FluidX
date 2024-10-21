@@ -1,4 +1,5 @@
 ﻿using EditorTextBuffers.Contracts;
+using System.Reflection.Emit;
 
 namespace EditorTextBuffers.PieceTree;
 
@@ -237,32 +238,4 @@ public class PieceTreeTextBuffer : ITextBuffer
     //}
 
     #endregion
-}
-
-file static class StringExtensions
-{
-    // TODO: SIMD or LINQ optimization
-    // TODO: Check TS strings.firstNonWhitespaceIndex and strings.lastNonWhitespaceIndex
-    public static int FirstNonWhitespaceIndex(this string str)
-    {
-        int i = 0;
-        while (char.IsWhiteSpace(str[i]))
-        {
-            i++;
-        }
-        if (i == str.Length - 1) // All whitespaces
-            return -1;
-        else
-            return i;
-    }
-
-    public static int LastNonWhitespaceIndex(this string str)
-    {
-        int i = str.Length - 1;
-        while (i >= 0 && char.IsWhiteSpace(str[i]))
-        {
-            i--;
-        }
-        return i; // i is -1 if all whitespaces
-    }
 }

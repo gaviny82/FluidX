@@ -82,7 +82,7 @@ internal class LineStarts
             }
             else
             {
-                if (isBasicASCII && chr != '\t' && (chr < 32 || chr > 126))
+                if (isBasicASCII && !chr.IsBasicASCII())
                     isBasicASCII = false;
             }
         }

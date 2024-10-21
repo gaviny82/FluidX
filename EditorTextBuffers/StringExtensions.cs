@@ -28,4 +28,21 @@ internal static partial class StringExtensions
     /// <param name="str"><see cref="string"/> to test</param>
     /// <returns><see langword="true"/> if <paramref name="str"/> contains LINE SEPARATOR (LS) or PARAGRAPH.</returns>
     public static bool ContainsUnusualLineTerminators(this string str) => ContainsUnusualLineTerminatorsRegex.IsMatch(str);
+
+
+    /// <summary>
+    /// Returns first index of the string that is not whitespace.
+    /// </summary>
+    /// <param name="str"></param>
+    /// <returns>Index of the first non-whitespace character, or -1 if the string is empty or contains only whitespaces.</returns>
+    /// <remarks>Whitespace characters are ' ' and '\t'.</remarks>
+    public static int FirstNonWhitespaceIndex(this string str) => str.IndexOfAny([' ', '\t']);
+
+    /// <summary>
+    /// Returns last index of the string that is not whitespace.
+    /// </summary>
+    /// <param name="str"></param>
+    /// <returns>Index of the last non-whitespace character, or -1 if the string is empty or contains only whitespaces.</returns>
+    /// <remarks>Whitespace characters are ' ' and '\t'.</remarks>
+    public static int LastNonWhitespaceIndex(this string str) => str.LastIndexOfAny([' ', '\t']);
 }
