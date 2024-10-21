@@ -408,7 +408,7 @@ public class PieceTreeBase
             // the char we want to fetch is at the head of next node.
             var matchingNode = nodePos.Node.Next();
             if (matchingNode is null)
-                return 0;
+                return '\0';
 
             var buffer = _buffers[matchingNode.Piece.BufferIndex];
             int startOffset = OffsetInBuffer(matchingNode.Piece.BufferIndex, matchingNode.Piece.Start);

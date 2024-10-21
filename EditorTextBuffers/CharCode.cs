@@ -439,7 +439,7 @@ public enum CharCode : int
      * Unicode Character 'ZERO WIDTH NO-BREAK SPACE' (U+FEFF)
      * http://www.fileformat.info/info/unicode/char/feff/index.htm
      */
-    UTF8_BOM = 65279,
+    UTF8_BOM = 65279,                                       // U+FEFF   BYTE ORDER MARK
 
     U_FULLWIDTH_SEMICOLON = 0xFF1B,                         // U+FF1B   FULLWIDTH SEMICOLON
     U_FULLWIDTH_COMMA = 0xFF0C,                             // U+FF0C   FULLWIDTH COMMA

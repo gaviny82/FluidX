@@ -78,18 +78,18 @@ public class PieceTreeTextBufferFactory
 public class PieceTreeTextBufferBuilder
 {
     private readonly List<StringBuffer> _chunks = [];
-    private string BOM = "";
+    private string _BOM = ""; // Either "" or "\uFEFF"
 
     private bool _hasPreviousChar = false;
     private char _previousChar = '\0';
     private readonly List<int> _tmpLineStarts = [];
 
-    private int cr = 0;
-    private int lf = 0;
-    private int crlf = 0;
-    private bool containsRTL = false;
-    private bool containsUnusualLineTerminators = false;
-    private bool isBasicASCII = true;
+    private int _cr = 0;
+    private int _lf = 0;
+    private int _crlf = 0;
+    private bool _containsRTL = false;
+    private bool _containsUnusualLineTerminators = false;
+    private bool _isBasicASCII = true;
 
     public void AcceptChunk(string chunk)
     {
@@ -99,7 +99,7 @@ public class PieceTreeTextBufferBuilder
         if (_chunks.Count == 0 && chunk.StartsWith((char)CharCode.UTF8_BOM))
         {
             char bom = (char)CharCode.UTF8_BOM;
-            BOM = bom.ToString();
+            _BOM = bom.ToString();
             chunk = chunk.Substring(1);
         }
 
@@ -134,21 +134,58 @@ public class PieceTreeTextBufferBuilder
         var lineStarts = LineStarts.Create(_tmpLineStarts, chunk);
 
         _chunks.Add(new StringBuffer(chunk, lineStarts.Starts));
-        cr += lineStarts.CR;
-        lf += lineStarts.LF;
-        crlf += lineStarts.CRLF;
+        _cr += lineStarts.CR;
+        _lf += lineStarts.LF;
+        _crlf += lineStarts.CRLF;
 
         if (!lineStarts.IsBasicAscii)
         {
             // this chunk contains non basic ASCII characters
-            isBasicASCII = false;
+            _isBasicASCII = false;
 
-            // FIXME:
-            //if (!containsRTL)
-            //    containsRTL = strings.containsRTL(chunk);
+            if (!_containsRTL)
+                _containsRTL = chunk.ContainsRTL();
 
-            //if (!containsUnusualLineTerminators)
-            //    containsUnusualLineTerminators = strings.containsUnusualLineTerminators(chunk);
+            if (!_containsUnusualLineTerminators)
+                _containsUnusualLineTerminators = chunk.ContainsUnusualLineTerminators();
+        }
+    }
+
+    public PieceTreeTextBufferFactory Finish(bool normalizeEOL = true)
+    {
+        _Finish();
+        return new PieceTreeTextBufferFactory(
+            _chunks,
+            _BOM,
+            _cr,
+            _lf,
+            _crlf,
+            _containsRTL,
+            _containsUnusualLineTerminators,
+            _isBasicASCII,
+            normalizeEOL
+        );
+    }
+
+    private void _Finish()
+    {
+        if (_chunks.Count == 0)
+        {
+            _acceptChunk1("", true);
+        }
+
+        if (this._hasPreviousChar)
+        {
+            this._hasPreviousChar = false;
+            // recreate last chunk
+            var lastChunk = _chunks[_chunks.Count - 1];
+            lastChunk.Buffer += _previousChar;
+            var newLineStarts = LineStarts.CreateFast(lastChunk.Buffer);
+            lastChunk.LineStarts = newLineStarts;
+            if (_previousChar == '\r')
+            {
+                _cr++;
+            }
         }
     }
 }
