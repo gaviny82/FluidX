@@ -29,6 +29,10 @@ internal static partial class StringExtensions
     /// <returns><see langword="true"/> if <paramref name="str"/> contains LINE SEPARATOR (LS) or PARAGRAPH.</returns>
     public static bool ContainsUnusualLineTerminators(this string str) => ContainsUnusualLineTerminatorsRegex.IsMatch(str);
 
+    public static Regex EndOfLinesRegex { get; } = GetEndOfLinesRegex();
+
+    [GeneratedRegex(@"\r\n|\r|\n")]
+    private static partial Regex GetEndOfLinesRegex();
 
     /// <summary>
     /// Returns first index of the string that is not whitespace.

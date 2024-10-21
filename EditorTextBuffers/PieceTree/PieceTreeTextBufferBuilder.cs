@@ -64,8 +64,7 @@ public class PieceTreeTextBufferFactory
             for (int i = 0, len = chunks.Count; i < len; i++)
             {
                 string str = chunks[i].Buffer;
-                // TODO: optimize Regex
-                str = Regex.Replace(str, @"\r\n|\r|\n", eol);
+                str = StringExtensions.EndOfLinesRegex.Replace(str, eol);
                 var newLineStart = LineStarts.CreateFast(str);
                 chunks[i] = new StringBuffer(str, newLineStart);
             }

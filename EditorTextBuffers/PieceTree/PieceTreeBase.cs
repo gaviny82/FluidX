@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 
 namespace EditorTextBuffers.PieceTree;
 
-public class PieceTreeBase
+public partial class PieceTreeBase
 {
     private const int AverageBufferSize = 65535; // 64 * 1024
 
@@ -91,8 +91,7 @@ public class PieceTreeBase
             }
 
             // Flush anyways
-            // TODO: Optimize Regex
-            string text = Regex.Replace(tempChunk, @"\r\n|\r|\n", eol);
+            string text = StringExtensions.EndOfLinesRegex.Replace(tempChunk, eol);
             chunks.Add(new StringBuffer(text, LineStarts.CreateFast(text)));
             tempChunk = str;
             tempChunkLen = len;
@@ -101,8 +100,7 @@ public class PieceTreeBase
 
         if (tempChunkLen > 0)
         {
-            // TODO: Optimize Regex
-            string text = Regex.Replace(tempChunk, @"\r\n|\r|\n", eol);
+            string text = StringExtensions.EndOfLinesRegex.Replace(tempChunk, eol);
             chunks.Add(new StringBuffer(text, LineStarts.CreateFast(text)));
         }
 
