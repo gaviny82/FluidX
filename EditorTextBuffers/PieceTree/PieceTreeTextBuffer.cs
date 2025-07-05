@@ -1,5 +1,9 @@
-﻿using EditorTextBuffers.Contracts;
+﻿using EditorTextBuffers;
+using EditorTextBuffers.Contracts;
+using Microsoft.VisualBasic;
+using System;
 using System.Reflection.Emit;
+using System.Text.RegularExpressions;
 
 namespace EditorTextBuffers.PieceTree;
 
@@ -81,7 +85,7 @@ public class PieceTreeTextBuffer : ITextBuffer
         return new Range(startPosition.LineNumber, startPosition.Column, endPosition.LineNumber, endPosition.Column);
     }
 
-    public string GetValueInRange(Range range, EndOfLinePreference eol)
+    public string GetValueInRange(Range range, EndOfLinePreference eol = EndOfLinePreference.TextDefined)
     {
         if (range.IsEmpty())
             return "";
@@ -90,7 +94,7 @@ public class PieceTreeTextBuffer : ITextBuffer
         return _pieceTree.GetValueInRange(range, lineEnding);
     }
 
-    public int GetValueLengthInRange(Range range, EndOfLinePreference eol)
+    public int GetValueLengthInRange(Range range, EndOfLinePreference eol = EndOfLinePreference.TextDefined)
     {
         if (range.IsEmpty())
             return 0;
@@ -199,6 +203,13 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     #endregion
 
+    private string GetEOL()
+    {
+        return _pieceTree.EOL; // either "\r\n" or "\n"
+    }
+
+    public event EventHandler? OnDidChangeContent;
+
     #region ITextBuffer Members (Edit Operations)
 
     public void SetEOL(string eol)
@@ -206,7 +217,303 @@ public class PieceTreeTextBuffer : ITextBuffer
         _pieceTree.EOL = eol;
     }
 
+    public ApplyEditsResult ApplyEdits(ValidAnnotatedEditOperation[] rawOperations, bool recordTrimAutoWhitespace, bool computeUndoEdits)
+    {
+        bool mightContainRTL = _mightContainRTL;
+        bool mightContainUnusualLineTerminators = _mightContainUnusualLineTerminators;
+        bool mightContainNonBasicASCII = _mightContainNonBasicASCII;
+        bool canReduceOperations = true;
+
+        var operations = new IValidatedEditOperation[rawOperations.Length];
+        for (int i = 0; i < rawOperations.Length; i++)
+        {
+            ValidAnnotatedEditOperation op = rawOperations[i];
+            if (canReduceOperations && op.IsTracked)
+                canReduceOperations = false;
+
+            Range validatedRange = op.Range;
+            if (!string.IsNullOrEmpty(op.Text))
+            {
+                bool textMightContainNonBasicASCII = true;
+                if (!mightContainNonBasicASCII)
+                {
+                    textMightContainNonBasicASCII = !op.Text.IsBasicASCII();
+                    mightContainNonBasicASCII = textMightContainNonBasicASCII;
+                }
+                if (!mightContainRTL && textMightContainNonBasicASCII)
+                {
+                    // check if the new inserted text contains RTL
+                    mightContainRTL = op.Text.ContainsRTL();
+                }
+                if (!mightContainUnusualLineTerminators && textMightContainNonBasicASCII)
+                {
+                    // check if the new inserted text contains unusual line terminators
+                    mightContainUnusualLineTerminators = op.Text.ContainsUnusualLineTerminators();
+                }
+            }
+
+            string validText = "";
+            int eolCount = 0;
+            int firstLineLength = 0;
+            int lastLineLength = 0;
+            if(!string.IsNullOrEmpty(op.Text))
+            {
+                (eolCount, firstLineLength, lastLineLength, StringEndOfLine strEOL) = 
+                    EOLCounter.CountEOL(op.Text);
+
+                string bufferEOL = GetEOL();
+                StringEndOfLine expectedStrEOL = (bufferEOL == "\r\n" ? StringEndOfLine.CRLF : StringEndOfLine.LF);
+                if (strEOL == StringEndOfLine.Unknown || strEOL == expectedStrEOL)
+                    validText = op.Text;
+                else
+                    validText = Regex.Replace(op.Text, "\r\n|\r|\n", bufferEOL); // TODO: Use generated regex
+            }
+            operations[i] = new ValidatedEditOperation
+            {
+                SortIndex = i,
+                Identifier = op.Identifier,
+                Range = validatedRange,
+                RangeOffset = GetOffsetAt(validatedRange.StartLineNumber, validatedRange.StartColumn),
+                RangeLength = GetValueLengthInRange(validatedRange),
+                Text = validText,
+                EOLCount = eolCount,
+                FirstLineLength = firstLineLength,
+                LastLineLength = lastLineLength,
+                ForceMoveMarkers = op.ForceMoveMarkers,
+                IsAutoWhitespaceEdit = op.IsAutoWhitespaceEdit
+            };
+        }
+
+        // Sort operations ascending
+        Array.Sort(operations, _sortOpsAscending);
+
+        bool hasTouchingRanges = false;
+        for (int i = 0, count = operations.Length - 1; i < count; i++)
+        {
+            var rangeEnd = operations[i].Range.GetEndPosition();
+            var nextRangeStart = operations[i + 1].Range.GetStartPosition();
+
+            if (nextRangeStart.IsBeforeOrEqual(rangeEnd))
+            {
+                if (nextRangeStart.IsBefore(rangeEnd))
+                {
+                    // overlapping ranges
+                    throw new Exception("Overlapping ranges are not allowed.");
+                }
+                hasTouchingRanges = true;
+            }
+        }
+
+        if (canReduceOperations)
+            operations = ReduceOperations(operations);
+
+        // Delta encode operations
+        Range[] reverseRanges = computeUndoEdits || recordTrimAutoWhitespace
+            ? _getInverseEditRanges(operations)
+            : [];
+        List<(int lineNumber, string oldContent)> newTrimAutoWhitespaceCandidates = [];
+        if (recordTrimAutoWhitespace)
+        {
+            for (int i = 0; i < operations.Length; i++)
+            {
+                var op = operations[i];
+                var reverseRange = reverseRanges[i];
+
+                if (op.IsAutoWhitespaceEdit && op.Range.IsEmpty())
+                {
+                    // Record already the future line numbers that might be auto whitespace removal candidates on next edit
+                    for (int lineNumber = reverseRange.StartLineNumber; lineNumber < reverseRange.EndLineNumber; lineNumber++)
+                    {
+                        string currentLineContent = "";
+                        if (lineNumber == reverseRange.StartLineNumber)
+                        {
+                            currentLineContent = GetLineContent(op.Range.StartLineNumber);
+                            if (currentLineContent.FirstNonWhitespaceIndex() != -1)
+                                continue;
+                        }
+                        newTrimAutoWhitespaceCandidates.Add((lineNumber, currentLineContent));
+                    }
+                }
+            }
+        }
+
+        IReverseSingleEditOperation[]? reverseOperations = null;
+        if (computeUndoEdits)
+        {
+            int reverseRangeDeltaOffset = 0;
+            reverseOperations = new IReverseSingleEditOperation[operations.Length];
+            for (int i = 0; i < operations.Length; i++)
+            {
+                IValidatedEditOperation op = operations[i];
+                Range reverseRange = reverseRanges[i];
+                string bufferText = GetValueInRange(op.Range);
+                int reverseRangeOffset = op.RangeOffset + reverseRangeDeltaOffset;
+                reverseRangeDeltaOffset += op.Text.Length - bufferText.Length;
+
+                reverseOperations[i] = new ReverseSingleEditOperation
+                {
+                    SortIndex = op.SortIndex,
+                    Identifier = op.Identifier,
+                    Range = reverseRange,
+                    Text = bufferText,
+                    TextChange = new TextChange(op.RangeOffset, bufferText, reverseRangeOffset, op.Text)
+                };
+            }
+
+            // Can only sort reverse operations when the order is not significant
+            if (!hasTouchingRanges)
+            {
+                Array.Sort(reverseOperations, (a, b) => a.SortIndex - b.SortIndex);
+            }
+        }
+
+        _mightContainRTL = mightContainRTL;
+        _mightContainUnusualLineTerminators = mightContainUnusualLineTerminators;
+        _mightContainNonBasicASCII = mightContainNonBasicASCII;
+
+        var contentChanges = DoApplyEdits(operations);
+
+        List<int>? trimAutoWhitespaceLineNumbers = null;
+        if (recordTrimAutoWhitespace && newTrimAutoWhitespaceCandidates.Count > 0)
+        {
+            // sort line numbers auto whitespace removal candidates for next edit descending
+            newTrimAutoWhitespaceCandidates.Sort((a, b) => b.lineNumber - a.lineNumber);
+
+            trimAutoWhitespaceLineNumbers = [];
+            for (int i = 0, len = newTrimAutoWhitespaceCandidates.Count; i < len; i++)
+            {
+                int lineNumber = newTrimAutoWhitespaceCandidates[i].lineNumber;
+                if (i > 0 && newTrimAutoWhitespaceCandidates[i - 1].lineNumber == lineNumber)
+                    continue; // Do not have the same line number twice
+
+                string prevContent = newTrimAutoWhitespaceCandidates[i].oldContent;
+                string lineContent = GetLineContent(lineNumber);
+
+                if (lineContent.Length == 0 || lineContent == prevContent || lineContent.FirstNonWhitespaceIndex() != -1)
+                    continue;
+
+                trimAutoWhitespaceLineNumbers.Add(lineNumber);
+            }
+        }
+
+        OnDidChangeContent?.Invoke(this, EventArgs.Empty);
+
+        return new ApplyEditsResult
+        {
+            ReverseEdits = reverseOperations,
+            Changes = contentChanges,
+            TrimAutoWhitespaceLineNumbers = trimAutoWhitespaceLineNumbers
+        };
+    }
+
     #endregion
+
+    /**
+     * Transform operations such that they represent the same logic edit,
+     * but that they also do not cause OOM crashes.
+     */
+    private IValidatedEditOperation[] ReduceOperations(IValidatedEditOperation[] operations)
+    {
+        if (operations.Length < 1000)
+            return operations; // We know from empirical testing that a thousand edits work fine regardless of their shape.
+
+        IValidatedEditOperation toSingleEditOperation(IValidatedEditOperation[] operations)
+        {
+            bool forceMoveMarkers = false;
+            Range firstEditRange = operations[0].Range;
+            Range lastEditRange = operations[operations.Length - 1].Range;
+            Range entireEditRange = new Range(firstEditRange.StartLineNumber, firstEditRange.StartColumn, lastEditRange.EndLineNumber, lastEditRange.EndColumn);
+            int lastEndLineNumber = firstEditRange.StartLineNumber;
+            int lastEndColumn = firstEditRange.StartColumn;
+            List<string> result = [];
+
+            for (int i = 0, len = operations.Length; i < len; i++)
+            {
+                IValidatedEditOperation operation = operations[i];
+                Range range = operation.Range;
+
+                forceMoveMarkers = forceMoveMarkers || operation.ForceMoveMarkers;
+
+                // (1) -- Push old text
+                result.Add(GetValueInRange(new Range(lastEndLineNumber, lastEndColumn, range.StartLineNumber, range.StartColumn)));
+
+                // (2) -- Push new text
+                if (operation.Text.Length > 0)
+                    result.Add(operation.Text);
+
+                lastEndLineNumber = range.EndLineNumber;
+                lastEndColumn = range.EndColumn;
+            }
+
+            string text = string.Concat(result);
+            var (eolCount, firstLineLength, lastLineLength, _) = EOLCounter.CountEOL(text);
+
+            return new ValidatedEditOperation
+            {
+                SortIndex = 0,
+                Identifier = operations[0].Identifier,
+                Range = entireEditRange,
+                RangeOffset = GetOffsetAt(entireEditRange.StartLineNumber, entireEditRange.StartColumn),
+                RangeLength = GetValueLengthInRange(entireEditRange, EndOfLinePreference.TextDefined),
+                Text = text,
+                EOLCount = eolCount,
+                FirstLineLength = firstLineLength,
+                LastLineLength = lastLineLength,
+                ForceMoveMarkers = forceMoveMarkers,
+                IsAutoWhitespaceEdit = false
+            };
+        }
+
+        // At one point, due to how events are emitted and how each operation is handled,
+        // some operations can trigger a high amount of temporary string allocations,
+        // that will immediately get edited again.
+        // e.g. a formatter inserting ridiculous amounts of \n on a model with a single line
+        // Therefore, the strategy is to collapse all the operations into a huge single edit operation
+        return [toSingleEditOperation(operations)];
+    }
+
+    private IReadOnlyList<IInternalModelContentChange> DoApplyEdits(IValidatedEditOperation[] operations)
+    {
+        Array.Sort(operations, _sortOpsDescending);
+        List<IInternalModelContentChange> contentChanges = [];
+
+        // operations are from bottom to top
+        for (int i = 0; i < operations.Length; i++)
+        {
+            IValidatedEditOperation op = operations[i];
+
+            int startLineNumber = op.Range.StartLineNumber;
+            int startColumn = op.Range.StartColumn;
+            int endLineNumber = op.Range.EndLineNumber;
+            int endColumn = op.Range.EndColumn;
+
+            if (startLineNumber == endLineNumber && startColumn == endColumn && op.Text.Length == 0)
+                continue; // no-op
+
+            if (!string.IsNullOrEmpty(op.Text))
+            {
+                // replacement
+                _pieceTree.Delete(op.RangeOffset, op.RangeLength);
+                _pieceTree.Insert(op.RangeOffset, op.Text, true);
+            }
+            else
+            {
+                // deletion
+                _pieceTree.Delete(op.RangeOffset, op.RangeLength);
+            }
+
+            Range contentChangeRange = new(startLineNumber, startColumn, endLineNumber, endColumn);
+            contentChanges.Add(new InternalModelContentChange
+            {
+                Range = contentChangeRange,
+                RangeLength = op.RangeLength,
+                Text = op.Text,
+                RangeOffset = op.RangeOffset,
+                ForceMoveMarkers = op.ForceMoveMarkers
+            });
+        }
+        return contentChanges;
+    }
 
     public string GetNearestChunk(int offset) => _pieceTree.GetNearestChunk(offset);
 
@@ -219,6 +526,11 @@ public class PieceTreeTextBuffer : ITextBuffer
         throw new NotImplementedException();
     }
 
+    internal static Range[] _getInverseEditRanges(IValidatedEditOperation[] operations)
+    {
+        throw new NotImplementedException();
+    }
+
     /**
      * Assumes `operations` are validated and sorted ascending
      */
@@ -227,15 +539,21 @@ public class PieceTreeTextBuffer : ITextBuffer
     //    throw new NotImplementedException();
     //}
 
-    //private static int _sortOpsAscending(a: IValidatedEditOperation, b: IValidatedEditOperation)
-    //{
-    //    throw new NotImplementedException();
-    //}
+    private static int _sortOpsAscending(IValidatedEditOperation a, IValidatedEditOperation b)
+    {
+        int r = Range.CompareRangesUsingEnds(a.Range, b.Range);
+        if (r == 0)
+            return a.SortIndex - b.SortIndex;
+        return r;
+    }
 
-    //private static int _sortOpsDescending(a: IValidatedEditOperation, b: IValidatedEditOperation)
-    //{
-    //    throw new NotImplementedException();
-    //}
+    private static int _sortOpsDescending(IValidatedEditOperation a, IValidatedEditOperation b)
+    {
+        int r = Range.CompareRangesUsingEnds(a.Range, b.Range);
+        if (r == 0)
+            return b.SortIndex - a.SortIndex;
+        return -r;
+    }
 
     #endregion
 }

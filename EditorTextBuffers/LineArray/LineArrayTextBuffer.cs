@@ -152,8 +152,17 @@ internal class LineArrayTextBuffer : ITextBuffer
 
     #endregion
 
+    #region ITextBuffer Members
+
     public void SetEOL(string eol)
     {
         throw new NotImplementedException();
     }
+
+    public ApplyEditsResult ApplyEdits(ValidAnnotatedEditOperation[] rawOperations, bool recordTrimAutoWhitespace, bool computeUndoEdits)
+    {
+        throw new NotImplementedException();
+    }
+
+    #endregion
 }
