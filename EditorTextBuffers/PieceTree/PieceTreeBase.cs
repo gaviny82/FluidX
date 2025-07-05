@@ -239,12 +239,12 @@ public partial class PieceTreeBase
         if (eol is not null)
         {
             if (eol != _EOL || !_EOLNormalized)
-                return Regex.Replace(value, @"\r\n|\r|\n", eol);
+                return StringExtensions.EndOfLinesRegex.Replace(value, eol);
 
             if (eol == _EOL && _EOLNormalized)
                 return value;
 
-            return Regex.Replace(value, @"\r\n|\r|\n", eol);
+            return StringExtensions.EndOfLinesRegex.Replace(value, eol);
         }
         return value;
     }
@@ -340,14 +340,14 @@ public partial class PieceTreeBase
             // add the text before the first line start in this piece
             currentLine += _EOLNormalized
                 ? buffer[pieceStartOffset..Math.Max(pieceStartOffset, lineStarts[pieceStartLine + 1] - _EOL.Length)]
-                : Regex.Replace(buffer[pieceStartOffset..lineStarts[pieceStartLine + 1]], @"\r\n|\r|\n", "");
+                : StringExtensions.EndOfLinesRegex.Replace(buffer[pieceStartOffset..lineStarts[pieceStartLine + 1]], "");
             lines.Add(currentLine);
 
             for (int line = pieceStartLine + 1; line < pieceEndLine; line++)
             {
                 currentLine = _EOLNormalized
                     ? buffer[lineStarts[line]..(lineStarts[line + 1] - _EOL.Length)]
-                    : Regex.Replace(buffer[lineStarts[line]..lineStarts[line + 1]], @"\r\n|\r|\n", "");
+                    : StringExtensions.EndOfLinesRegex.Replace(buffer[lineStarts[line]..lineStarts[line + 1]], "");
                 lines.Add(currentLine);
             }
 
@@ -394,7 +394,7 @@ public partial class PieceTreeBase
         else if (_EOLNormalized)
             _lastVisitedLine.Value = GetLineRawContent(lineNumber, _EOL.Length);
         else
-            _lastVisitedLine.Value = Regex.Replace(GetLineRawContent(lineNumber), @"\r\n|\r|\n", "");
+            _lastVisitedLine.Value = StringExtensions.EndOfLinesRegex.Replace(GetLineRawContent(lineNumber), "");
 
         return _lastVisitedLine.Value;
     }

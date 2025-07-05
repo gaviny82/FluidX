@@ -255,7 +255,7 @@ public class PieceTreeTextBuffer : ITextBuffer
                 if (strEOL == StringEndOfLine.Unknown || strEOL == expectedStrEOL)
                     validText = op.Text;
                 else
-                    validText = Regex.Replace(op.Text, "\r\n|\r|\n", bufferEOL); // TODO: Use generated regex
+                    validText = StringExtensions.EndOfLinesRegex.Replace(op.Text, bufferEOL);
             }
             operations[i] = new ValidatedEditOperation
             {
