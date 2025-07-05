@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/Samples/">
+    <Project Path="Samples/CreatePieceTree/PieceTreeDemo.csproj" />
+  </Folder>
+  <Project Path="EditorTextBuffers/EditorTextBuffers.csproj" />
+</Solution>
