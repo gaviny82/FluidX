@@ -45,8 +45,6 @@ internal class LineArrayTextBuffer : ITextBuffer
 
     public string BOM => throw new NotImplementedException();
 
-    public string EOL => throw new NotImplementedException();
-
     public bool MightContainRTL => throw new NotImplementedException();
 
     public bool MightContainUnusualLineTerminators => throw new NotImplementedException();
@@ -160,6 +158,11 @@ internal class LineArrayTextBuffer : ITextBuffer
     }
 
     public ApplyEditsResult ApplyEdits(ValidAnnotatedEditOperation[] rawOperations, bool recordTrimAutoWhitespace, bool computeUndoEdits)
+    {
+        throw new NotImplementedException();
+    }
+
+    public string GetEOL()
     {
         throw new NotImplementedException();
     }

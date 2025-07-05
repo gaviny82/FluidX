@@ -25,7 +25,7 @@ public interface IReadOnlyTextBuffer : IEquatable<IReadOnlyTextBuffer>
     /// The end-of-line sequence of the document (either CRLF, CR or LF)
     /// <para>If the document has mixed end-of-line sequences, the majority one is returned.</para>
     /// </summary>
-    string EOL { get; }
+    string GetEOL();
 
     /// <summary>
     /// <see langword="true"/> if the document might contain RTL characters

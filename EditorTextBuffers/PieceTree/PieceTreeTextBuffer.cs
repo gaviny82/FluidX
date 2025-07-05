@@ -1,8 +1,5 @@
 ﻿using EditorTextBuffers;
 using EditorTextBuffers.Contracts;
-using Microsoft.VisualBasic;
-using System;
-using System.Reflection.Emit;
 using System.Text.RegularExpressions;
 
 namespace EditorTextBuffers.PieceTree;
@@ -32,12 +29,6 @@ public class PieceTreeTextBuffer : ITextBuffer
         _pieceTree = new PieceTreeBase(chunks, eol, eolNormalized);
     }
 
-    // TODO:
-    public void Dispose()
-    {
-        throw new NotImplementedException();
-    }
-
     public bool Equals(IReadOnlyTextBuffer? other)
     {
         if (other is not PieceTreeTextBuffer otherBuffer)
@@ -46,7 +37,7 @@ public class PieceTreeTextBuffer : ITextBuffer
         if (_BOM != otherBuffer._BOM)
             return false;
 
-        if (EOL != otherBuffer.EOL)
+        if (GetEOL() != otherBuffer.GetEOL())
             return false;
 
         return _pieceTree.Equals(otherBuffer._pieceTree);
@@ -69,7 +60,7 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     public string BOM { get => _BOM; }
 
-    public string EOL { get => _pieceTree.EOL; }
+    public string GetEOL() => _pieceTree.EOL;
 
     public ITextSnapshot CreateSnapshot(bool preserveBOM) => _pieceTree.CreateSnapshot(preserveBOM ? _BOM : "");
 
@@ -90,7 +81,7 @@ public class PieceTreeTextBuffer : ITextBuffer
         if (range.IsEmpty())
             return "";
 
-        string lineEnding = _getEndOfLine(eol);
+        string lineEnding = GetEndOfLine(eol);
         return _pieceTree.GetValueInRange(range, lineEnding);
     }
 
@@ -110,8 +101,8 @@ public class PieceTreeTextBuffer : ITextBuffer
         // offsets use the text EOL, so we need to compensate for length differences
         // if the requested EOL doesn't match the text EOL
         int eolOffsetCompensation = 0;
-        string desiredEOL = _getEndOfLine(eol);
-        string actualEOL = EOL;
+        string desiredEOL = GetEndOfLine(eol);
+        string actualEOL = GetEOL();
         if (desiredEOL.Length != actualEOL.Length)
         {
             int delta = desiredEOL.Length - actualEOL.Length;
@@ -151,7 +142,7 @@ public class PieceTreeTextBuffer : ITextBuffer
                 }
             }
 
-            result += _getEndOfLine(eol).Length * (toLineNumber - fromLineNumber);
+            result += GetEndOfLine(eol).Length * (toLineNumber - fromLineNumber);
 
             return result;
         }
@@ -193,27 +184,25 @@ public class PieceTreeTextBuffer : ITextBuffer
         return result + 2;
     }
 
-    private string _getEndOfLine(EndOfLinePreference eol) => eol switch
+    private string GetEndOfLine(EndOfLinePreference eol) => eol switch
     {
         EndOfLinePreference.LF => "\n",
         EndOfLinePreference.CRLF => "\r\n",
-        EndOfLinePreference.TextDefined => EOL,
+        EndOfLinePreference.TextDefined => GetEOL(),
         _ => throw new Exception("Unknown EOL preference"),
     };
 
     #endregion
 
-    private string GetEOL()
-    {
-        return _pieceTree.EOL; // either "\r\n" or "\n"
-    }
+    #region Editing (including ITextBuffer Members)
 
     public event EventHandler? OnDidChangeContent;
 
-    #region ITextBuffer Members (Edit Operations)
-
     public void SetEOL(string eol)
     {
+        if (eol != "\r\n" && eol != "\n")
+            throw new ArgumentException("EOL must be either CRLF or LF", nameof(eol));
+
         _pieceTree.EOL = eol;
     }
 
@@ -285,7 +274,7 @@ public class PieceTreeTextBuffer : ITextBuffer
         }
 
         // Sort operations ascending
-        Array.Sort(operations, _sortOpsAscending);
+        Array.Sort(operations, SortOpsAscending);
 
         bool hasTouchingRanges = false;
         for (int i = 0, count = operations.Length - 1; i < count; i++)
@@ -309,7 +298,7 @@ public class PieceTreeTextBuffer : ITextBuffer
 
         // Delta encode operations
         Range[] reverseRanges = computeUndoEdits || recordTrimAutoWhitespace
-            ? _getInverseEditRanges(operations)
+            ? GetInverseEditRanges(operations)
             : [];
         List<(int lineNumber, string oldContent)> newTrimAutoWhitespaceCandidates = [];
         if (recordTrimAutoWhitespace)
@@ -406,8 +395,6 @@ public class PieceTreeTextBuffer : ITextBuffer
         };
     }
 
-    #endregion
-
     /**
      * Transform operations such that they represent the same logic edit,
      * but that they also do not cause OOM crashes.
@@ -421,8 +408,8 @@ public class PieceTreeTextBuffer : ITextBuffer
         {
             bool forceMoveMarkers = false;
             Range firstEditRange = operations[0].Range;
-            Range lastEditRange = operations[operations.Length - 1].Range;
-            Range entireEditRange = new Range(firstEditRange.StartLineNumber, firstEditRange.StartColumn, lastEditRange.EndLineNumber, lastEditRange.EndColumn);
+            Range lastEditRange = operations[^1].Range;
+            Range entireEditRange = new(firstEditRange.StartLineNumber, firstEditRange.StartColumn, lastEditRange.EndLineNumber, lastEditRange.EndColumn);
             int lastEndLineNumber = firstEditRange.StartLineNumber;
             int lastEndColumn = firstEditRange.StartColumn;
             List<string> result = [];
@@ -472,9 +459,9 @@ public class PieceTreeTextBuffer : ITextBuffer
         return [toSingleEditOperation(operations)];
     }
 
-    private IReadOnlyList<IInternalModelContentChange> DoApplyEdits(IValidatedEditOperation[] operations)
+    private List<IInternalModelContentChange> DoApplyEdits(IValidatedEditOperation[] operations)
     {
-        Array.Sort(operations, _sortOpsDescending);
+        Array.Sort(operations, SortOpsDescending);
         List<IInternalModelContentChange> contentChanges = [];
 
         // operations are from bottom to top
@@ -515,31 +502,70 @@ public class PieceTreeTextBuffer : ITextBuffer
         return contentChanges;
     }
 
-    public string GetNearestChunk(int offset) => _pieceTree.GetNearestChunk(offset);
+    #endregion
 
-    #region Helpers (testing purpose)
-
-    internal PieceTreeBase GetPieceTree() => _pieceTree;
-
-    internal static Range _getInverseEditRange(Range range, string text)
-    {
-        throw new NotImplementedException();
-    }
-
-    internal static Range[] _getInverseEditRanges(IValidatedEditOperation[] operations)
-    {
-        throw new NotImplementedException();
-    }
+    #region Helpers
 
     /**
      * Assumes `operations` are validated and sorted ascending
      */
-    //internal static Range[] _getInverseEditRanges(IValidatedEditOperation[] operations)
-    //{
-    //    throw new NotImplementedException();
-    //}
+    internal static Range[] GetInverseEditRanges(IValidatedEditOperation[] operations)
+    {
+        var result = new Range[operations.Length];
 
-    private static int _sortOpsAscending(IValidatedEditOperation a, IValidatedEditOperation b)
+        int prevOpEndLineNumber = 0;
+        int prevOpEndColumn = 0;
+        IValidatedEditOperation? prevOp = null;
+        for (int i = 0, len = operations.Length; i < len; i++)
+        {
+            var op = operations[i];
+            int startLineNumber, startColumn;
+
+            if (prevOp is not null)
+            {
+                if(prevOp.Range.EndLineNumber == op.Range.StartLineNumber)
+                {
+                    startLineNumber = prevOpEndLineNumber;
+                    startColumn = prevOpEndColumn + (op.Range.StartColumn - prevOp.Range.EndColumn);
+                }
+                else
+                {
+                    startLineNumber = prevOpEndLineNumber + (op.Range.StartLineNumber - prevOp.Range.EndLineNumber);
+                    startColumn = op.Range.StartColumn;
+                }
+            }
+            else
+            {
+                startLineNumber = op.Range.StartLineNumber;
+                startColumn = op.Range.StartColumn;
+            }
+
+            Range resultRange;
+            if (op.Text.Length > 0)
+            {
+                // the operation inserts something
+                int lineCount = op.EOLCount + 1;
+                if (lineCount == 1) // single line insert
+                    resultRange = new Range(startLineNumber, startColumn, startLineNumber, startColumn + op.FirstLineLength);
+                else // multi line insert
+                    resultRange = new Range(startLineNumber, startColumn, startLineNumber + lineCount - 1, op.LastLineLength + 1);
+            }
+            else
+            {
+                // There is nothing to insert
+                resultRange = new Range(startLineNumber, startColumn, startLineNumber, startColumn);
+            }
+
+            prevOpEndLineNumber = resultRange.EndLineNumber;
+            prevOpEndColumn = resultRange.EndColumn;
+
+            result[i] = resultRange;
+            prevOp = op;
+        }
+        return result;
+    }
+
+    private static int SortOpsAscending(IValidatedEditOperation a, IValidatedEditOperation b)
     {
         int r = Range.CompareRangesUsingEnds(a.Range, b.Range);
         if (r == 0)
@@ -547,7 +573,7 @@ public class PieceTreeTextBuffer : ITextBuffer
         return r;
     }
 
-    private static int _sortOpsDescending(IValidatedEditOperation a, IValidatedEditOperation b)
+    private static int SortOpsDescending(IValidatedEditOperation a, IValidatedEditOperation b)
     {
         int r = Range.CompareRangesUsingEnds(a.Range, b.Range);
         if (r == 0)
