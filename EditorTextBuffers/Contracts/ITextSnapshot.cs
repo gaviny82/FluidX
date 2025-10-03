@@ -2,10 +2,12 @@
 
 /// <summary>
 /// Text snapshot that works like an iterator.
-/// Will try to return chunks of roughly ~64KB size.
-/// Will return null when finished.
 /// </summary>
 public interface ITextSnapshot
 {
+    /// <summary>
+    /// Reads the next chunk of text.
+    /// </summary>
+    /// <returns>the next chunk of text or <see langword="null"/> when finished.</returns>
     string? Read();
 }

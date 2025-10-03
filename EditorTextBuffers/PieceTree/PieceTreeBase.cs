@@ -1610,7 +1610,7 @@ public partial class PieceTreeBase
 
     #region Tree Operations
 
-    private static bool Iterate(TreeNode node, Func<TreeNode, bool> callback)
+    internal static bool Iterate(TreeNode node, Func<TreeNode, bool> callback)
     {
         if (node == TreeNode.Sentinel)
             return callback(TreeNode.Sentinel);
@@ -1634,7 +1634,7 @@ public partial class PieceTreeBase
         return currentContent;
     }
 
-    private string GetPieceContent(Piece piece)
+    internal string GetPieceContent(Piece piece)
     {
         var buffer = _buffers[piece.BufferIndex];
         int startOffset = OffsetInBuffer(piece.BufferIndex, piece.Start);

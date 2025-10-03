@@ -177,7 +177,6 @@ public interface IReadOnlyTextBuffer : IEquatable<IReadOnlyTextBuffer>
 
     #endregion
 
-    // TODO: Implement snapshot
     ITextSnapshot CreateSnapshot(bool preserveBOM);
 
     // TODO: Implement searchable text buffer
