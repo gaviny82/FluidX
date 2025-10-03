@@ -1,12 +1,12 @@
 ﻿namespace EditorTextBuffers.PieceTree;
 
-public enum NodeColor
+internal enum NodeColor
 {
     Black = 0,
     Red = 1
 }
 
-public class TreeNode
+internal class TreeNode
 {
     public TreeNode Parent { get; set; }
     public TreeNode Left { get; set; }

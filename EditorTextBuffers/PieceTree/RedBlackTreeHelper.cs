@@ -1,6 +1,6 @@
 ﻿namespace EditorTextBuffers.PieceTree;
 
-public static class RedBlackTreeHelper
+internal static class RedBlackTreeHelper
 {
     /// <summary>
     /// Left most node in the tree rooted at <paramref name="node"/>

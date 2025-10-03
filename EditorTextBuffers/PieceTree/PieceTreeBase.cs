@@ -7,7 +7,7 @@ public partial class PieceTreeBase
 {
     private const int AverageBufferSize = 65535; // 64 * 1024
 
-    public TreeNode Root { get; set; } = null!;
+    internal TreeNode Root { get; set; } = null!;
 
     protected List<StringBuffer> _buffers = null!; // 0 is change buffer, others are readonly original buffer.
     protected int _lineCount;
@@ -15,7 +15,7 @@ public partial class PieceTreeBase
     protected string _EOL = "\n"; // Either "\r\n" or "\n"
     protected bool _EOLNormalized;
 
-    private BufferCursor _lastChangeBufferPos = null!;
+    private BufferCursor _lastChangeBufferPos;
     private PieceTreeSearchCache _searchCache = null!;
     private (int LineNumber, string Value) _lastVisitedLine;
 
@@ -249,7 +249,7 @@ public partial class PieceTreeBase
         return value;
     }
 
-    public string GetValueInRange2(NodePosition startPosition, NodePosition endPosition)
+    internal string GetValueInRange2(NodePosition startPosition, NodePosition endPosition)
     {
         TreeNode x = startPosition.Node;
         string buffer = _buffers[x.Piece.BufferIndex].Buffer;
@@ -1737,7 +1737,7 @@ public partial class PieceTreeBase
     #endregion
 }
 
-public class NodePosition
+internal class NodePosition
 {
     /// <summary>
     /// Piece index.
@@ -1755,18 +1755,27 @@ public class NodePosition
     public required int NodeStartOffset { get; init; }
 }
 
-public class BufferCursor
+public class StringBuffer
 {
-    /// <summary>
-    /// Line number in current buffer
-    /// </summary>
-    public required int Line { get; init; }
+    public string Buffer { get; set; }
+    public IReadOnlyList<int> LineStarts { get; set; }
 
-    /// <summary>
-    /// Column number in current buffer
-    /// </summary>
-    public required int Column { get; init; }
+    public StringBuffer(string buffer, IReadOnlyList<int> lineStarts)
+    {
+        Buffer = buffer;
+        LineStarts = lineStarts;
+    }
 }
+
+// TODO: Confirm 0-based or 1-based indexing
+/// <summary>
+/// A position in a text buffer
+/// </summary>
+/// <param name="Line">Line number in current buffer</param>
+/// <param name="Column">Column number in current buffer</param>
+internal readonly record struct BufferCursor(int Line, int Column);
+
+internal record class Piece(int BufferIndex, BufferCursor Start, BufferCursor End, int LineFeedCount, int Length);
 
 internal class CacheEntry
 {
