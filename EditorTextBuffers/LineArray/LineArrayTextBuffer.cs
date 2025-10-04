@@ -167,5 +167,10 @@ internal class LineArrayTextBuffer : ITextBuffer
         throw new NotImplementedException();
     }
 
+    public IReadOnlyList<FindMatch> FindMatchesLineByLine(Range searchRange, SearchData searchData, bool captureMatches, int limitResultCount)
+    {
+        throw new NotImplementedException();
+    }
+
     #endregion
 }

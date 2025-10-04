@@ -192,6 +192,9 @@ public class PieceTreeTextBuffer : ITextBuffer
         _ => throw new Exception("Unknown EOL preference"),
     };
 
+    public IReadOnlyList<FindMatch> FindMatchesLineByLine(Range searchRange, SearchData searchData, bool captureMatches, int limitResultCount)
+        => _pieceTree.FindMatchesLineByLine(searchRange, searchData, captureMatches, limitResultCount);
+
     #endregion
 
     #region Editing (including ITextBuffer Members)

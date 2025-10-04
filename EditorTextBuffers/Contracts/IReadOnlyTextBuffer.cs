@@ -179,24 +179,9 @@ public interface IReadOnlyTextBuffer : IEquatable<IReadOnlyTextBuffer>
 
     ITextSnapshot CreateSnapshot(bool preserveBOM);
 
-    // TODO: Implement searchable text buffer
-
-    //FindMatch[] FindMatchesLineByLine(
-    //    Range searchRange,
-    //    SearchData searchData,
-    //    bool captureMatches,
-    //    int limitResultCount);
+    IReadOnlyList<FindMatch> FindMatchesLineByLine(
+        Range searchRange,
+        SearchData searchData,
+        bool captureMatches,
+        int limitResultCount);
 }
-
-//public class SearchData
-//{
-//    public required Regex Regex { get; init; }
-//    public required WordCharacterClassifier? WordSeparators { get; init; }
-//    public required string? SimpleSearch { get; init; }
-//}
-
-//public class FindMatch
-//{
-//    public required Range Range { get; init; }
-//    public required string[] Matches { get; init; }
-//}

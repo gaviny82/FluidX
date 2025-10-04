@@ -1,5 +1,8 @@
 ﻿using EditorTextBuffers.Contracts;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
+using static System.Net.Mime.MediaTypeNames;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace EditorTextBuffers.PieceTree;
 
@@ -468,25 +471,180 @@ public partial class PieceTreeBase
         }
     }
 
-    // TODO: 
-    //public int FindMatchesInNode(
-    //    TreeNode node,
-    //    Searcher searcher,
-    //    int startColumn,
-    //    BufferCursor startCursor,
-    //    BufferCursor endCursor,
-    //    SearchData searchData,
-    //    bool captureMatches,
-    //    int limitResultCount,
-    //    int resultLen,
-    //    FindMatch[] result)
-    //{
-    //    throw new NotImplementedException();
-    //}
+    public IReadOnlyList<FindMatch> FindMatchesLineByLine(
+        Range searchRange,
+        SearchData searchData,
+        bool captureMatches,
+        int limitResultCount)
+    {
+        List<FindMatch> result = [];
+        var searcher = new Searcher(searchData.WordSeparators, searchData.Regex);
 
-    // findMatchesLineByLine
+        var startPosition = NodeAt2(searchRange.StartLineNumber, searchRange.StartColumn);
+        if (startPosition is null)
+            return [];
+        var endPosition = NodeAt2(searchRange.EndLineNumber, searchRange.EndColumn);
+        if (endPosition is null)
+            return [];
+        var start = PositionInBuffer(startPosition.Node, startPosition.Remainder);
+        var end = PositionInBuffer(endPosition.Node, endPosition.Remainder);
 
-    // _findMatchesInLine
+        if (startPosition.Node == endPosition.Node)
+        {
+            FindMatchesInNode(startPosition.Node, searcher, searchRange.StartLineNumber, searchRange.StartColumn, start, end, searchData, captureMatches, limitResultCount, result);
+            return result;
+        }
+
+        int startLineNumber = searchRange.StartLineNumber;
+        var currentNode = startPosition.Node;
+        int startColumn;
+        while (currentNode != endPosition.Node)
+        {
+            int lineBreakCnt = GetLineFeedCnt(currentNode.Piece.BufferIndex, start, currentNode.Piece.End);
+            if (lineBreakCnt >= 1)
+            {
+                // last line break position
+                var lineStarts = _buffers[currentNode.Piece.BufferIndex].LineStarts;
+                int startOffsetInBuffer = OffsetInBuffer(currentNode.Piece.BufferIndex, currentNode.Piece.Start);
+                int nextLineStartOffset = lineStarts[start.Line + lineBreakCnt];
+                startColumn = startLineNumber == searchRange.StartLineNumber ? searchRange.StartColumn : 1;
+                FindMatchesInNode(currentNode, searcher, startLineNumber, startColumn, start, PositionInBuffer(currentNode, nextLineStartOffset - startOffsetInBuffer), searchData, captureMatches, limitResultCount, result);
+                if (result.Count >= limitResultCount)
+                    return result;
+                startLineNumber += lineBreakCnt;
+            }
+
+            startColumn = startLineNumber == searchRange.StartLineNumber ? searchRange.StartColumn - 1 : 0;
+            // search for the remaining content
+            if (startLineNumber == searchRange.EndLineNumber)
+            {
+                string text = GetLineContent(startLineNumber).Substring(startColumn, searchRange.EndColumn - 1 - startColumn);
+                FindMatchesInLine(searchData, searcher, text, searchRange.EndLineNumber, startColumn, result, captureMatches, limitResultCount);
+                return result;
+            }
+            FindMatchesInLine(searchData, searcher, GetLineContent(startLineNumber).Substring(startColumn), startLineNumber, startColumn, result, captureMatches, limitResultCount);
+            if (result.Count >= limitResultCount)
+                return result;
+            startLineNumber++;
+            startPosition = NodeAt2(startLineNumber, 1);
+            currentNode = startPosition.Node;
+            start = PositionInBuffer(startPosition.Node, startPosition.Remainder);
+        }
+
+        if (startLineNumber == searchRange.EndLineNumber)
+        {
+            startColumn = startLineNumber == searchRange.StartLineNumber ? searchRange.StartColumn - 1 : 0;
+            string text = GetLineContent(startLineNumber).Substring(startColumn, searchRange.EndColumn - 1 - startColumn);
+            FindMatchesInLine(searchData, searcher, text, searchRange.EndLineNumber, startColumn, result, captureMatches, limitResultCount);
+            return result;
+        }
+
+        startColumn = startLineNumber == searchRange.StartLineNumber ? searchRange.StartColumn : 1;
+        FindMatchesInNode(endPosition.Node, searcher, startLineNumber, startColumn, start, end, searchData, captureMatches, limitResultCount, result);
+        return result;
+    }
+
+    private void FindMatchesInNode(
+        TreeNode node,
+        Searcher searcher,
+        int startLineNumber,
+        int startColumn,
+        BufferCursor startCursor,
+        BufferCursor endCursor,
+        SearchData searchData,
+        bool captureMatches,
+        int limitResultCount,
+        List<FindMatch> result)
+    {
+        var buffer = _buffers[node.Piece.BufferIndex];
+        int startOffsetInBuffer = OffsetInBuffer(node.Piece.BufferIndex, node.Piece.Start);
+        int start = OffsetInBuffer(node.Piece.BufferIndex, startCursor);
+        int end = OffsetInBuffer(node.Piece.BufferIndex, endCursor);
+
+        Match? m;
+        // Reset regex to search from the beginning
+        BufferCursor? ret = new BufferCursor(0, 0);
+        string searchText;
+        Func<int, int> offsetInBuffer;
+
+        if (searcher._wordSeparators is not null)
+        {
+            searchText = buffer.Buffer.Substring(start, end - start);
+            offsetInBuffer = (int offset) => offset + start;
+            searcher.Reset(0);
+        }
+        else
+        {
+            searchText = buffer.Buffer;
+            offsetInBuffer = (int offset) => offset;
+            searcher.Reset(start);
+        }
+
+        do
+        {
+            m = searcher.Next(searchText);
+            if (m is not null)
+            {
+                if (offsetInBuffer(m.Index) >= end)
+                    return;
+                PositionInBuffer(node, offsetInBuffer(m.Index) - startOffsetInBuffer, ref ret);
+                BufferCursor ret1 = (BufferCursor)ret!;
+                int lineFeedCnt = GetLineFeedCnt(node.Piece.BufferIndex, startCursor, ret1);
+                int retStartColumn = ret1.Line == startCursor.Line ? ret1.Column - startCursor.Column + startColumn : ret1.Column + 1;
+                int retEndColumn = retStartColumn + m.Length;
+                result.Add(SearchUtils.CreateFindMatch(new Range(startLineNumber + lineFeedCnt, retStartColumn, startLineNumber + lineFeedCnt, retEndColumn), [m], captureMatches));
+
+                if (offsetInBuffer(m.Index) + m.Length >= end)
+                    return;
+                if (result.Count >= limitResultCount)
+                    return;
+            }
+        } while (m is not null);
+    }
+
+
+    private void FindMatchesInLine(
+        SearchData searchData,
+        Searcher searcher,
+        string text,
+        int lineNumber,
+        int deltaOffset,
+        List<FindMatch> result,
+        bool captureMatches,
+        int limitResultCount)
+    {
+        var wordSeparators = searchData.WordSeparators;
+        if (!captureMatches && searchData.SimpleSearch is string searchString)
+        {
+            int lastMatchIndex = -searchString.Length;
+            while((lastMatchIndex = text.IndexOf(searchString, lastMatchIndex + searchString.Length)) != -1)
+            {
+                if (wordSeparators is null || SearchUtils.IsValidMatch(wordSeparators, text, text.Length, lastMatchIndex, searchString.Length))
+                {
+                    result.Add(new FindMatch(new Range(lineNumber, lastMatchIndex + 1 + deltaOffset, lineNumber, lastMatchIndex + 1 + searchString.Length + deltaOffset), null));
+                    if (result.Count >= limitResultCount)
+                        return;
+                }
+            }
+            return;
+        }
+
+        Match? m = null;
+        // Reset regex to search from the beginning
+        searcher.Reset(0);
+        do
+        {
+            m = searcher.Next(text);
+            if (m is not null)
+            {
+                result.Add(SearchUtils.CreateFindMatch(
+                    new Range(lineNumber, m.Index + 1 + deltaOffset, lineNumber, m.Index + 1 + m.Length + deltaOffset),
+                    [m],
+                    captureMatches)
+                );
+            }
+        } while (m is not null);
+    }
 
     #endregion
 
@@ -765,6 +923,12 @@ public partial class PieceTreeBase
 
     private BufferCursor PositionInBuffer(TreeNode node, int remainder)
     {
+        BufferCursor? ret = null;
+        return (BufferCursor)PositionInBuffer(node, remainder, ref ret)!; // not null when ret is null
+    }
+
+    private BufferCursor? PositionInBuffer(TreeNode node, int remainder, ref BufferCursor? ret)
+    {
         var piece = node.Piece;
         int bufferIndex = node.Piece.BufferIndex;
         var lineStarts = _buffers[bufferIndex].LineStarts;
@@ -797,6 +961,12 @@ public partial class PieceTreeBase
                 low = mid + 1;
             else
                 break;
+        }
+
+        if (ret is BufferCursor)
+        {
+            ret = new BufferCursor(mid, offset - midStart);
+            return null;
         }
 
         return new BufferCursor
