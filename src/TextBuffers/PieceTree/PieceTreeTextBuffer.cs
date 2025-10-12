@@ -1,5 +1,4 @@
-﻿using FluidX.TextBuffers.Contracts;
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 
 namespace FluidX.TextBuffers.PieceTree;
 

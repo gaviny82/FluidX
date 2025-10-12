@@ -1,6 +1,4 @@
-﻿using FluidX.TextBuffers.Contracts;
-
-namespace FluidX.TextBuffers;
+﻿namespace FluidX.TextBuffers;
 
 public static class TextSnapshotExtensions
 {

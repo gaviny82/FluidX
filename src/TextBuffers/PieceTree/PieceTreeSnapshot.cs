@@ -1,6 +1,4 @@
-﻿using FluidX.TextBuffers.Contracts;
-
-namespace FluidX.TextBuffers.PieceTree;
+﻿namespace FluidX.TextBuffers.PieceTree;
 
 /// <summary>
 /// Readonly snapshot for <see cref="PieceTreeTextBuffer"/>.

@@ -1,4 +1,4 @@
-﻿namespace FluidX.TextBuffers.Contracts;
+﻿namespace FluidX.TextBuffers;
 
 public interface ITextBuffer : IReadOnlyTextBuffer
 {

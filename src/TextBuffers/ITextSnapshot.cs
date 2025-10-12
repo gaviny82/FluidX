@@ -1,4 +1,4 @@
-﻿namespace FluidX.TextBuffers.Contracts;
+﻿namespace FluidX.TextBuffers;
 
 /// <summary>
 /// Text snapshot that works like an iterator.
