@@ -22,6 +22,11 @@ public class UndoRedoStack
     public bool CanRedo => Future.Count > 0;
     public bool HasElements => Past.Count > 0 || Future.Count > 0;
 
+    /// <summary>
+    /// Returns the most recent <see cref="IUndoRedoElement"/>, if available.
+    /// </summary>
+    /// <returns>The last element in the undo stack, or <see langword="null"/> if there are no elements to undo or if there are
+    /// pending redo operations.</returns>
     public IUndoRedoElement? GetLastElement()
     {
         if (Future.Count != 0) return null;
