@@ -34,9 +34,33 @@ public class UndoRedoStack
         return Past.Peek();
     }
 
+    public IUndoRedoElement? GetClosestPastElement()
+    {
+        if (Past.Count == 0) return null;
+        return Past.Peek();
+    }
+
+    public IUndoRedoElement? GetClosestFutureElement()
+    {
+        if (Future.Count == 0) return null;
+        return Future.Peek();
+    }
+
     public void PushElement(IUndoRedoElement element)
     {
         Future.Clear();
+        Past.Push(element);
+    }
+
+    public void MoveBackward(IUndoRedoElement element)
+    {
+        Past.Pop();
+        Future.Push(element);
+    }
+
+    public void MoveForward(IUndoRedoElement element)
+    {
+        Future.Pop();
         Past.Push(element);
     }
 

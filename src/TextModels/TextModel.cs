@@ -38,6 +38,9 @@ public class TextModel
         _ => EndOfLineSequence.CRLF,
     };
 
+    public bool CanUndo => _undoRedoStack.CanUndo;
+    public bool CanRedo => _undoRedoStack.CanRedo;
+
     private readonly UndoRedoStack _undoRedoStack = new();
     private int[]? _trimAutoWhitespaceLineNumbers;
 
@@ -138,6 +141,95 @@ public class TextModel
         return result.ReverseEdits;
     }
 
+    public void Undo()
+    {
+        if (_undoRedoStack.GetClosestPastElement() is not IUndoRedoElement element)
+            return;
+        _undoRedoStack.MoveBackward(element);
+        element.Undo();
+    }
+
+    public void ApplyUndo(TextChange[] changes, EndOfLineSequence eol, long resultingAltVersionId, Selection[]? resultingSelection)
+    {
+        var edits = changes.Select(change =>
+        {
+            var rangeStart = TextBuffer.GetPositionAt(change.NewPosition);
+            var rangeEnd = TextBuffer.GetPositionAt(change.NewEnd);
+            return new ValidAnnotatedEditOperation
+            {
+                Range = new FluidX.TextBuffers.Range(
+                    rangeStart.LineNumber,
+                    rangeStart.Column,
+                    rangeEnd.LineNumber,
+                    rangeEnd.Column
+                ),
+                Text = change.OldText,
+                ForceMoveMarkers = false,
+                IsAutoWhitespaceEdit = false,
+                IsTracked = false,
+                Identifier = null
+            };
+        }).ToArray();
+
+        // TODO: Emit events
+
+        ApplyEdits(edits, false);
+        SetEOL(eol);
+        AlternativeVersionId = resultingAltVersionId;
+    }
+
+    public void ApplyRedo(TextChange[] changes, EndOfLineSequence eol, long resultingAltVersionId, Selection[]? resultingSelection)
+    {
+        var edits = changes.Select(change =>
+        {
+            var rangeStart = TextBuffer.GetPositionAt(change.OldPosition);
+            var rangeEnd = TextBuffer.GetPositionAt(change.OldEnd);
+            return new ValidAnnotatedEditOperation
+            {
+                Range = new FluidX.TextBuffers.Range(
+                    rangeStart.LineNumber,
+                    rangeStart.Column,
+                    rangeEnd.LineNumber,
+                    rangeEnd.Column
+                ),
+                Text = change.NewText,
+                ForceMoveMarkers = false,
+                IsAutoWhitespaceEdit = false,
+                IsTracked = false,
+                Identifier = null
+            };
+        }).ToArray();
+
+        // TODO: Emit events
+
+        ApplyEdits(edits, false);
+        SetEOL(eol);
+        AlternativeVersionId = resultingAltVersionId;
+    }
+
+    public void Redo()
+    {
+        if (_undoRedoStack.GetClosestFutureElement() is not IUndoRedoElement element)
+            return;
+        _undoRedoStack.MoveForward(element);
+        element.Redo();
+    }
+
+    public void SetEOL(EndOfLineSequence eol)
+    {
+        string newEOL = eol switch
+        {
+            EndOfLineSequence.LF => "\n",
+            _ => "\r\n",
+        };
+
+        if (TextBuffer.GetEOL() == newEOL) return;
+
+        // Set EOL only if different
+        TextBuffer.SetEOL(newEOL);
+        IncreaseVersionId();
+    }
+
     private void IncreaseVersionId()
     {
         VersionId++;
@@ -205,14 +297,12 @@ public class SingleModelEditStackElement : IUndoRedoElement
 
     public void Undo()
     {
-        // TODO: Call Model.ApplyUndo
-        throw new NotImplementedException();
+        Model.ApplyUndo(Changes, BeforeEOL, BeforeVersionId, BeforeCursorState);
     }
 
     public void Redo()
     {
-        // TODO: Call Model.ApplyRedo
-        throw new NotImplementedException();
+        Model.ApplyRedo(Changes, AfterEOL, AfterVersionId, AfterCursorState);
     }
 
     private class TextChangeCompressor
