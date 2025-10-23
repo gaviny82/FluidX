@@ -1,4 +1,5 @@
-﻿using System.Text.RegularExpressions;
+﻿using FluidX.TextModels;
+using System.Text.RegularExpressions;
 
 namespace FluidX.TextBuffers.PieceTree;
 
@@ -207,6 +208,131 @@ public class PieceTreeTextBuffer : ITextBuffer
         _pieceTree.EOL = eol;
     }
 
+    public void ApplyEdits(ReadOnlySpan<TextReplacement> operations)
+    {
+        #region Update RTL, Line Terminators, Non-Basic ASCII Flags
+
+        bool mightContainRTL = _mightContainRTL;
+        bool mightContainUnusualLineTerminators = _mightContainUnusualLineTerminators;
+        bool mightContainNonBasicASCII = _mightContainNonBasicASCII;
+
+        foreach (var op in operations)
+        {
+            Range validatedRange = op.Range;
+            if (!string.IsNullOrEmpty(op.Text))
+            {
+                bool textMightContainNonBasicASCII = true;
+                if (!mightContainNonBasicASCII)
+                {
+                    textMightContainNonBasicASCII = !op.Text.IsBasicASCII();
+                    mightContainNonBasicASCII = textMightContainNonBasicASCII;
+                }
+                if (!mightContainRTL && textMightContainNonBasicASCII)
+                {
+                    // check if the new inserted text contains RTL
+                    mightContainRTL = op.Text.ContainsRTL();
+                }
+                if (!mightContainUnusualLineTerminators && textMightContainNonBasicASCII)
+                {
+                    // check if the new inserted text contains unusual line terminators
+                    mightContainUnusualLineTerminators = op.Text.ContainsUnusualLineTerminators();
+                }
+            }
+
+            // TODO: TBD
+            //string validText = "";
+            //int eolCount = 0;
+            //int firstLineLength = 0;
+            //int lastLineLength = 0;
+            //if (!string.IsNullOrEmpty(op.Text))
+            //{
+            //    (eolCount, firstLineLength, lastLineLength, StringEndOfLine strEOL) =
+            //        EOLCounter.CountEOL(op.Text);
+
+            //    string bufferEOL = GetEOL();
+            //    StringEndOfLine expectedStrEOL = (bufferEOL == "\r\n" ? StringEndOfLine.CRLF : StringEndOfLine.LF);
+            //    if (strEOL == StringEndOfLine.Unknown || strEOL == expectedStrEOL)
+            //        validText = op.Text;
+            //    else
+            //        validText = StringExtensions.EndOfLinesRegex.Replace(op.Text, bufferEOL);
+            //}
+            //operations[i] = new ValidatedEditOperation
+            //{
+            //    SortIndex = i,
+            //    Identifier = op.Identifier,
+            //    Range = validatedRange,
+            //    RangeOffset = GetOffsetAt(validatedRange.StartLineNumber, validatedRange.StartColumn),
+            //    RangeLength = GetValueLengthInRange(validatedRange),
+            //    Text = validText,
+            //    EOLCount = eolCount,
+            //    FirstLineLength = firstLineLength,
+            //    LastLineLength = lastLineLength,
+            //    ForceMoveMarkers = op.ForceMoveMarkers,
+            //    IsAutoWhitespaceEdit = op.IsAutoWhitespaceEdit
+            //};
+        }
+
+        _mightContainRTL = mightContainRTL;
+        _mightContainUnusualLineTerminators = mightContainUnusualLineTerminators;
+        _mightContainNonBasicASCII = mightContainNonBasicASCII;
+
+        #endregion
+
+        #region Apply changes
+
+        (TextReplacement Op, int SortIndex)[] opsWithIndex = new (TextReplacement, int)[operations.Length];
+        for (int i = 0; i < operations.Length; i++)
+        {
+            opsWithIndex[i] = (operations[i], i);
+        }
+        Array.Sort(opsWithIndex, SortOpsDescending);
+
+        //List<IInternalModelContentChange> contentChanges = [];
+
+        // operations are from bottom to top
+        foreach (var (op, _) in opsWithIndex)
+        {
+            int startLineNumber = op.Range.StartLineNumber;
+            int startColumn = op.Range.StartColumn;
+            int endLineNumber = op.Range.EndLineNumber;
+            int endColumn = op.Range.EndColumn;
+
+            if (startLineNumber == endLineNumber
+                && startColumn == endColumn
+                && op.Text.Length == 0)
+                continue; // no-op
+
+            int rangeOffset = GetOffsetAt(op.Range.StartLineNumber, op.Range.StartColumn);
+            int rangeLength = GetValueLengthInRange(op.Range);
+
+            if (!string.IsNullOrEmpty(op.Text))
+            {
+                // replacement
+                _pieceTree.Delete(rangeOffset, rangeLength);
+                _pieceTree.Insert(rangeOffset, op.Text, true);
+            }
+            else
+            {
+                // deletion
+                _pieceTree.Delete(rangeOffset, rangeLength);
+            }
+
+            //Range contentChangeRange = new(startLineNumber, startColumn, endLineNumber, endColumn);
+            //contentChanges.Add(new InternalModelContentChange
+            //{
+            //    Range = contentChangeRange,
+            //    RangeLength = op.RangeLength,
+            //    Text = op.Text,
+            //    RangeOffset = op.RangeOffset,
+            //    ForceMoveMarkers = op.ForceMoveMarkers
+            //});
+        }
+
+        #endregion
+    }
+
+
+    [Obsolete]
     public ApplyEditsResult ApplyEdits(ValidAnnotatedEditOperation[] rawOperations, bool recordTrimAutoWhitespace, bool computeUndoEdits)
     {
         bool mightContainRTL = _mightContainRTL;
@@ -261,7 +387,6 @@ public class PieceTreeTextBuffer : ITextBuffer
             operations[i] = new ValidatedEditOperation
             {
                 SortIndex = i,
-                Identifier = op.Identifier,
                 Range = validatedRange,
                 RangeOffset = GetOffsetAt(validatedRange.StartLineNumber, validatedRange.StartColumn),
                 RangeLength = GetValueLengthInRange(validatedRange),
@@ -273,6 +398,8 @@ public class PieceTreeTextBuffer : ITextBuffer
                 IsAutoWhitespaceEdit = op.IsAutoWhitespaceEdit
             };
         }
+
+        #region TODO: Lift to TextModel
 
         // Sort operations ascending
         Array.Sort(operations, SortOpsAscending);
@@ -343,7 +470,6 @@ public class PieceTreeTextBuffer : ITextBuffer
                 reverseOperations[i] = new ReverseSingleEditOperation
                 {
                     SortIndex = op.SortIndex,
-                    Identifier = op.Identifier,
                     Range = reverseRange,
                     Text = bufferText,
                     TextChange = new TextChange(op.RangeOffset, bufferText, reverseRangeOffset, op.Text)
@@ -357,12 +483,15 @@ public class PieceTreeTextBuffer : ITextBuffer
             }
         }
 
+        #endregion
+
         _mightContainRTL = mightContainRTL;
         _mightContainUnusualLineTerminators = mightContainUnusualLineTerminators;
         _mightContainNonBasicASCII = mightContainNonBasicASCII;
 
         var contentChanges = DoApplyEdits(operations);
 
+        #region TODO: Lift to TextModel
         List<int>? trimAutoWhitespaceLineNumbers = null;
         if (recordTrimAutoWhitespace && newTrimAutoWhitespaceCandidates.Count > 0)
         {
@@ -394,76 +523,75 @@ public class PieceTreeTextBuffer : ITextBuffer
             Changes = contentChanges,
             TrimAutoWhitespaceLineNumbers = trimAutoWhitespaceLineNumbers
         };
+        #endregion
     }
 
     /**
      * Transform operations such that they represent the same logic edit,
      * but that they also do not cause OOM crashes.
      */
+    [Obsolete]
     private IValidatedEditOperation[] ReduceOperations(IValidatedEditOperation[] operations)
     {
         if (operations.Length < 1000)
             return operations; // We know from empirical testing that a thousand edits work fine regardless of their shape.
 
-        IValidatedEditOperation toSingleEditOperation(IValidatedEditOperation[] operations)
+        bool forceMoveMarkers = false;
+        Range firstEditRange = operations[0].Range;
+        Range lastEditRange = operations[^1].Range;
+        Range entireEditRange = new(firstEditRange.StartLineNumber, firstEditRange.StartColumn, lastEditRange.EndLineNumber, lastEditRange.EndColumn);
+        int lastEndLineNumber = firstEditRange.StartLineNumber;
+        int lastEndColumn = firstEditRange.StartColumn;
+        List<string> result = [];
+
+        for (int i = 0, len = operations.Length; i < len; i++)
         {
-            bool forceMoveMarkers = false;
-            Range firstEditRange = operations[0].Range;
-            Range lastEditRange = operations[^1].Range;
-            Range entireEditRange = new(firstEditRange.StartLineNumber, firstEditRange.StartColumn, lastEditRange.EndLineNumber, lastEditRange.EndColumn);
-            int lastEndLineNumber = firstEditRange.StartLineNumber;
-            int lastEndColumn = firstEditRange.StartColumn;
-            List<string> result = [];
+            IValidatedEditOperation operation = operations[i];
+            Range range = operation.Range;
 
-            for (int i = 0, len = operations.Length; i < len; i++)
-            {
-                IValidatedEditOperation operation = operations[i];
-                Range range = operation.Range;
+            forceMoveMarkers = forceMoveMarkers || operation.ForceMoveMarkers;
 
-                forceMoveMarkers = forceMoveMarkers || operation.ForceMoveMarkers;
+            // (1) -- Push old text
+            result.Add(GetValueInRange(new Range(lastEndLineNumber, lastEndColumn, range.StartLineNumber, range.StartColumn)));
 
-                // (1) -- Push old text
-                result.Add(GetValueInRange(new Range(lastEndLineNumber, lastEndColumn, range.StartLineNumber, range.StartColumn)));
+            // (2) -- Push new text
+            if (operation.Text.Length > 0)
+                result.Add(operation.Text);
 
-                // (2) -- Push new text
-                if (operation.Text.Length > 0)
-                    result.Add(operation.Text);
-
-                lastEndLineNumber = range.EndLineNumber;
-                lastEndColumn = range.EndColumn;
-            }
-
-            string text = string.Concat(result);
-            var (eolCount, firstLineLength, lastLineLength, _) = EOLCounter.CountEOL(text);
-
-            return new ValidatedEditOperation
-            {
-                SortIndex = 0,
-                Identifier = operations[0].Identifier,
-                Range = entireEditRange,
-                RangeOffset = GetOffsetAt(entireEditRange.StartLineNumber, entireEditRange.StartColumn),
-                RangeLength = GetValueLengthInRange(entireEditRange, EndOfLinePreference.TextDefined),
-                Text = text,
-                EOLCount = eolCount,
-                FirstLineLength = firstLineLength,
-                LastLineLength = lastLineLength,
-                ForceMoveMarkers = forceMoveMarkers,
-                IsAutoWhitespaceEdit = false
-            };
+            lastEndLineNumber = range.EndLineNumber;
+            lastEndColumn = range.EndColumn;
         }
+
+        string text = string.Concat(result);
+        var (eolCount, firstLineLength, lastLineLength, _) = EOLCounter.CountEOL(text);
+
+        var combinedOperation = new ValidatedEditOperation
+        {
+            SortIndex = 0,
+            Range = entireEditRange,
+            RangeOffset = GetOffsetAt(entireEditRange.StartLineNumber, entireEditRange.StartColumn),
+            RangeLength = GetValueLengthInRange(entireEditRange, EndOfLinePreference.TextDefined),
+            Text = text,
+            EOLCount = eolCount,
+            FirstLineLength = firstLineLength,
+            LastLineLength = lastLineLength,
+            ForceMoveMarkers = forceMoveMarkers,
+            IsAutoWhitespaceEdit = false
+        };
 
         // At one point, due to how events are emitted and how each operation is handled,
         // some operations can trigger a high amount of temporary string allocations,
         // that will immediately get edited again.
         // e.g. a formatter inserting ridiculous amounts of \n on a model with a single line
         // Therefore, the strategy is to collapse all the operations into a huge single edit operation
-        return [toSingleEditOperation(operations)];
+        return [combinedOperation];
     }
 
-    private List<IInternalModelContentChange> DoApplyEdits(IValidatedEditOperation[] operations)
+    [Obsolete]
+    private List<InternalModelContentChange> DoApplyEdits(IValidatedEditOperation[] operations)
     {
         Array.Sort(operations, SortOpsDescending);
-        List<IInternalModelContentChange> contentChanges = [];
+        List<InternalModelContentChange> contentChanges = [];
 
         // operations are from bottom to top
         for (int i = 0; i < operations.Length; i++)
@@ -510,6 +638,7 @@ public class PieceTreeTextBuffer : ITextBuffer
     /**
      * Assumes `operations` are validated and sorted ascending
      */
+    [Obsolete]
     internal static Range[] GetInverseEditRanges(IValidatedEditOperation[] operations)
     {
         var result = new Range[operations.Length];
@@ -566,6 +695,7 @@ public class PieceTreeTextBuffer : ITextBuffer
         return result;
     }
 
+    [Obsolete]
     private static int SortOpsAscending(IValidatedEditOperation a, IValidatedEditOperation b)
     {
         int r = Range.CompareRangesUsingEnds(a.Range, b.Range);
@@ -574,9 +704,18 @@ public class PieceTreeTextBuffer : ITextBuffer
         return r;
     }
 
+    [Obsolete]
     private static int SortOpsDescending(IValidatedEditOperation a, IValidatedEditOperation b)
     {
         int r = Range.CompareRangesUsingEnds(a.Range, b.Range);
+        if (r == 0)
+            return b.SortIndex - a.SortIndex;
+        return -r;
+    }
+
+    private static int SortOpsDescending((TextReplacement Op, int SortIndex) a, (TextReplacement Op, int SortIndex) b)
+    {
+        int r = Range.CompareRangesUsingEnds(a.Op.Range, b.Op.Range);
         if (r == 0)
             return b.SortIndex - a.SortIndex;
         return -r;

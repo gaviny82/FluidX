@@ -1,4 +1,5 @@
-﻿using System;
+﻿using FluidX.TextModels;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -156,7 +157,7 @@ internal class LineArrayTextBuffer : ITextBuffer
         throw new NotImplementedException();
     }
 
-    public ApplyEditsResult ApplyEdits(ValidAnnotatedEditOperation[] rawOperations, bool recordTrimAutoWhitespace, bool computeUndoEdits)
+    public void ApplyEdits(ReadOnlySpan<TextReplacement> operations)
     {
         throw new NotImplementedException();
     }

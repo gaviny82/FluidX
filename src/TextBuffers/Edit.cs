@@ -6,17 +6,12 @@ namespace FluidX.TextBuffers;
 public class ApplyEditsResult
 {
     public required IValidEditOperation[]? ReverseEdits { get; init; }
-    public required IReadOnlyList<IInternalModelContentChange> Changes { get; init; }
+    public required IReadOnlyList<InternalModelContentChange> Changes { get; init; }
     public required IReadOnlyList<int>? TrimAutoWhitespaceLineNumbers { get; init; }
 }
 
 public interface IValidEditOperation
 {
-    /**
-     * An identifier associated with this single edit operation.
-     * @internal
-     */
-    ISingleEditOperationIdentifier? Identifier { get; }
     /**
      * The range to replace. This can be empty to emulate a simple insert.
      */
@@ -34,7 +29,6 @@ public interface IValidEditOperation
 interface IValidatedEditOperation
 {
     int SortIndex { get; }
-    ISingleEditOperationIdentifier? Identifier { get; }
     Range Range { get; }
     int RangeOffset { get; }
     int RangeLength { get; }
@@ -49,7 +43,6 @@ interface IValidatedEditOperation
 class ValidatedEditOperation : IValidatedEditOperation
 {
     public required int SortIndex { get; init; }
-    public required ISingleEditOperationIdentifier? Identifier { get; init; }
     public required Range Range { get; init; }
     public required int RangeOffset { get; init; }
     public required int RangeLength { get; init; }
@@ -68,7 +61,6 @@ interface IReverseSingleEditOperation : IValidEditOperation
 
 class ReverseSingleEditOperation : IReverseSingleEditOperation
 {
-    public required ISingleEditOperationIdentifier? Identifier { get; init; }
     public required Range Range { get; init; }
     public required string Text { get; init; }
     public required TextChange TextChange { get; init; }
@@ -169,60 +161,37 @@ public class TextChange
     }
 }
 
-public interface IInternalModelContentChange : IModelContentChange
+public class InternalModelContentChange
 {
-    //Range Range { get; }//duplicate?
-    bool ForceMoveMarkers { get; }
-}
+    /// <summary>
+    /// The old range that got replaced.
+    /// </summary>
+    public required Range Range { get; init; }
 
-class InternalModelContentChange : IInternalModelContentChange
-{
-    public required IRange Range { get; init; }
+    /// <summary>
+    /// The offset of the range that got replaced.
+    /// </summary>
     public required int RangeOffset { get; init; }
+
+    /// <summary>
+    /// The length of the range that got replaced.
+    /// </summary>
     public required int RangeLength { get; init; }
+
+    /// <summary>
+    /// The new text for the range.
+    /// </summary>
     public required string Text { get; init; }
+
+
     public required bool ForceMoveMarkers { get; init; }
 }
 
 public class ValidAnnotatedEditOperation
 {
-    public required ISingleEditOperationIdentifier? Identifier { get; init; }
     public required Range Range { get; init; }
-    public required string? Text { get; init; }
+    public required string Text { get; init; }
     public required bool ForceMoveMarkers { get; init; }
     public required bool IsAutoWhitespaceEdit { get; init; }
-    public required bool IsTracked { get; init; }
-}
-
-public interface ISingleEditOperationIdentifier
-{
-    /**
-     * Identifier major
-     */
-    int Major { get; }
-    /**
-     * Identifier minor
-     */
-    int Minor { get; }
-}
-
-public interface IModelContentChange
-{
-    /**
-     * The old range that got replaced.
-     */
-    IRange Range { get; }
-
-    /**
-     * The offset of the range that got replaced.
-     */
-    int RangeOffset { get; }
-    /**
-     * The length of the range that got replaced.
-     */
-    int RangeLength { get; }
-    /**
-     * The new text for the range.
-     */
-    string Text { get; }
+    public required bool IsTracked { get; init; } = false;
 }

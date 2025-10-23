@@ -84,7 +84,7 @@ public interface IReadOnlyTextBuffer : IEquatable<IReadOnlyTextBuffer>
     /// <param name="range"><see cref="Range"/> of text</param>
     /// <param name="eol">End-of-line preference</param>
     /// <returns>Text in <paramref name="range"/> with the specified <see cref="EndOfLinePreference"/>.<returns>
-    string GetValueInRange(Range range, EndOfLinePreference eol);
+    string GetValueInRange(Range range, EndOfLinePreference eol = EndOfLinePreference.TextDefined);
 
     /// <summary>
     /// Get the length of text in a <see cref="Range"/> with the specified <see cref="EndOfLinePreference"/>.
@@ -92,7 +92,7 @@ public interface IReadOnlyTextBuffer : IEquatable<IReadOnlyTextBuffer>
     /// <param name="range">Range of text</param>
     /// <param name="eol">End-of-line preference</param>
     /// <returns>Length of text in <paramref name="range"/> with the specified <see cref="EndOfLinePreference"/>.</returns>
-    int GetValueLengthInRange(Range range, EndOfLinePreference eol);
+    int GetValueLengthInRange(Range range, EndOfLinePreference eol = EndOfLinePreference.TextDefined);
 
     /// <summary>
     /// Get the number of Unicode characters in a <see cref="Range"/> with the specified <see cref="EndOfLinePreference"/>.
