@@ -165,7 +165,7 @@ public class TextModel
 
         // Delta encode operations
         Range[] reverseRanges = computeUndoEdits || recordTrimAutoWhitespace
-            ? GetInverseEditRanges(operations)
+            ? GetInverseEditRanges(operations.Select(op=>new TextReplacement(op.Range, op.Text)).ToArray())
             : [];
         List<(int lineNumber, string oldContent)> newTrimAutoWhitespaceCandidates = [];
         if (recordTrimAutoWhitespace)
@@ -193,37 +193,55 @@ public class TextModel
             }
         }
 
-        IReverseSingleEditOperation[]? reverseOperations = null;
+        ReverseSingleEditOperation[]? reverseOperations = null;
         if (computeUndoEdits)
         {
             int reverseRangeDeltaOffset = 0;
-            reverseOperations = new IReverseSingleEditOperation[operations.Length];
+            reverseOperations = new ReverseSingleEditOperation[operations.Length];
             for (int i = 0; i < operations.Length; i++)
             {
-                IValidatedEditOperation op = operations[i];
+                ValidAnnotatedEditOperation op = operations[i];
+
+                // TODO: Avoid duplicate computation of rangeOffset and rangeLength in TextBuffer.ApplyEdit
+                int rangeOffset = TextBuffer.GetOffsetAt(op.Range.StartLineNumber, op.Range.StartColumn);
+                //int rangeLength = TextBuffer.GetValueLengthInRange(op.Range);
+
                 Range reverseRange = reverseRanges[i];
                 string bufferText = TextBuffer.GetValueInRange(op.Range);
-                int reverseRangeOffset = op.RangeOffset + reverseRangeDeltaOffset;
+                int reverseRangeOffset = rangeOffset + reverseRangeDeltaOffset;
                 reverseRangeDeltaOffset += op.Text.Length - bufferText.Length;
 
                 reverseOperations[i] = new ReverseSingleEditOperation
                 {
-                    SortIndex = op.SortIndex,
-                    Identifier = op.Identifier,
+                    //SortIndex = op.SortIndex,
+                    SortIndex = -1, // TODO: Remove this field (no longer used)
                     Range = reverseRange,
                     Text = bufferText,
-                    TextChange = new TextChange(op.RangeOffset, bufferText, reverseRangeOffset, op.Text)
+                    TextChange = new TextChange(rangeOffset, bufferText, reverseRangeOffset, op.Text)
                 };
             }
 
             // Can only sort reverse operations when the order is not significant
-            if (!hasTouchingRanges)
-            {
-                Array.Sort(reverseOperations, (a, b) => a.SortIndex - b.SortIndex);
-            }
+            //if (!hasTouchingRanges)
+            //{
+            //    Array.Sort(reverseOperations, (a, b) => a.SortIndex - b.SortIndex);
+            //}
         }
 
         #endregion
+
+        List<InternalModelContentChange> contentChanges = [];
+        foreach (var op in operations)
+        {
+            contentChanges.Add(new InternalModelContentChange
+            {
+                Range = op.Range,
+                RangeLength = TextBuffer.GetOffsetAt(op.Range.StartLineNumber, op.Range.StartColumn),
+                Text = op.Text,
+                RangeOffset = TextBuffer.GetValueLengthInRange(op.Range),
+                ForceMoveMarkers = op.ForceMoveMarkers
+            });
+        }
 
         int oldLineCount = TextBuffer.LineCount;
         TextBuffer.ApplyEdits(operations.Select(op => new TextReplacement(op.Range, op.Text!)).ToArray());
@@ -231,13 +249,12 @@ public class TextModel
 
         #region Post-edit record auto whitespace
 
-        List<int>? trimAutoWhitespaceLineNumbers = null;
         if (recordTrimAutoWhitespace && newTrimAutoWhitespaceCandidates.Count > 0)
         {
             // sort line numbers auto whitespace removal candidates for next edit descending
             newTrimAutoWhitespaceCandidates.Sort((a, b) => b.lineNumber - a.lineNumber);
 
-            trimAutoWhitespaceLineNumbers = [];
+            List<int> trimAutoWhitespaceLineNumbers = [];
             for (int i = 0, len = newTrimAutoWhitespaceCandidates.Count; i < len; i++)
             {
                 int lineNumber = newTrimAutoWhitespaceCandidates[i].lineNumber;
@@ -252,13 +269,10 @@ public class TextModel
 
                 trimAutoWhitespaceLineNumbers.Add(lineNumber);
             }
+            _trimAutoWhitespaceLineNumbers = trimAutoWhitespaceLineNumbers.ToArray();
         }
 
         #endregion
-
-        var contentChanges = result.Changes;
-
-        _trimAutoWhitespaceLineNumbers = trimAutoWhitespaceLineNumbers?.ToArray();
 
         if (contentChanges.Count != 0)
         {
@@ -267,7 +281,7 @@ public class TextModel
             IncreaseVersionId();
         }
 
-        return result.ReverseEdits;
+        return reverseOperations;
     }
 
     private static int SortOpsAscending((ValidAnnotatedEditOperation Op, int SortIndex) a, (ValidAnnotatedEditOperation Op, int SortIndex) b)
@@ -357,14 +371,15 @@ public class TextModel
             }
 
             Range resultRange;
+            var (eolCount, firstLineLength, lastLineLength, strEOL) = EOLCounter.CountEOL(op.Text);
             if (op.Text.Length > 0)
             {
                 // the operation inserts something
-                int lineCount = op.EOLCount + 1;
+                int lineCount = eolCount + 1;
                 if (lineCount == 1) // single line insert
-                    resultRange = new Range(startLineNumber, startColumn, startLineNumber, startColumn + op.FirstLineLength);
+                    resultRange = new Range(startLineNumber, startColumn, startLineNumber, startColumn + firstLineLength);
                 else // multi line insert
-                    resultRange = new Range(startLineNumber, startColumn, startLineNumber + lineCount - 1, op.LastLineLength + 1);
+                    resultRange = new Range(startLineNumber, startColumn, startLineNumber + lineCount - 1, lastLineLength + 1);
             }
             else
             {

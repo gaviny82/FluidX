@@ -292,13 +292,9 @@ public class PieceTreeTextBuffer : ITextBuffer
         // operations are from bottom to top
         foreach (var (op, _) in opsWithIndex)
         {
-            int startLineNumber = op.Range.StartLineNumber;
-            int startColumn = op.Range.StartColumn;
-            int endLineNumber = op.Range.EndLineNumber;
-            int endColumn = op.Range.EndColumn;
-
-            if (startLineNumber == endLineNumber
-                && startColumn == endColumn
+            Range range = op.Range;
+            if (range.StartLineNumber == range.EndLineNumber
+                && range.StartColumn == range.EndColumn
                 && op.Text.Length == 0)
                 continue; // no-op
 
@@ -316,6 +312,8 @@ public class PieceTreeTextBuffer : ITextBuffer
                 // deletion
                 _pieceTree.Delete(rangeOffset, rangeLength);
             }
+
+            // TODO: Return rangeOffset and rangeLength to the caller to avoid duplicate computation
 
             //Range contentChangeRange = new(startLineNumber, startColumn, endLineNumber, endColumn);
             //contentChanges.Add(new InternalModelContentChange

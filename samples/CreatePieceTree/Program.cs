@@ -23,7 +23,6 @@ var insertEdit = new ValidAnnotatedEditOperation
     ForceMoveMarkers = false,
     IsAutoWhitespaceEdit = false,
     IsTracked = false,
-    Identifier = null
 };
 buffer.ApplyEdits([insertEdit], false, false);
 PrintAllLines();
@@ -38,7 +37,6 @@ var deleteEdit = new ValidAnnotatedEditOperation
     ForceMoveMarkers = false,
     IsAutoWhitespaceEdit = false,
     IsTracked = false,
-    Identifier = null
 };
 buffer.ApplyEdits([deleteEdit], false, false);
 PrintAllLines();
