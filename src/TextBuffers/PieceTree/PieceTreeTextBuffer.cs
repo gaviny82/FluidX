@@ -209,6 +209,9 @@ public class PieceTreeTextBuffer : ITextBuffer
     }
 
     public void ApplyEdits(ReadOnlySpan<TextReplacement> operations)
+        => ApplyEdits(operations, out _);
+
+    public void ApplyEdits(ReadOnlySpan<TextReplacement> operations, out List<(int RangeOffset, int RangeLength, string originalText)> changeInfo)
     {
         #region Update RTL, Line Terminators, Non-Basic ASCII Flags
 
@@ -287,9 +290,9 @@ public class PieceTreeTextBuffer : ITextBuffer
         }
         Array.Sort(opsWithIndex, SortOpsDescending);
 
-        //List<IInternalModelContentChange> contentChanges = [];
+        changeInfo = new(opsWithIndex.Length);
 
-        // operations are from bottom to top
+        // operations are applied from bottom to top
         foreach (var (op, _) in opsWithIndex)
         {
             Range range = op.Range;
@@ -300,6 +303,7 @@ public class PieceTreeTextBuffer : ITextBuffer
 
             int rangeOffset = GetOffsetAt(op.Range.StartLineNumber, op.Range.StartColumn);
             int rangeLength = GetValueLengthInRange(op.Range);
+            string originalText = GetValueInRange(op.Range);
 
             if (!string.IsNullOrEmpty(op.Text))
             {
@@ -313,17 +317,7 @@ public class PieceTreeTextBuffer : ITextBuffer
                 _pieceTree.Delete(rangeOffset, rangeLength);
             }
 
-            // TODO: Return rangeOffset and rangeLength to the caller to avoid duplicate computation
-
-            //Range contentChangeRange = new(startLineNumber, startColumn, endLineNumber, endColumn);
-            //contentChanges.Add(new InternalModelContentChange
-            //{
-            //    Range = contentChangeRange,
-            //    RangeLength = op.RangeLength,
-            //    Text = op.Text,
-            //    RangeOffset = op.RangeOffset,
-            //    ForceMoveMarkers = op.ForceMoveMarkers
-            //});
+            changeInfo.Add((rangeOffset, rangeLength, originalText));
         }
 
         #endregion

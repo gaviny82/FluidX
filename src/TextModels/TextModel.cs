@@ -161,8 +161,6 @@ public class TextModel
 
         #endregion
 
-        #region Pre-edit compute reverse ranges and auto whitespace
-
         // Delta encode operations
         Range[] reverseRanges = computeUndoEdits || recordTrimAutoWhitespace
             ? GetInverseEditRanges(operations.Select(op=>new TextReplacement(op.Range, op.Text)).ToArray())
@@ -193,6 +191,15 @@ public class TextModel
             }
         }
 
+        // Apply edits to text buffer
+        int oldLineCount = TextBuffer.LineCount;
+        ((PieceTreeTextBuffer)TextBuffer).ApplyEdits(
+            operations.Select(op => new TextReplacement(op.Range, op.Text!)).ToArray(),
+            out var changeInfo
+        );
+        int newLineCount = TextBuffer.LineCount;
+
+        // Compute reverse operations
         ReverseSingleEditOperation[]? reverseOperations = null;
         if (computeUndoEdits)
         {
@@ -202,12 +209,9 @@ public class TextModel
             {
                 ValidAnnotatedEditOperation op = operations[i];
 
-                // TODO: Avoid duplicate computation of rangeOffset and rangeLength in TextBuffer.ApplyEdit
-                int rangeOffset = TextBuffer.GetOffsetAt(op.Range.StartLineNumber, op.Range.StartColumn);
-                //int rangeLength = TextBuffer.GetValueLengthInRange(op.Range);
-
+                int rangeOffset = changeInfo[i].RangeOffset;
                 Range reverseRange = reverseRanges[i];
-                string bufferText = TextBuffer.GetValueInRange(op.Range);
+                string bufferText = changeInfo[i].originalText;
                 int reverseRangeOffset = rangeOffset + reverseRangeDeltaOffset;
                 reverseRangeDeltaOffset += op.Text.Length - bufferText.Length;
 
@@ -228,27 +232,21 @@ public class TextModel
             //}
         }
 
-        #endregion
-
         List<InternalModelContentChange> contentChanges = [];
-        foreach (var op in operations)
+        for (int i = 0; i < operations.Length; i++)
         {
+            ValidAnnotatedEditOperation op = operations[i];
             contentChanges.Add(new InternalModelContentChange
             {
                 Range = op.Range,
-                RangeLength = TextBuffer.GetOffsetAt(op.Range.StartLineNumber, op.Range.StartColumn),
+                RangeLength = changeInfo[i].RangeLength,
                 Text = op.Text,
-                RangeOffset = TextBuffer.GetValueLengthInRange(op.Range),
+                RangeOffset = changeInfo[i].RangeOffset,
                 ForceMoveMarkers = op.ForceMoveMarkers
             });
         }
 
-        int oldLineCount = TextBuffer.LineCount;
-        TextBuffer.ApplyEdits(operations.Select(op => new TextReplacement(op.Range, op.Text!)).ToArray());
-        int newLineCount = TextBuffer.LineCount;
-
-        #region Post-edit record auto whitespace
-
+        // Post-edit record auto whitespace
         if (recordTrimAutoWhitespace && newTrimAutoWhitespaceCandidates.Count > 0)
         {
             // sort line numbers auto whitespace removal candidates for next edit descending
@@ -272,12 +270,9 @@ public class TextModel
             _trimAutoWhitespaceLineNumbers = trimAutoWhitespaceLineNumbers.ToArray();
         }
 
-        #endregion
-
+        // TODO: Update decorations, injected text and compute event args
         if (contentChanges.Count != 0)
         {
-            // TODO: Update decorations, injected text and compute event args
-
             IncreaseVersionId();
         }
 
