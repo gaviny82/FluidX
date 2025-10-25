@@ -32,6 +32,8 @@ public class TextModel
         TrimAutoWhitespace: true
     );
 
+    public event TextModelModelContentChangedEventHandler? ContentChanged;
+
     public EndOfLineSequence EOL => TextBuffer.GetEOL() switch
     {
         "\n" => EndOfLineSequence.LF,
@@ -231,6 +233,13 @@ public class TextModel
     {
         VersionId++;
         AlternativeVersionId = VersionId;
+    }
+
+    private void OnContentChanged(
+        ModelRawContentChangedEventArgs rawChange,
+        ModelContentChangedEventArgs change)
+    {
+        ContentChanged?.Invoke(new(rawChange, change));
     }
 }
 
@@ -543,104 +552,6 @@ public class SingleModelEditStackElement : IUndoRedoElement
         }
     }
 }
-
-#region Event Data
-
-public enum RawContentChangedType
-{
-    Flush = 1,
-    LineChanged = 2,
-    LinesDeleted = 3,
-    LinesInserted = 4,
-    EOLChanged = 5
-}
-
-public abstract class ModelRawChange
-{
-    public abstract RawContentChangedType Type { get; }
-}
-
-/// <summary>
-/// An event describing that a model has been reset to a new value.
-/// </summary>
-public class ModelRawFlush : ModelRawChange
-{
-    public override RawContentChangedType Type => RawContentChangedType.Flush;
-}
-
-/// <summary>
-/// An event describing that a line has changed in a model.
-/// </summary>
-public class ModelRawLineChanged : ModelRawChange
-{
-    public override RawContentChangedType Type => RawContentChangedType.LineChanged;
-
-    /// <summary>
-    /// The line that has changed (1-based)
-    /// </summary>
-    public int LineNumber { get; }
-    /// <summary>
-    /// The new value of the line.
-    /// </summary>
-    public string Detail { get; }
-
-    // TODO: InjectedText
-
-    public ModelRawLineChanged(int lineNumber, string detail)
-    {
-        LineNumber = lineNumber;
-        Detail = detail;
-    }
-}
-
-public class ModelRawLinesDeleted : ModelRawChange
-{
-    public override RawContentChangedType Type => RawContentChangedType.LinesDeleted;
-    public int FromLineNumber { get; }
-    public int ToLineNumber { get; }
-    public ModelRawLinesDeleted(int fromLineNumber, int toLineNumber)
-    {
-        FromLineNumber = fromLineNumber;
-        ToLineNumber = toLineNumber;
-    }
-}
-
-public class ModelRawLinesInserted : ModelRawChange
-{
-    public override RawContentChangedType Type => RawContentChangedType.LinesInserted;
-    public int FromLineNumber { get; }
-    public int ToLineNumber { get; }
-    public string[] Details { get; }
-
-    // TODO: InjectedText
-
-    public ModelRawLinesInserted(int fromLineNumber, int toLineNumber, string[] details)
-    {
-        FromLineNumber = fromLineNumber;
-        ToLineNumber = toLineNumber;
-        Details = details;
-    }
-}
-
-public class ModelRawContentChangedEventArgs
-{
-    public ModelRawChange[] Changes { get; }
-    public int VersionId { get; }
-    public bool IsUndoing { get; }
-    public bool IsRedoing { get; }
-    public Selection[]? ResultingSelection { get; set; }
-
-    public ModelRawContentChangedEventArgs(ModelRawChange[] changes, int versionId, bool isUndoing, bool isRedoing)
-    {
-        Changes = changes;
-        VersionId = versionId;
-        IsUndoing = isUndoing;
-        IsRedoing = isRedoing;
-        ResultingSelection = null;
-    }
-}
-
-#endregion
 
 public enum EndOfLineSequence
 {
