@@ -207,17 +207,17 @@ public class PieceTreeTextBuffer : ITextBuffer
         _pieceTree.EOL = eol;
     }
 
-    public ApplyEditsResult ApplyEdits(ValidAnnotatedEditOperation[] rawOperations, bool recordTrimAutoWhitespace, bool computeUndoEdits)
+    public ApplyEditsResult ApplyEdits(EditOperation[] rawOperations, bool recordTrimAutoWhitespace, bool computeUndoEdits)
     {
         bool mightContainRTL = _mightContainRTL;
         bool mightContainUnusualLineTerminators = _mightContainUnusualLineTerminators;
         bool mightContainNonBasicASCII = _mightContainNonBasicASCII;
         bool canReduceOperations = true;
 
-        var operations = new IValidatedEditOperation[rawOperations.Length];
+        var operations = new ValidatedEditOperation[rawOperations.Length];
         for (int i = 0; i < rawOperations.Length; i++)
         {
-            ValidAnnotatedEditOperation op = rawOperations[i];
+            EditOperation op = rawOperations[i];
             if (canReduceOperations && op.IsTracked)
                 canReduceOperations = false;
 
@@ -261,7 +261,6 @@ public class PieceTreeTextBuffer : ITextBuffer
             operations[i] = new ValidatedEditOperation
             {
                 SortIndex = i,
-                Identifier = op.Identifier,
                 Range = validatedRange,
                 RangeOffset = GetOffsetAt(validatedRange.StartLineNumber, validatedRange.StartColumn),
                 RangeLength = GetValueLengthInRange(validatedRange),
@@ -327,14 +326,14 @@ public class PieceTreeTextBuffer : ITextBuffer
             }
         }
 
-        IReverseSingleEditOperation[]? reverseOperations = null;
+        ReverseSingleEditOperation[]? reverseOperations = null;
         if (computeUndoEdits)
         {
             int reverseRangeDeltaOffset = 0;
-            reverseOperations = new IReverseSingleEditOperation[operations.Length];
+            reverseOperations = new ReverseSingleEditOperation[operations.Length];
             for (int i = 0; i < operations.Length; i++)
             {
-                IValidatedEditOperation op = operations[i];
+                ValidatedEditOperation op = operations[i];
                 Range reverseRange = reverseRanges[i];
                 string bufferText = GetValueInRange(op.Range);
                 int reverseRangeOffset = op.RangeOffset + reverseRangeDeltaOffset;
@@ -343,7 +342,6 @@ public class PieceTreeTextBuffer : ITextBuffer
                 reverseOperations[i] = new ReverseSingleEditOperation
                 {
                     SortIndex = op.SortIndex,
-                    Identifier = op.Identifier,
                     Range = reverseRange,
                     Text = bufferText,
                     TextChange = new TextChange(op.RangeOffset, bufferText, reverseRangeOffset, op.Text)
@@ -400,82 +398,75 @@ public class PieceTreeTextBuffer : ITextBuffer
      * Transform operations such that they represent the same logic edit,
      * but that they also do not cause OOM crashes.
      */
-    private IValidatedEditOperation[] ReduceOperations(IValidatedEditOperation[] operations)
+    private ValidatedEditOperation[] ReduceOperations(ValidatedEditOperation[] operations)
     {
         if (operations.Length < 1000)
             return operations; // We know from empirical testing that a thousand edits work fine regardless of their shape.
 
-        IValidatedEditOperation toSingleEditOperation(IValidatedEditOperation[] operations)
+        bool forceMoveMarkers = false;
+        Range firstEditRange = operations[0].Range;
+        Range lastEditRange = operations[^1].Range;
+        Range entireEditRange = new(firstEditRange.StartLineNumber, firstEditRange.StartColumn, lastEditRange.EndLineNumber, lastEditRange.EndColumn);
+        int lastEndLineNumber = firstEditRange.StartLineNumber;
+        int lastEndColumn = firstEditRange.StartColumn;
+        List<string> result = [];
+
+        for (int i = 0, len = operations.Length; i < len; i++)
         {
-            bool forceMoveMarkers = false;
-            Range firstEditRange = operations[0].Range;
-            Range lastEditRange = operations[^1].Range;
-            Range entireEditRange = new(firstEditRange.StartLineNumber, firstEditRange.StartColumn, lastEditRange.EndLineNumber, lastEditRange.EndColumn);
-            int lastEndLineNumber = firstEditRange.StartLineNumber;
-            int lastEndColumn = firstEditRange.StartColumn;
-            List<string> result = [];
+            ValidatedEditOperation operation = operations[i];
+            Range range = operation.Range;
 
-            for (int i = 0, len = operations.Length; i < len; i++)
-            {
-                IValidatedEditOperation operation = operations[i];
-                Range range = operation.Range;
+            forceMoveMarkers = forceMoveMarkers || operation.ForceMoveMarkers;
 
-                forceMoveMarkers = forceMoveMarkers || operation.ForceMoveMarkers;
+            // (1) -- Push old text
+            result.Add(GetValueInRange(new Range(lastEndLineNumber, lastEndColumn, range.StartLineNumber, range.StartColumn)));
 
-                // (1) -- Push old text
-                result.Add(GetValueInRange(new Range(lastEndLineNumber, lastEndColumn, range.StartLineNumber, range.StartColumn)));
+            // (2) -- Push new text
+            if (operation.Text.Length > 0)
+                result.Add(operation.Text);
 
-                // (2) -- Push new text
-                if (operation.Text.Length > 0)
-                    result.Add(operation.Text);
-
-                lastEndLineNumber = range.EndLineNumber;
-                lastEndColumn = range.EndColumn;
-            }
-
-            string text = string.Concat(result);
-            var (eolCount, firstLineLength, lastLineLength, _) = EOLCounter.CountEOL(text);
-
-            return new ValidatedEditOperation
-            {
-                SortIndex = 0,
-                Identifier = operations[0].Identifier,
-                Range = entireEditRange,
-                RangeOffset = GetOffsetAt(entireEditRange.StartLineNumber, entireEditRange.StartColumn),
-                RangeLength = GetValueLengthInRange(entireEditRange, EndOfLinePreference.TextDefined),
-                Text = text,
-                EOLCount = eolCount,
-                FirstLineLength = firstLineLength,
-                LastLineLength = lastLineLength,
-                ForceMoveMarkers = forceMoveMarkers,
-                IsAutoWhitespaceEdit = false
-            };
+            lastEndLineNumber = range.EndLineNumber;
+            lastEndColumn = range.EndColumn;
         }
+
+        string text = string.Concat(result);
+        var (eolCount, firstLineLength, lastLineLength, _) = EOLCounter.CountEOL(text);
+
+        var combinedOperation = new ValidatedEditOperation
+        {
+            SortIndex = 0,
+            Range = entireEditRange,
+            RangeOffset = GetOffsetAt(entireEditRange.StartLineNumber, entireEditRange.StartColumn),
+            RangeLength = GetValueLengthInRange(entireEditRange, EndOfLinePreference.TextDefined),
+            Text = text,
+            EOLCount = eolCount,
+            FirstLineLength = firstLineLength,
+            LastLineLength = lastLineLength,
+            ForceMoveMarkers = forceMoveMarkers,
+            IsAutoWhitespaceEdit = false
+        };
 
         // At one point, due to how events are emitted and how each operation is handled,
         // some operations can trigger a high amount of temporary string allocations,
         // that will immediately get edited again.
         // e.g. a formatter inserting ridiculous amounts of \n on a model with a single line
         // Therefore, the strategy is to collapse all the operations into a huge single edit operation
-        return [toSingleEditOperation(operations)];
+        return [combinedOperation];
     }
 
-    private List<IInternalModelContentChange> DoApplyEdits(IValidatedEditOperation[] operations)
+    private List<InternalModelContentChange> DoApplyEdits(ValidatedEditOperation[] operations)
     {
         Array.Sort(operations, SortOpsDescending);
-        List<IInternalModelContentChange> contentChanges = [];
+        List<InternalModelContentChange> contentChanges = [];
 
         // operations are from bottom to top
         for (int i = 0; i < operations.Length; i++)
         {
-            IValidatedEditOperation op = operations[i];
+            ValidatedEditOperation op = operations[i];
 
-            int startLineNumber = op.Range.StartLineNumber;
-            int startColumn = op.Range.StartColumn;
-            int endLineNumber = op.Range.EndLineNumber;
-            int endColumn = op.Range.EndColumn;
-
-            if (startLineNumber == endLineNumber && startColumn == endColumn && op.Text.Length == 0)
+            if (op.Range.StartLineNumber == op.Range.EndLineNumber
+                && op.Range.StartColumn == op.Range.EndColumn
+                && op.Text.Length == 0)
                 continue; // no-op
 
             if (!string.IsNullOrEmpty(op.Text))
@@ -490,10 +481,9 @@ public class PieceTreeTextBuffer : ITextBuffer
                 _pieceTree.Delete(op.RangeOffset, op.RangeLength);
             }
 
-            Range contentChangeRange = new(startLineNumber, startColumn, endLineNumber, endColumn);
             contentChanges.Add(new InternalModelContentChange
             {
-                Range = contentChangeRange,
+                Range = op.Range,
                 RangeLength = op.RangeLength,
                 Text = op.Text,
                 RangeOffset = op.RangeOffset,
@@ -510,13 +500,13 @@ public class PieceTreeTextBuffer : ITextBuffer
     /**
      * Assumes `operations` are validated and sorted ascending
      */
-    internal static Range[] GetInverseEditRanges(IValidatedEditOperation[] operations)
+    internal static Range[] GetInverseEditRanges(ValidatedEditOperation[] operations)
     {
         var result = new Range[operations.Length];
 
         int prevOpEndLineNumber = 0;
         int prevOpEndColumn = 0;
-        IValidatedEditOperation? prevOp = null;
+        ValidatedEditOperation? prevOp = null;
         for (int i = 0, len = operations.Length; i < len; i++)
         {
             var op = operations[i];
@@ -566,7 +556,7 @@ public class PieceTreeTextBuffer : ITextBuffer
         return result;
     }
 
-    private static int SortOpsAscending(IValidatedEditOperation a, IValidatedEditOperation b)
+    private static int SortOpsAscending(ValidatedEditOperation a, ValidatedEditOperation b)
     {
         int r = Range.CompareRangesUsingEnds(a.Range, b.Range);
         if (r == 0)
@@ -574,7 +564,7 @@ public class PieceTreeTextBuffer : ITextBuffer
         return r;
     }
 
-    private static int SortOpsDescending(IValidatedEditOperation a, IValidatedEditOperation b)
+    private static int SortOpsDescending(ValidatedEditOperation a, ValidatedEditOperation b)
     {
         int r = Range.CompareRangesUsingEnds(a.Range, b.Range);
         if (r == 0)

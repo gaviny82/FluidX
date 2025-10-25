@@ -56,21 +56,20 @@ public class TextModel
         // Ported from microsoft/vscode/src/vs/editor/common/model/textModel.ts
         // This is a simplified implementation of TextModel.edit=>pushEditOperations=>_pushEditOperations=>_commandManager.pushEditOperation
         // TODO: Emit events for ContentChanged and DecorationsChanged
-        PushEditOperations(edit.Replacements.Select(r => new ValidAnnotatedEditOperation
+        PushEditOperations(edit.Replacements.Select(r => new EditOperation
         {
             Range = r.Range,
             Text = r.Text,
             ForceMoveMarkers = false,
             IsAutoWhitespaceEdit = false,
             IsTracked = false,
-            Identifier = null
         }).ToArray(), null, null);
     }
 
     public Selection[]? PushEditOperations(
-        ValidAnnotatedEditOperation[] editOperations,
+        EditOperation[] editOperations,
         Selection[]? beforeCursorState,
-        Func<IValidEditOperation[]?, Selection[]?>? cursorStateComputer
+        Func<ReverseSingleEditOperation[]?, Selection[]?>? cursorStateComputer
         )
     {
         // Ported from microsoft/vscode/src/vs/editor/common/model/editStack.ts
@@ -121,7 +120,7 @@ public class TextModel
     /// <param name="computeUndoEdits"></param>
     /// <returns>Not null when <paramref name="computeUndoEdits"/> is true</returns>
     /// <exception cref="NotImplementedException"></exception>
-    public IValidEditOperation[]? ApplyEdits(ValidAnnotatedEditOperation[] rawOperations, bool computeUndoEdits)
+    public ReverseSingleEditOperation[]? ApplyEdits(EditOperation[] rawOperations, bool computeUndoEdits)
     {
         // TODO: Emit events
         int oldLineCount = TextBuffer.LineCount;
@@ -155,7 +154,7 @@ public class TextModel
         {
             var rangeStart = TextBuffer.GetPositionAt(change.NewPosition);
             var rangeEnd = TextBuffer.GetPositionAt(change.NewEnd);
-            return new ValidAnnotatedEditOperation
+            return new EditOperation
             {
                 Range = new FluidX.TextBuffers.Range(
                     rangeStart.LineNumber,
@@ -166,8 +165,7 @@ public class TextModel
                 Text = change.OldText,
                 ForceMoveMarkers = false,
                 IsAutoWhitespaceEdit = false,
-                IsTracked = false,
-                Identifier = null
+                IsTracked = false
             };
         }).ToArray();
 
@@ -184,7 +182,7 @@ public class TextModel
         {
             var rangeStart = TextBuffer.GetPositionAt(change.OldPosition);
             var rangeEnd = TextBuffer.GetPositionAt(change.OldEnd);
-            return new ValidAnnotatedEditOperation
+            return new EditOperation
             {
                 Range = new FluidX.TextBuffers.Range(
                     rangeStart.LineNumber,
@@ -195,8 +193,7 @@ public class TextModel
                 Text = change.NewText,
                 ForceMoveMarkers = false,
                 IsAutoWhitespaceEdit = false,
-                IsTracked = false,
-                Identifier = null
+                IsTracked = false
             };
         }).ToArray();
 

@@ -156,7 +156,7 @@ internal class LineArrayTextBuffer : ITextBuffer
         throw new NotImplementedException();
     }
 
-    public ApplyEditsResult ApplyEdits(ValidAnnotatedEditOperation[] rawOperations, bool recordTrimAutoWhitespace, bool computeUndoEdits)
+    public ApplyEditsResult ApplyEdits(EditOperation[] rawOperations, bool recordTrimAutoWhitespace, bool computeUndoEdits)
     {
         throw new NotImplementedException();
     }

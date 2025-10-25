@@ -5,7 +5,7 @@ public interface ITextBuffer : IReadOnlyTextBuffer
     void SetEOL(string eol); // either "\r\n" or "\n"
 
     ApplyEditsResult ApplyEdits(
-        ValidAnnotatedEditOperation[] rawOperations,
+        EditOperation[] rawOperations,
         bool recordTrimAutoWhitespace,
         bool computeUndoEdits);
 }

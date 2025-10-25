@@ -16,14 +16,13 @@ Console.WriteLine(buffer.GetValueInRange(new FluidX.TextBuffers.Range(1, 2, 2, 2
 // Writing to the buffer
 
 // INSERT a character 'a' at (line 2, column 4)
-var insertEdit = new ValidAnnotatedEditOperation
+var insertEdit = new EditOperation
 {
     Range = new FluidX.TextBuffers.Range(2, 4, 2, 4), // Empty range = insert at this position
     Text = "a", // Text to insert
     ForceMoveMarkers = false,
     IsAutoWhitespaceEdit = false,
-    IsTracked = false,
-    Identifier = null
+    IsTracked = false
 };
 buffer.ApplyEdits([insertEdit], false, false);
 PrintAllLines();
@@ -31,14 +30,13 @@ PrintAllLines();
 // DELETE a character at (line 1, column 4)
 // To delete, range must cover the character to remove.
 // E.g., to delete a single character at (1,4), use range (1,4)-(1,5)
-var deleteEdit = new ValidAnnotatedEditOperation
+var deleteEdit = new EditOperation
 {
     Range = new FluidX.TextBuffers.Range(1, 4, 1, 5), // Covers single character
     Text = "", // Empty text = delete
     ForceMoveMarkers = false,
     IsAutoWhitespaceEdit = false,
-    IsTracked = false,
-    Identifier = null
+    IsTracked = false
 };
 buffer.ApplyEdits([deleteEdit], false, false);
 PrintAllLines();
