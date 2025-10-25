@@ -222,11 +222,64 @@ public class TextModel
             _ => "\r\n",
         };
 
+        // Set EOL only if different
         if (TextBuffer.GetEOL() == newEOL) return;
 
-        // Set EOL only if different
+        var oldFullModelRange = GetFullModelRange();
+        int oldModelValueLength = TextBuffer.GetValueLengthInRange(oldFullModelRange, EndOfLinePreference.TextDefined);
+        int endLineNumber = TextBuffer.LineCount;
+        int endColumn = TextBuffer.GetLineMaxColumn(endLineNumber);
+
+        // TODO: OnEOLChanging
         TextBuffer.SetEOL(newEOL);
         IncreaseVersionId();
+        // TODO: OnEOLChanged
+
+        OnContentChanged(
+            new ModelRawContentChangedEventArgs(
+                [new ModelRawEOLChanged()],
+                VersionId,
+                false,
+                false
+            ),
+            new ModelContentChangedEventArgs(
+                Changes: [
+                    new ModelContentChange
+                    {
+                        Range = new FluidX.TextBuffers.Range(1, 1, endLineNumber, endColumn),
+                        RangeOffset = 0,
+                        RangeLength = oldModelValueLength,
+                        Text = GetValue()
+                    }
+                ],
+                TextBuffer.GetEOL(),
+                VersionId: VersionId,
+                IsUndoing: false,
+                IsRedoing: false,
+                IsFlush: false,
+                IsEolChange: true,
+                DetailedReasons: [EditSources.CreateEOLChange()],
+                DetailedReasonsChangeLengths: [1]
+            )
+        );
+    }
+
+    public FluidX.TextBuffers.Range GetFullModelRange()
+    {
+        int lineCount = TextBuffer.LineCount;
+        int endColumn = TextBuffer.GetLineMaxColumn(lineCount);
+        return new(1, 1, lineCount, endColumn);
+    }
+
+    /// <summary>
+    /// Get all text
+    /// </summary>
+    public string GetValue(EndOfLinePreference eol = EndOfLinePreference.TextDefined, bool preserveBOM = false)
+    {
+        var fullRange = GetFullModelRange();
+        var fullText = TextBuffer.GetValueInRange(fullRange, eol);
+        string bom = preserveBOM ? TextBuffer.BOM : "";
+        return $"{bom}{fullText}";
     }
 
     private void IncreaseVersionId()

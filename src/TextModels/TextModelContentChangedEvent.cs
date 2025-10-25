@@ -1,4 +1,5 @@
 ﻿using System.Reflection;
+using Range = FluidX.TextBuffers.Range;
 
 namespace FluidX.TextModels;
 
@@ -78,9 +79,14 @@ public class ModelRawLinesInserted : ModelRawChange
     }
 }
 
+public class ModelRawEOLChanged : ModelRawChange
+{
+    public override RawContentChangedType Type => RawContentChangedType.EOLChanged;
+}
+
 public record class ModelRawContentChangedEventArgs(
     ModelRawChange[] Changes,
-    int VersionId,
+    long VersionId,
     bool IsUndoing,
     bool IsRedoing)
 {
@@ -121,16 +127,17 @@ public record class TextModelContentChangedEventArgs(
 /// <param name="IsRedoing">Flag that indicates that this event was generated while redoing.</param>
 /// <param name="IsFlush">Flag that indicates that all decorations were lost with this edit. The model has been reset to a new value.</param>
 /// <param name="IsEolChange">Flag that indicates that this event describes an eol change.</param>
+/// <param name="DetailedReasons">Detailed reason information for the change.</param>
 /// <param name="DetailedReasonsChangeLengths">The sum of these lengths equals changes.length. The length of this array must equal the length of detailedReasons.</param>
 public record class ModelContentChangedEventArgs(
     ModelContentChange[] Changes,
     string EOL,
-    int VersionId,
+    long VersionId,
     bool IsUndoing,
     bool IsRedoing,
     bool IsFlush,
     bool IsEolChange,
-    /* DetailedReasons,*/ // internal
+    TextModelEditSource[] DetailedReasons,
     int[] DetailedReasonsChangeLengths
 );
 
