@@ -32,6 +32,8 @@ public class TextModel
         TrimAutoWhitespace: true
     );
 
+    public event TextModelModelContentChangedEventHandler? ContentChanged;
+
     public EndOfLineSequence EOL => TextBuffer.GetEOL() switch
     {
         "\n" => EndOfLineSequence.LF,
@@ -120,8 +122,15 @@ public class TextModel
     /// <param name="computeUndoEdits"></param>
     /// <returns>Not null when <paramref name="computeUndoEdits"/> is true</returns>
     /// <exception cref="NotImplementedException"></exception>
-    public ReverseSingleEditOperation[]? ApplyEdits(EditOperation[] rawOperations, bool computeUndoEdits)
+    public ReverseSingleEditOperation[]? ApplyEdits(
+        EditOperation[] rawOperations,
+        bool computeUndoEdits,
+        TextModelEditSource? reason = null,
+        bool isUndoing = false,
+        bool isRedoing = false)
     {
+        reason ??= EditSources.CreateApplyEdits();
+
         // TODO: Emit events
         int oldLineCount = TextBuffer.LineCount;
         var result = TextBuffer.ApplyEdits(rawOperations, Options.TrimAutoWhitespace, computeUndoEdits);
@@ -134,7 +143,130 @@ public class TextModel
         {
             // TODO: Update decorations, injected text and compute event args
 
+            // We do a first pass to update decorations
+            // because we want to read decorations in the second pass
+            // where we will emit content change events
+            // and we want to read the final decorations
+            for (int i = 0, len = contentChanges.Count; i < len; i++)
+            {
+                var change = contentChanges[i];
+                //this._decorationsTree.acceptReplace(change.rangeOffset, change.rangeLength, change.text.length, change.forceMoveMarkers);
+            }
+
             IncreaseVersionId();
+
+            List<ModelRawChange> rawContentChanges = [];
+            int lineCount = oldLineCount;
+            for (int i = 0; i < contentChanges.Count; i++)
+            {
+                var change = contentChanges[i];
+                int eolCount = EOLCounter.CountEOL(change.Text).eolCount;
+                //this._onDidChangeDecorations.fire();
+
+                int startLineNumber = change.Range.StartLineNumber;
+                int endLineNumber = change.Range.EndLineNumber;
+
+                int deletingLinesCnt = endLineNumber - startLineNumber;
+                int insertingLinesCnt = eolCount;
+                int editingLinesCnt = Math.Min(deletingLinesCnt, insertingLinesCnt);
+
+                int changeLineCountDelta = (insertingLinesCnt - deletingLinesCnt);
+
+                int currentEditStartLineNumber = newLineCount - lineCount - changeLineCountDelta + startLineNumber;
+                int firstEditLineNumber = currentEditStartLineNumber;
+                int lastInsertedLineNumber = currentEditStartLineNumber + insertingLinesCnt;
+
+                //var decorationsWithInjectedTextInEditedRange = this._decorationsTree.getInjectedTextInInterval(
+                //    this,
+                //    TextBuffer.GetOffsetAt(new Position(firstEditLineNumber, 1)),
+                //    TextBuffer.GetOffsetAt(new Position(lastInsertedLineNumber, TextBuffer.GetLineMaxColumn(lastInsertedLineNumber))),
+                //    0
+                //);
+
+                //var injectedTextInEditedRange = LineInjectedText.fromDecorations(decorationsWithInjectedTextInEditedRange);
+                //var injectedTextInEditedRangeQueue = new ArrayQueue(injectedTextInEditedRange);
+
+                for (int j = editingLinesCnt; j >= 0; j--)
+                {
+                    int editLineNumber = startLineNumber + j;
+                    int currentEditLineNumber = currentEditStartLineNumber + j;
+
+                    //injectedTextInEditedRangeQueue.takeFromEndWhile(r => r.lineNumber > currentEditLineNumber);
+                    //var decorationsInCurrentLine = injectedTextInEditedRangeQueue.takeFromEndWhile(r => r.lineNumber === currentEditLineNumber);
+
+                    rawContentChanges.Add(
+                        new ModelRawLineChanged(
+                            editLineNumber,
+                            TextBuffer.GetLineContent(currentEditLineNumber)
+                        //decorationsInCurrentLine // Not implemented yet
+                        ));
+                }
+
+                if (editingLinesCnt < deletingLinesCnt)
+                {
+                    // Must delete some lines
+                    int spliceStartLineNumber = startLineNumber + editingLinesCnt;
+                    rawContentChanges.Add(new ModelRawLinesDeleted(spliceStartLineNumber + 1, endLineNumber));
+                }
+
+                if (editingLinesCnt < insertingLinesCnt)
+                {
+                    //var injectedTextInEditedRangeQueue = new ArrayQueue(injectedTextInEditedRange);
+
+                    // Must insert some lines
+                    int spliceLineNumber = startLineNumber + editingLinesCnt;
+                    int cnt = insertingLinesCnt - editingLinesCnt;
+                    int fromLineNumber = newLineCount - lineCount - cnt + spliceLineNumber + 1;
+                    //LineInjectedText[]?[] injectedTexts = [];
+                    string[] newLines = new string[cnt];
+                    for (int j = 0; j < cnt; j++)
+                    {
+                        int lineNumber = fromLineNumber + i;
+                        newLines[j] = TextBuffer.GetLineContent(lineNumber);
+
+                        //injectedTextInEditedRangeQueue.takeWhile(r => r.lineNumber < lineNumber);
+                        //injectedTexts[i] = injectedTextInEditedRangeQueue.takeWhile(r => r.lineNumber === lineNumber);
+                    }
+
+                    rawContentChanges.Add(
+                        new ModelRawLinesInserted(
+                            spliceLineNumber + 1,
+                            startLineNumber + insertingLinesCnt,
+                            newLines
+                        //injectedTexts // Not implemented yet
+                        )
+                    );
+                }
+
+                lineCount += changeLineCountDelta;
+            }
+
+            // Fire ContentChanged Event
+            OnContentChanged(
+                new ModelRawContentChangedEventArgs(
+                    rawContentChanges,
+                    VersionId,
+                    isUndoing,
+                    isRedoing
+                ),
+                new ModelContentChangedEventArgs(
+                    contentChanges.Select(c => new ModelContentChange
+                    {
+                        Range = c.Range,
+                        RangeLength = c.RangeLength,
+                        RangeOffset = c.RangeOffset,
+                        Text = c.Text
+                    }).ToList(),
+                    TextBuffer.GetEOL(),
+                    VersionId,
+                    isUndoing,
+                    isRedoing,
+                    false,
+                    false,
+                    [reason],
+                    [contentChanges.Count]
+                )
+            );
         }
 
         return result.ReverseEdits;
@@ -171,7 +303,7 @@ public class TextModel
 
         // TODO: Emit events
 
-        ApplyEdits(edits, false);
+        ApplyEdits(edits, false, null, true, false);
         SetEOL(eol);
         AlternativeVersionId = resultingAltVersionId;
     }
@@ -199,7 +331,7 @@ public class TextModel
 
         // TODO: Emit events
 
-        ApplyEdits(edits, false);
+        ApplyEdits(edits, false, null, false, true);
         SetEOL(eol);
         AlternativeVersionId = resultingAltVersionId;
     }
@@ -220,17 +352,77 @@ public class TextModel
             _ => "\r\n",
         };
 
+        // Set EOL only if different
         if (TextBuffer.GetEOL() == newEOL) return;
 
-        // Set EOL only if different
+        var oldFullModelRange = GetFullModelRange();
+        int oldModelValueLength = TextBuffer.GetValueLengthInRange(oldFullModelRange, EndOfLinePreference.TextDefined);
+        int endLineNumber = TextBuffer.LineCount;
+        int endColumn = TextBuffer.GetLineMaxColumn(endLineNumber);
+
+        // TODO: OnEOLChanging
         TextBuffer.SetEOL(newEOL);
         IncreaseVersionId();
+        // TODO: OnEOLChanged
+
+        OnContentChanged(
+            new ModelRawContentChangedEventArgs(
+                [new ModelRawEOLChanged()],
+                VersionId,
+                false,
+                false
+            ),
+            new ModelContentChangedEventArgs(
+                Changes: [
+                    new ModelContentChange
+                    {
+                        Range = new FluidX.TextBuffers.Range(1, 1, endLineNumber, endColumn),
+                        RangeOffset = 0,
+                        RangeLength = oldModelValueLength,
+                        Text = GetValue()
+                    }
+                ],
+                TextBuffer.GetEOL(),
+                VersionId: VersionId,
+                IsUndoing: false,
+                IsRedoing: false,
+                IsFlush: false,
+                IsEolChange: true,
+                DetailedReasons: [EditSources.CreateEOLChange()],
+                DetailedReasonsChangeLengths: [1]
+            )
+        );
+    }
+
+    public FluidX.TextBuffers.Range GetFullModelRange()
+    {
+        int lineCount = TextBuffer.LineCount;
+        int endColumn = TextBuffer.GetLineMaxColumn(lineCount);
+        return new(1, 1, lineCount, endColumn);
+    }
+
+    /// <summary>
+    /// Get all text
+    /// </summary>
+    public string GetValue(EndOfLinePreference eol = EndOfLinePreference.TextDefined, bool preserveBOM = false)
+    {
+        var fullRange = GetFullModelRange();
+        var fullText = TextBuffer.GetValueInRange(fullRange, eol);
+        string bom = preserveBOM ? TextBuffer.BOM : "";
+        return $"{bom}{fullText}";
     }
 
     private void IncreaseVersionId()
     {
         VersionId++;
         AlternativeVersionId = VersionId;
+    }
+
+    private void OnContentChanged(
+        ModelRawContentChangedEventArgs rawChange,
+        ModelContentChangedEventArgs change)
+    {
+        ContentChanged?.Invoke(new(rawChange, change));
     }
 }
 
@@ -241,406 +433,6 @@ public record struct TextModelOptions(
     DefaultEndOfLine DefaultEOL,
     bool TrimAutoWhitespace
 );
-
-public class SingleModelEditStackElement : IUndoRedoElement
-{
-    public TextModel Model { get; }
-
-    public long BeforeVersionId { get; }
-    public long AfterVersionId { get; private set; }
-
-    public EndOfLineSequence BeforeEOL { get; }
-    public EndOfLineSequence AfterEOL { get; private set; }
-
-    public Selection[]? BeforeCursorState { get; }
-    public Selection[]? AfterCursorState { get; private set; }
-
-    public TextChange[] Changes { get; private set; }
-
-    public SingleModelEditStackElement(TextModel model, Selection[]? beforeCursorState)
-    {
-        Model = model;
-        long versionId = model.AlternativeVersionId;
-        EndOfLineSequence eol = model.EOL;
-        BeforeVersionId = versionId;
-        AfterVersionId = versionId;
-        BeforeEOL = eol;
-        AfterEOL = eol;
-        BeforeCursorState = beforeCursorState;
-        AfterCursorState = beforeCursorState;
-        Changes = [];
-    }
-
-    public void Append(
-        TextChange[] textChanges,
-        EndOfLineSequence afterEOL,
-        long afterVersionId,
-        Selection[]? afterCursorState)
-    {
-        if (textChanges.Length > 0)
-            Changes = CompressConsecutiveTextChanges(Changes, textChanges);
-        AfterEOL = afterEOL;
-        AfterVersionId = afterVersionId;
-        AfterCursorState = afterCursorState;
-    }
-
-    private TextChange[] CompressConsecutiveTextChanges(TextChange[]? prevEdits, TextChange[] currEdits)
-    {
-        if (prevEdits is null || prevEdits.Length == 0)
-            return currEdits;
-        var compressor = new TextChangeCompressor(prevEdits, currEdits);
-        return compressor.Compress();
-    }
-
-    public void Undo()
-    {
-        Model.ApplyUndo(Changes, BeforeEOL, BeforeVersionId, BeforeCursorState);
-    }
-
-    public void Redo()
-    {
-        Model.ApplyRedo(Changes, AfterEOL, AfterVersionId, AfterCursorState);
-    }
-
-    private class TextChangeCompressor
-    {
-        private TextChange[] _prevEdits;
-        private TextChange[] _currEdits;
-
-        private List<TextChange> _result;
-
-        private int _prevLen;
-        private int _prevDeltaOffset;
-
-        private int _currLen;
-        private int _currDeltaOffset;
-
-        public TextChangeCompressor(TextChange[] prevEdits, TextChange[] currEdits)
-        {
-            _prevEdits = prevEdits;
-            _currEdits = currEdits;
-
-            _result = [];
-
-            _prevLen = _prevEdits.Length;
-            _prevDeltaOffset = 0;
-
-            _currLen = _currEdits.Length;
-            _currDeltaOffset = 0;
-        }
-
-        public TextChange[] Compress()
-        {
-            int prevIndex = 0;
-            int currIndex = 0;
-
-            TextChange? prevEdit = GetPrev(prevIndex);
-            TextChange? currEdit = GetCurr(currIndex);
-
-            while (prevIndex < _prevLen || currIndex < _currLen)
-            {
-                if (prevEdit is null)
-                {
-                    AcceptCurr(currEdit!);
-                    currIndex++;
-                    currEdit = GetCurr(currIndex);
-                    continue;
-                }
-                if (currEdit is null)
-                {
-                    AcceptPrev(prevEdit);
-                    prevIndex++;
-                    prevEdit = GetPrev(prevIndex);
-                    continue;
-                }
-                if (currEdit.OldEnd <= prevEdit.NewPosition)
-                {
-                    AcceptCurr(currEdit);
-                    currIndex++;
-                    currEdit = GetCurr(currIndex);
-                    continue;
-                }
-                if (prevEdit.NewEnd <= currEdit.OldPosition)
-                {
-                    AcceptPrev(prevEdit);
-                    prevIndex++;
-                    prevEdit = GetPrev(prevIndex);
-                    continue;
-                }
-
-                if (currEdit.OldPosition < prevEdit.NewPosition)
-                {
-                    var (e1, e2) = SplitCurr(currEdit, prevEdit.NewPosition - currEdit.OldPosition);
-                    AcceptCurr(e1);
-                    currEdit = e2;
-                    continue;
-                }
-                if (prevEdit.NewPosition < currEdit.OldPosition)
-                {
-                    var (e1, e2) = SplitPrev(currEdit, prevEdit.NewPosition - currEdit.OldPosition);
-                    AcceptPrev(e1);
-                    prevEdit = e2;
-                    continue;
-                }
-
-                // At this point, currEdit.oldPosition == prevEdit.newPosition
-
-                TextChange mergePrev;
-                TextChange mergeCurr;
-                if (currEdit.OldEnd == prevEdit.NewEnd)
-                {
-                    mergePrev = prevEdit;
-                    mergeCurr = currEdit;
-                    prevEdit = GetPrev(++prevIndex);
-                    currEdit = GetCurr(++currIndex);
-                }
-                else if (currEdit.OldEnd < prevEdit.NewEnd)
-                {
-                    var (e1, e2) = SplitPrev(prevEdit, currEdit.OldLength);
-                    mergePrev = e1;
-                    mergeCurr = currEdit;
-                    prevEdit = e2;
-                    currEdit = GetCurr(++currIndex);
-                }
-                else
-                {
-                    var (e1, e2) = SplitCurr(currEdit, prevEdit.NewLength);
-                    mergePrev = prevEdit;
-                    mergeCurr = e1;
-                    prevEdit = GetPrev(++prevIndex);
-                    currEdit = e2;
-                }
-
-                _result.Add(new TextChange(
-                    mergePrev.OldPosition,
-                    mergePrev.OldText,
-                    mergeCurr.NewPosition,
-                    mergeCurr.NewText
-                ));
-                _prevDeltaOffset += mergePrev.NewLength - mergePrev.OldLength;
-                _currDeltaOffset += mergeCurr.NewLength - mergeCurr.OldLength;
-            }
-
-            var merged = Merge(_result);
-            var cleaned = RemoveNoOps(merged);
-            return cleaned.ToArray();
-        }
-
-        private void AcceptCurr(TextChange currEdit)
-        {
-            _result.Add(RebaseCurr(_prevDeltaOffset, currEdit));
-            _currDeltaOffset += currEdit.NewLength - currEdit.OldLength;
-        }
-
-        private void AcceptPrev(TextChange prevEdit)
-        {
-            _result.Add(RebasePrev(_currDeltaOffset, prevEdit));
-            _prevDeltaOffset += prevEdit.NewLength - prevEdit.OldLength;
-        }
-
-        private TextChange? GetCurr(int currIndex) => currIndex < _currLen ? _currEdits[currIndex] : null;
-
-        private TextChange? GetPrev(int prevIndex) => prevIndex < _prevLen ? _prevEdits[prevIndex] : null;
-
-        private static TextChange RebaseCurr(int prevDeltaOffset, TextChange currEdit) => new TextChange(
-            currEdit.OldPosition - prevDeltaOffset,
-            currEdit.OldText,
-            currEdit.NewPosition,
-            currEdit.NewText
-        );
-
-        private static TextChange RebasePrev(int currDeltaOffset, TextChange prevEdit) => new TextChange(
-            prevEdit.OldPosition,
-            prevEdit.OldText,
-            prevEdit.NewPosition + currDeltaOffset,
-            prevEdit.NewText
-        );
-
-        private static (TextChange, TextChange) SplitPrev(TextChange edit, int offset)
-        {
-            string preText = edit.NewText.Substring(0, offset);
-            string postText = edit.NewText.Substring(offset);
-            return (
-                new TextChange(
-                    edit.OldPosition,
-                    edit.OldText,
-                    edit.NewPosition,
-                    preText
-                ),
-                new TextChange(
-                    edit.OldEnd,
-                    "",
-                    edit.NewPosition + offset,
-                    postText
-                )
-            );
-        }
-
-        private static (TextChange, TextChange) SplitCurr(TextChange edit, int offset)
-        {
-            string preText = edit.OldText.Substring(0, offset);
-            string postText = edit.NewText.Substring(offset);
-            return (
-                new TextChange(
-                    edit.OldPosition,
-                    preText,
-                    edit.NewPosition,
-                    edit.NewText
-                ),
-                new TextChange(
-                    edit.OldPosition + offset,
-                    postText,
-                    edit.NewEnd,
-                    ""
-                )
-            );
-        }
-
-        private static List<TextChange> Merge(List<TextChange> edits)
-        {
-            if (edits.Count == 0)
-                return edits;
-
-            List<TextChange> result = [];
-            var prev = edits[0];
-            for (int i = 1; i < edits.Count; i++)
-            {
-                var curr = edits[i];
-                if (prev.OldEnd == curr.OldPosition)
-                {
-                    // Merge into `prev`
-                    prev = new TextChange(
-                        prev.OldPosition,
-                        prev.OldText + curr.OldText,
-                        prev.NewPosition,
-                        prev.NewText + curr.NewText
-                    );
-                }
-                else
-                {
-                    result.Add(prev);
-                    prev = curr;
-                }
-            }
-            result.Add(prev);
-            return result;
-        }
-
-        private static List<TextChange> RemoveNoOps(List<TextChange> edits)
-        {
-            if (edits.Count == 0)
-                return [];
-
-            List<TextChange> result = [];
-            for (int i = 0; i < edits.Count; i++)
-            {
-                var edit = edits[i];
-                if (edit.OldText == edit.NewText)
-                    continue;
-                result.Add(edit);
-            }
-            return result;
-        }
-    }
-}
-
-#region Event Data
-
-public enum RawContentChangedType
-{
-    Flush = 1,
-    LineChanged = 2,
-    LinesDeleted = 3,
-    LinesInserted = 4,
-    EOLChanged = 5
-}
-
-public abstract class ModelRawChange
-{
-    public abstract RawContentChangedType Type { get; }
-}
-
-/// <summary>
-/// An event describing that a model has been reset to a new value.
-/// </summary>
-public class ModelRawFlush : ModelRawChange
-{
-    public override RawContentChangedType Type => RawContentChangedType.Flush;
-}
-
-/// <summary>
-/// An event describing that a line has changed in a model.
-/// </summary>
-public class ModelRawLineChanged : ModelRawChange
-{
-    public override RawContentChangedType Type => RawContentChangedType.LineChanged;
-
-    /// <summary>
-    /// The line that has changed (1-based)
-    /// </summary>
-    public int LineNumber { get; }
-    /// <summary>
-    /// The new value of the line.
-    /// </summary>
-    public string Detail { get; }
-
-    // TODO: InjectedText
-
-    public ModelRawLineChanged(int lineNumber, string detail)
-    {
-        LineNumber = lineNumber;
-        Detail = detail;
-    }
-}
-
-public class ModelRawLinesDeleted : ModelRawChange
-{
-    public override RawContentChangedType Type => RawContentChangedType.LinesDeleted;
-    public int FromLineNumber { get; }
-    public int ToLineNumber { get; }
-    public ModelRawLinesDeleted(int fromLineNumber, int toLineNumber)
-    {
-        FromLineNumber = fromLineNumber;
-        ToLineNumber = toLineNumber;
-    }
-}
-
-public class ModelRawLinesInserted : ModelRawChange
-{
-    public override RawContentChangedType Type => RawContentChangedType.LinesInserted;
-    public int FromLineNumber { get; }
-    public int ToLineNumber { get; }
-    public string[] Details { get; }
-
-    // TODO: InjectedText
-
-    public ModelRawLinesInserted(int fromLineNumber, int toLineNumber, string[] details)
-    {
-        FromLineNumber = fromLineNumber;
-        ToLineNumber = toLineNumber;
-        Details = details;
-    }
-}
-
-public class ModelRawContentChangedEventArgs
-{
-    public ModelRawChange[] Changes { get; }
-    public int VersionId { get; }
-    public bool IsUndoing { get; }
-    public bool IsRedoing { get; }
-    public Selection[]? ResultingSelection { get; set; }
-
-    public ModelRawContentChangedEventArgs(ModelRawChange[] changes, int versionId, bool isUndoing, bool isRedoing)
-    {
-        Changes = changes;
-        VersionId = versionId;
-        IsUndoing = isUndoing;
-        IsRedoing = isRedoing;
-        ResultingSelection = null;
-    }
-}
-
-#endregion
 
 public enum EndOfLineSequence
 {
