@@ -48,7 +48,10 @@ public static class EditSources
         => new(new CursorMetadata(kind, detailedSource));
 
     public static TextModelEditSource CreateEOLChange()
-        => new(new EOLChange());
+        => new(new EOLChangeMetadata());
+
+    public static TextModelEditSource CreateApplyEdits()
+        => new(new ApplyEditsMetadata());
 }
 
 #region Metadata Types
@@ -76,9 +79,14 @@ public sealed class CursorMetadata(string kind, string? detailedSource = null) :
     public string? DetailedSource { get; } = detailedSource;
 }
 
-public sealed class EOLChange : TextModelEditSourceMetadata
+public sealed class EOLChangeMetadata : TextModelEditSourceMetadata
 {
     public override string Source => "eolChange";
+}
+
+public sealed class ApplyEditsMetadata : TextModelEditSourceMetadata
+{
+    public override string Source => "applyEdits";
 }
 
 #endregion

@@ -122,8 +122,15 @@ public class TextModel
     /// <param name="computeUndoEdits"></param>
     /// <returns>Not null when <paramref name="computeUndoEdits"/> is true</returns>
     /// <exception cref="NotImplementedException"></exception>
-    public ReverseSingleEditOperation[]? ApplyEdits(EditOperation[] rawOperations, bool computeUndoEdits)
+    public ReverseSingleEditOperation[]? ApplyEdits(
+        EditOperation[] rawOperations,
+        bool computeUndoEdits,
+        TextModelEditSource? reason = null,
+        bool isUndoing = false,
+        bool isRedoing = false)
     {
+        reason ??= EditSources.CreateApplyEdits();
+
         // TODO: Emit events
         int oldLineCount = TextBuffer.LineCount;
         var result = TextBuffer.ApplyEdits(rawOperations, Options.TrimAutoWhitespace, computeUndoEdits);
@@ -136,7 +143,130 @@ public class TextModel
         {
             // TODO: Update decorations, injected text and compute event args
 
+            // We do a first pass to update decorations
+            // because we want to read decorations in the second pass
+            // where we will emit content change events
+            // and we want to read the final decorations
+            for (int i = 0, len = contentChanges.Count; i < len; i++)
+            {
+                var change = contentChanges[i];
+                //this._decorationsTree.acceptReplace(change.rangeOffset, change.rangeLength, change.text.length, change.forceMoveMarkers);
+            }
+
             IncreaseVersionId();
+
+            List<ModelRawChange> rawContentChanges = [];
+            int lineCount = oldLineCount;
+            for (int i = 0; i < contentChanges.Count; i++)
+            {
+                var change = contentChanges[i];
+                int eolCount = EOLCounter.CountEOL(change.Text).eolCount;
+                //this._onDidChangeDecorations.fire();
+
+                int startLineNumber = change.Range.StartLineNumber;
+                int endLineNumber = change.Range.EndLineNumber;
+
+                int deletingLinesCnt = endLineNumber - startLineNumber;
+                int insertingLinesCnt = eolCount;
+                int editingLinesCnt = Math.Min(deletingLinesCnt, insertingLinesCnt);
+
+                int changeLineCountDelta = (insertingLinesCnt - deletingLinesCnt);
+
+                int currentEditStartLineNumber = newLineCount - lineCount - changeLineCountDelta + startLineNumber;
+                int firstEditLineNumber = currentEditStartLineNumber;
+                int lastInsertedLineNumber = currentEditStartLineNumber + insertingLinesCnt;
+
+                //var decorationsWithInjectedTextInEditedRange = this._decorationsTree.getInjectedTextInInterval(
+                //    this,
+                //    TextBuffer.GetOffsetAt(new Position(firstEditLineNumber, 1)),
+                //    TextBuffer.GetOffsetAt(new Position(lastInsertedLineNumber, TextBuffer.GetLineMaxColumn(lastInsertedLineNumber))),
+                //    0
+                //);
+
+                //var injectedTextInEditedRange = LineInjectedText.fromDecorations(decorationsWithInjectedTextInEditedRange);
+                //var injectedTextInEditedRangeQueue = new ArrayQueue(injectedTextInEditedRange);
+
+                for (int j = editingLinesCnt; j >= 0; j--)
+                {
+                    int editLineNumber = startLineNumber + j;
+                    int currentEditLineNumber = currentEditStartLineNumber + j;
+
+                    //injectedTextInEditedRangeQueue.takeFromEndWhile(r => r.lineNumber > currentEditLineNumber);
+                    //var decorationsInCurrentLine = injectedTextInEditedRangeQueue.takeFromEndWhile(r => r.lineNumber === currentEditLineNumber);
+
+                    rawContentChanges.Add(
+                        new ModelRawLineChanged(
+                            editLineNumber,
+                            TextBuffer.GetLineContent(currentEditLineNumber)
+                        //decorationsInCurrentLine // Not implemented yet
+                        ));
+                }
+
+                if (editingLinesCnt < deletingLinesCnt)
+                {
+                    // Must delete some lines
+                    int spliceStartLineNumber = startLineNumber + editingLinesCnt;
+                    rawContentChanges.Add(new ModelRawLinesDeleted(spliceStartLineNumber + 1, endLineNumber));
+                }
+
+                if (editingLinesCnt < insertingLinesCnt)
+                {
+                    //var injectedTextInEditedRangeQueue = new ArrayQueue(injectedTextInEditedRange);
+
+                    // Must insert some lines
+                    int spliceLineNumber = startLineNumber + editingLinesCnt;
+                    int cnt = insertingLinesCnt - editingLinesCnt;
+                    int fromLineNumber = newLineCount - lineCount - cnt + spliceLineNumber + 1;
+                    //LineInjectedText[]?[] injectedTexts = [];
+                    string[] newLines = new string[cnt];
+                    for (int j = 0; j < cnt; j++)
+                    {
+                        int lineNumber = fromLineNumber + i;
+                        newLines[j] = TextBuffer.GetLineContent(lineNumber);
+
+                        //injectedTextInEditedRangeQueue.takeWhile(r => r.lineNumber < lineNumber);
+                        //injectedTexts[i] = injectedTextInEditedRangeQueue.takeWhile(r => r.lineNumber === lineNumber);
+                    }
+
+                    rawContentChanges.Add(
+                        new ModelRawLinesInserted(
+                            spliceLineNumber + 1,
+                            startLineNumber + insertingLinesCnt,
+                            newLines
+                        //injectedTexts // Not implemented yet
+                        )
+                    );
+                }
+
+                lineCount += changeLineCountDelta;
+            }
+
+            // Fire ContentChanged Event
+            OnContentChanged(
+                new ModelRawContentChangedEventArgs(
+                    rawContentChanges,
+                    VersionId,
+                    isUndoing,
+                    isRedoing
+                ),
+                new ModelContentChangedEventArgs(
+                    contentChanges.Select(c => new ModelContentChange
+                    {
+                        Range = c.Range,
+                        RangeLength = c.RangeLength,
+                        RangeOffset = c.RangeOffset,
+                        Text = c.Text
+                    }).ToList(),
+                    TextBuffer.GetEOL(),
+                    VersionId,
+                    isUndoing,
+                    isRedoing,
+                    false,
+                    false,
+                    [reason],
+                    [contentChanges.Count]
+                )
+            );
         }
 
         return result.ReverseEdits;
@@ -173,7 +303,7 @@ public class TextModel
 
         // TODO: Emit events
 
-        ApplyEdits(edits, false);
+        ApplyEdits(edits, false, null, true, false);
         SetEOL(eol);
         AlternativeVersionId = resultingAltVersionId;
     }
@@ -201,7 +331,7 @@ public class TextModel
 
         // TODO: Emit events
 
-        ApplyEdits(edits, false);
+        ApplyEdits(edits, false, null, false, true);
         SetEOL(eol);
         AlternativeVersionId = resultingAltVersionId;
     }

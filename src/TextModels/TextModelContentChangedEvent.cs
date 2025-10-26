@@ -85,7 +85,7 @@ public class ModelRawEOLChanged : ModelRawChange
 }
 
 public record class ModelRawContentChangedEventArgs(
-    ModelRawChange[] Changes,
+    IReadOnlyList<ModelRawChange> Changes,
     long VersionId,
     bool IsUndoing,
     bool IsRedoing)
@@ -130,7 +130,7 @@ public record class TextModelContentChangedEventArgs(
 /// <param name="DetailedReasons">Detailed reason information for the change.</param>
 /// <param name="DetailedReasonsChangeLengths">The sum of these lengths equals changes.length. The length of this array must equal the length of detailedReasons.</param>
 public record class ModelContentChangedEventArgs(
-    ModelContentChange[] Changes,
+    IReadOnlyList<ModelContentChange> Changes,
     string EOL,
     long VersionId,
     bool IsUndoing,
