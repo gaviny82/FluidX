@@ -1,0 +1,144 @@
+﻿using Range = FluidX.TextBuffers.Range;
+
+namespace FluidX.Decorations;
+
+internal class IntervalNode
+{
+    #region Metadata Flags
+
+    private int _metadata = 0;
+
+    public NodeColor NodeColor
+    {
+        get => (NodeColor)((_metadata & Constants.ColorMask) >> Constants.ColorOffset);
+        set => _metadata = (_metadata & Constants.ColorMaskInverse) | ((int)value << Constants.ColorOffset);
+    }
+
+    public bool IsVisited
+    {
+        get => ((_metadata & Constants.IsVisitedMask) >> Constants.IsVisitedOffset) != 0;
+        set => _metadata = (_metadata & Constants.IsVisitedMaskInverse) | ((value ? 1 : 0) << Constants.IsVisitedOffset);
+    }
+
+    public bool IsForValidation
+    {
+        get => ((_metadata & Constants.IsForValidationMask) >> Constants.IsForValidationOffset) != 0;
+        set => _metadata = (_metadata & Constants.IsForValidationMaskInverse) | ((value ? 1 : 0) << Constants.IsForValidationOffset);
+    }
+
+    public bool IsInGlyphMargin
+    {
+        get => ((_metadata & Constants.IsMarginMask) >> Constants.IsMarginOffset) != 0;
+        set => _metadata = (_metadata & Constants.IsMarginMaskInverse) | ((value ? 1 : 0) << Constants.IsMarginOffset);
+    }
+
+    public bool AffectsFont
+    {
+        get => ((_metadata & Constants.AffectsFontMask) >> Constants.AffectsFontOffset) != 0;
+        set => _metadata = (_metadata & Constants.AffectsFontMaskInverse) | ((value ? 1 : 0) << Constants.AffectsFontOffset);
+    }
+
+    public TrackedRangeStickiness Stickiness
+    {
+        get => (TrackedRangeStickiness)((_metadata & Constants.StickinessMask) >> Constants.StickinessOffset);
+        set => _metadata = (_metadata & Constants.StickinessMaskInverse) | ((int)value << Constants.StickinessOffset);
+    }
+
+    public bool CollapseOnReplaceEdit
+    {
+        get => ((_metadata & Constants.CollapseOnReplaceEditMask) >> Constants.CollapseOnReplaceEditOffset) != 0;
+        set => _metadata = (_metadata & Constants.CollapseOnReplaceEditMaskInverse) | ((value ? 1 : 0) << Constants.CollapseOnReplaceEditOffset);
+    }
+
+    #endregion
+
+    public IntervalNode Parent { get; set; }
+    public IntervalNode Left { get; set; }
+    public IntervalNode Right { get; set; }
+
+    public int Start { get; set; }
+    public int End { get; set; }
+    public int Delta { get; set; }
+    public int MaxEnd { get; set; }
+
+    public string Id { get; set; }
+    public int OwnerId { get; set; }
+    // public ModelDecorationOptions Options { get; set; }
+
+    public int CachedVersionId { get; set; }
+    public int CachedAbsoluteStart { get; set; }
+    public int CachedAbsoluteEnd { get; set; }
+    public Range? Range { get; set; }
+
+    public IntervalNode(string id, int start, int end)
+    {
+        Parent = this;
+        Left = this;
+        Right = this;
+        NodeColor = NodeColor.Red;
+
+        Start = start;
+        End = end;
+        Delta = 0;
+        MaxEnd = end;
+
+        Id = id;
+        OwnerId = 0;
+        //Options = null!;
+        IsForValidation = false;
+        IsInGlyphMargin = false;
+        Stickiness = TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges;
+        CollapseOnReplaceEdit = false;
+        AffectsFont = false;
+
+        CachedVersionId = 0;
+        CachedAbsoluteStart = start;
+        CachedAbsoluteEnd = end;
+        Range = null;
+
+        IsVisited = false;
+    }
+
+    public void Reset(int versionId, int start, int end, Range range)
+    {
+        Start = start;
+        End = end;
+        MaxEnd = end;
+        CachedVersionId = versionId;
+        CachedAbsoluteStart = start;
+        CachedAbsoluteEnd = end;
+        Range = range;
+    }
+
+    //public setOptions(options: ModelDecorationOptions)
+    //{
+    //    this.options = options;
+    //    const className = this.options.className;
+    //    setNodeIsForValidation(this, (
+    //        className === ClassName.EditorErrorDecoration
+    //        || className === ClassName.EditorWarningDecoration
+    //        || className === ClassName.EditorInfoDecoration
+    //    ));
+    //    setNodeIsInGlyphMargin(this, this.options.glyphMarginClassName !== null);
+    //    _setNodeStickiness(this, < number > this.options.stickiness);
+    //    setCollapseOnReplaceEdit(this, this.options.collapseOnReplaceEdit);
+    //    setNodeAffectsFont(this, this.options.affectsFont ?? false);
+    //}
+
+    public void SetCachedOffsets(int absoluteStart, int absoluteEnd, int cachedVersionId)
+    {
+        if (CachedVersionId != cachedVersionId)
+            Range = null;
+
+        CachedVersionId = cachedVersionId;
+        CachedAbsoluteStart = absoluteStart;
+        CachedAbsoluteEnd = absoluteEnd;
+    }
+
+    public void Detach()
+    {
+        Parent = null!;
+        Left = null!;
+        Right = null!;
+    }
+}
