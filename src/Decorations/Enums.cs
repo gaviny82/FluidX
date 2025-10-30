@@ -11,7 +11,7 @@ internal enum NodeColor
  * Describes the behavior of decorations when typing/editing near their edges.
  * Note: Please do not edit the values, as they very carefully match `DecorationRangeBehavior`
  */
-internal enum TrackedRangeStickiness
+public enum TrackedRangeStickiness
 {
     AlwaysGrowsWhenTypingAtEdges = 0,
     NeverGrowsWhenTypingAtEdges = 1,
@@ -19,7 +19,7 @@ internal enum TrackedRangeStickiness
     GrowsOnlyWhenTypingAfter = 3,
 }
 
-internal static class ClassName
+internal static class ClassNames
 {
     public const string EditorHintDecoration = "squiggly-hint";
     public const string EditorInfoDecoration = "squiggly-info";

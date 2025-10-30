@@ -63,7 +63,7 @@ internal class IntervalNode
 
     public string Id { get; set; }
     public int OwnerId { get; set; }
-    // public ModelDecorationOptions Options { get; set; }
+    public ModelDecorationOptions Options { get; set; }
 
     public int CachedVersionId { get; set; }
     public int CachedAbsoluteStart { get; set; }
@@ -84,7 +84,7 @@ internal class IntervalNode
 
         Id = id;
         OwnerId = 0;
-        //Options = null!;
+        Options = null!;
         IsForValidation = false;
         IsInGlyphMargin = false;
         Stickiness = TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges;
@@ -110,20 +110,18 @@ internal class IntervalNode
         Range = range;
     }
 
-    //public setOptions(options: ModelDecorationOptions)
-    //{
-    //    this.options = options;
-    //    const className = this.options.className;
-    //    setNodeIsForValidation(this, (
-    //        className === ClassName.EditorErrorDecoration
-    //        || className === ClassName.EditorWarningDecoration
-    //        || className === ClassName.EditorInfoDecoration
-    //    ));
-    //    setNodeIsInGlyphMargin(this, this.options.glyphMarginClassName !== null);
-    //    _setNodeStickiness(this, < number > this.options.stickiness);
-    //    setCollapseOnReplaceEdit(this, this.options.collapseOnReplaceEdit);
-    //    setNodeAffectsFont(this, this.options.affectsFont ?? false);
-    //}
+    public void SetOptions(ModelDecorationOptions options)
+    {
+        Options = options;
+        string? className = Options.ClassName;
+        IsForValidation = className == ClassNames.EditorErrorDecoration
+            || className == ClassNames.EditorWarningDecoration
+            || className == ClassNames.EditorInfoDecoration;
+        IsInGlyphMargin = Options.GlyphMarginClassName is not null;
+        Stickiness = Options.Stickiness;
+        CollapseOnReplaceEdit = options.CollapseOnReplaceEdit;
+        AffectsFont = options.AffectsFont ?? false;
+    }
 
     public void SetCachedOffsets(int absoluteStart, int absoluteEnd, int cachedVersionId)
     {
