@@ -2,7 +2,7 @@
 
 namespace FluidX.Decorations;
 
-internal class IntervalNode
+public class IntervalNode
 {
     #region Metadata Flags
 
@@ -138,5 +138,21 @@ internal class IntervalNode
         Parent = null!;
         Left = null!;
         Right = null!;
+    }
+
+    internal static readonly IntervalNode Sentinel = new IntervalNode(string.Empty, 0, 0)
+    {
+        NodeColor = NodeColor.Black,
+        Parent = null!,
+        Left = null!,
+        Right = null!,
+    };
+
+    internal static void ResetSentinel()
+    {
+        Sentinel.Parent = Sentinel;
+        Sentinel.Delta = 0;
+        Sentinel.Start = 0;
+        Sentinel.End = 0;
     }
 }

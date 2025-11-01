@@ -1,7 +1,7 @@
 ﻿namespace FluidX.Decorations;
 
 // The red-black tree is based on the "Introduction to Algorithms" by Cormen, Leiserson and Rivest.
-internal enum NodeColor
+public enum NodeColor
 {
     Black = 0,
     Red = 1
@@ -81,4 +81,11 @@ internal static class Constants
      * See https://thibaultlaurens.github.io/javascript/2013/04/29/how-the-v8-engine-works/#tagged-values
      */
     public const int MAX_SAFE_DELTA = 1 << 30;
+}
+
+public enum MarkerMoveSemantics
+{
+    MarkerDefined = 0,
+    ForceMove = 1,
+    ForceStay = 2
 }
