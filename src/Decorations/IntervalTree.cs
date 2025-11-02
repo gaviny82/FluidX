@@ -91,7 +91,7 @@ public class IntervalTree
         NormalizeDeltaIfNecessary();
     }
 
-    public void ResolveNode(IntervalNode node, int cachedVersionId)
+    public void ResolveNode(IntervalNode node, long cachedVersionId)
     {
         IntervalNode initialNode = node;
         int delta = 0;
@@ -487,7 +487,7 @@ public class IntervalTree
         int filterOwnerId,
         bool filterOutValidation,
         bool filterFontDecorations,
-        int cachedVersionId,
+        long cachedVersionId,
         bool onlyMarginDecorations)
     {
         var node = _root;
@@ -558,7 +558,7 @@ public class IntervalTree
         int filterOwnerId,
         bool filterOutValidation,
         bool filterFontDecorations,
-        int cachedVersionId,
+        long cachedVersionId,
         bool onlyMarginDecorations)
     {
         // https://en.wikipedia.org/wiki/Interval_tree#Augmented_tree

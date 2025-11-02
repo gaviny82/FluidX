@@ -15,7 +15,10 @@ public class ModelDecorationOptions
     public string[]? GlyphMarginHoverMessage { get; init; } // MarkdownString[]
     public bool IsWholeLine { get; init; }
     public int? LineHeight { get; init; }
+    public string? FontFamily { get; init; }
     public string? FontSize { get; init; }
+    public string? FontWeight { get; init; }
+    public string? FontStyle { get; init; }
     public bool ShowIfCollapsed { get; init; } = false;
     public bool CollapseOnReplaceEdit { get; init; } = false;
     public ModelDecorationOverviewRulerOptions? OverviewRuler { get; init; }
@@ -36,7 +39,7 @@ public class ModelDecorationOptions
     public ModelDecorationInjectedTextOptions? Before { get; init; }
     public bool? HideInCommentTokens { get; init; } = false;
     public bool? HideInStringTokens { get; init; } = false;
-    public bool? AffectsFont { get; init; }
+    public bool AffectsFont => FontSize is not null || FontFamily is not null || FontWeight is not null || FontStyle is not null;
     public TextDirection? TextDirection { get; init; }
 }
 

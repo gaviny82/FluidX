@@ -2,7 +2,7 @@
 
 namespace FluidX.Decorations;
 
-public class IntervalNode
+public class IntervalNode : IModelDecoration
 {
     #region Metadata Flags
 
@@ -65,10 +65,11 @@ public class IntervalNode
     public int OwnerId { get; set; }
     public ModelDecorationOptions Options { get; set; }
 
-    public int CachedVersionId { get; set; }
+    public long CachedVersionId { get; set; }
     public int CachedAbsoluteStart { get; set; }
     public int CachedAbsoluteEnd { get; set; }
     public Range? Range { get; set; }
+    Range IModelDecoration.Range => (Range)Range!; // Range must not be null when accessed via IModelDecoration
 
     public IntervalNode(string id, int start, int end)
     {
@@ -123,7 +124,7 @@ public class IntervalNode
         AffectsFont = options.AffectsFont ?? false;
     }
 
-    public void SetCachedOffsets(int absoluteStart, int absoluteEnd, int cachedVersionId)
+    public void SetCachedOffsets(int absoluteStart, int absoluteEnd, long cachedVersionId)
     {
         if (CachedVersionId != cachedVersionId)
             Range = null;

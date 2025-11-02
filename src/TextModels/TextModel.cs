@@ -1,4 +1,5 @@
-﻿using FluidX.TextBuffers;
+﻿using Range = FluidX.TextBuffers.Range;
+using FluidX.TextBuffers;
 using FluidX.TextBuffers.PieceTree;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
@@ -7,7 +8,7 @@ using System.Security.AccessControl;
 
 namespace FluidX.TextModels;
 
-public class TextModel
+public class TextModel : IDecorationTreesHost
 {
     /// <summary>
     /// The underlying text buffer of this text model
@@ -42,6 +43,9 @@ public class TextModel
 
     public bool CanUndo => _undoRedoStack.CanUndo;
     public bool CanRedo => _undoRedoStack.CanRedo;
+
+    Range IDecorationTreesHost.GetRangeAt(int start, int end)
+        => TextBuffer.GetRangeAt(start, end - start);
 
     private readonly UndoRedoStack _undoRedoStack = new();
     private int[]? _trimAutoWhitespaceLineNumbers;
