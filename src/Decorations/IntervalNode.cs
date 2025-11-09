@@ -63,7 +63,7 @@ public class IntervalNode : IModelDecoration
 
     public string Id { get; set; }
     public int OwnerId { get; set; }
-    public ModelDecorationOptions Options { get; set; }
+    public ModelDecorationOptions Options { get; private set; }
 
     public long CachedVersionId { get; set; }
     public int CachedAbsoluteStart { get; set; }
@@ -121,7 +121,7 @@ public class IntervalNode : IModelDecoration
         IsInGlyphMargin = Options.GlyphMarginClassName is not null;
         Stickiness = Options.Stickiness;
         CollapseOnReplaceEdit = options.CollapseOnReplaceEdit;
-        AffectsFont = options.AffectsFont ?? false;
+        AffectsFont = options.AffectsFont;
     }
 
     public void SetCachedOffsets(int absoluteStart, int absoluteEnd, long cachedVersionId)
