@@ -113,14 +113,17 @@ public class LineTokens : IEnumerable<LineToken>
     /// <param name="offset">The search offset</param>
     /// <returns>The index of the token containing the offset.</returns>
     public int FindTokenIndexAtOffset(int offset)
+        => FindIndexInTokensArray(_tokens, offset);
+
+    public static int FindIndexInTokensArray(LineToken[] tokens, int offset)
     {
         // Binary search
         int low = 0;
-        int high = _tokens.Length - 1;
+        int high = tokens.Length - 1;
         while (low <= high)
         {
             int mid = (low + high) / 2;
-            int midEndOffset = _tokens[mid].EndOffset;
+            int midEndOffset = tokens[mid].EndOffset;
             if (offset < midEndOffset)
                 high = mid - 1;
             else
