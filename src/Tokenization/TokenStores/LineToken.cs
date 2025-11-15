@@ -1,5 +1,8 @@
-﻿namespace FluidX.Tokenization.TokenStores;
+﻿using System.Runtime.InteropServices;
 
+namespace FluidX.Tokenization.TokenStores;
+
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
 public readonly struct LineTokenMetadata(uint metadata)
 {
     private readonly uint _metadata = metadata;
@@ -83,6 +86,7 @@ public readonly struct LineTokenMetadata(uint metadata)
 
 public record struct TokenPresentation(ColorId Foreground, bool Italic, bool Bold, bool Underline, bool Strikethrough);
 
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
 public readonly record struct LineToken(int EndOffset, LineTokenMetadata Metadata);
 
 /**

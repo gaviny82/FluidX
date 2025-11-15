@@ -1,4 +1,5 @@
 ﻿using FluidX.TextBuffers;
+using System.Diagnostics.CodeAnalysis;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 using Range = FluidX.TextBuffers.Range;
 
@@ -9,8 +10,6 @@ namespace FluidX.Tokenization.TokenStores;
 /// </summary>
 public class ContiguousTokensStore
 {
-    private static readonly LineToken[] EmptyLineTokens = [];
-
     private readonly List<LineToken[]?> _lineTokens = [];
     private readonly ILanguageIdCodec _languageIdCodec;
 
@@ -31,7 +30,7 @@ public class ContiguousTokensStore
         LineToken[]? rawLineTokens = null;
         if (lineIndex< _lineTokens.Count)
             rawLineTokens = _lineTokens[lineIndex];
-        if (rawLineTokens is not null && rawLineTokens != EmptyLineTokens)
+        if (rawLineTokens is not null && rawLineTokens != ContiguousTokensEditing.EmptyLineTokens)
             return new LineTokens(rawLineTokens, lineText, _languageIdCodec);
 
         LineToken[] lineTokens = [
@@ -53,7 +52,7 @@ public class ContiguousTokensStore
                 hasDifferentLanguageId = tokens[1].Metadata.LanguageId != topLevelLanguageId;
 
             if (!hasDifferentLanguageId)
-                return EmptyLineTokens;
+                return ContiguousTokensEditing.EmptyLineTokens;
         }
 
         if (tokens is null || tokens.Length == 0)
@@ -146,7 +145,7 @@ public class ContiguousTokensStore
             if (range.StartColumn == range.EndColumn)
                 return; // Nothing to delete
 
-            _lineTokens[firstLineIndex] = Delete(
+            _lineTokens[firstLineIndex] = ContiguousTokensEditing.Delete(
                 _lineTokens[firstLineIndex],
                 range.StartColumn - 1,
                 range.EndColumn - 1
@@ -154,15 +153,15 @@ public class ContiguousTokensStore
             return;
         }
 
-        _lineTokens[firstLineIndex] = DeleteEnding(_lineTokens[firstLineIndex], range.StartColumn - 1);
+        _lineTokens[firstLineIndex] = ContiguousTokensEditing.DeleteEnding(_lineTokens[firstLineIndex], range.StartColumn - 1);
 
         int lastLineIndex = range.EndLineNumber - 1;
         LineToken[]? lastLineTokens = null;
         if (lastLineIndex < _lineTokens.Count)
-            lastLineTokens = DeleteBeginning(_lineTokens[lastLineIndex], range.EndColumn - 1);
+            lastLineTokens = ContiguousTokensEditing.DeleteBeginning(_lineTokens[lastLineIndex], range.EndColumn - 1);
 
         // Take remaining text on last line and append it to remaining text on first line
-        _lineTokens[firstLineIndex] = Append(_lineTokens[firstLineIndex], lastLineTokens);
+        _lineTokens[firstLineIndex] = ContiguousTokensEditing.Append(_lineTokens[firstLineIndex], lastLineTokens);
 
         // Delete middle lines
         DeleteLines(range.StartLineNumber, range.EndLineNumber - range.StartLineNumber);
@@ -180,35 +179,56 @@ public class ContiguousTokensStore
         if (eolCount == 0)
         {
             // Inserting text on one line
-            _lineTokens[lineIndex] = Insert(_lineTokens[lineIndex], position.Column - 1, firstLineLength);
+            _lineTokens[lineIndex] = ContiguousTokensEditing.Insert(_lineTokens[lineIndex], position.Column - 1, firstLineLength);
             return;
         }
 
-        _lineTokens[lineIndex] = DeleteEnding(_lineTokens[lineIndex], position.Column - 1);
-        _lineTokens[lineIndex] = Insert(_lineTokens[lineIndex], position.Column - 1, firstLineLength);
+        _lineTokens[lineIndex] = ContiguousTokensEditing.DeleteEnding(_lineTokens[lineIndex], position.Column - 1);
+        _lineTokens[lineIndex] = ContiguousTokensEditing.Insert(_lineTokens[lineIndex], position.Column - 1, firstLineLength);
 
         InsertLines(position.LineNumber, eolCount);
     }
 
     //TODO: public LineTokenChangeRange[] SetMultilineTokens(ContiguousMultilineTokens tokens, ITextModel textModel)
 
-    #region Editing
+    private static LineTokenMetadata GetDefaultMetadata(LanguageId topLevelLanguageId)
+    {
+        uint metadata =
+            ((uint)topLevelLanguageId << MetadataConsts.LANGUAGEID_OFFSET)
+            | ((uint)StandardTokenType.Other << MetadataConsts.TOKEN_TYPE_OFFSET)
+            | ((uint)FontStyle.None << MetadataConsts.FONT_STYLE_OFFSET)
+            | ((uint)ColorId.DefaultForeground << MetadataConsts.FOREGROUND_OFFSET)
+            | ((uint)ColorId.DefaultBackground << MetadataConsts.BACKGROUND_OFFSET)
+            // If there is no grammar, we just take a guess and try to match brackets.
+            | MetadataConsts.BALANCED_BRACKETS_MASK;
+        return new LineTokenMetadata(metadata);
+    }
+}
 
-    private static LineToken[]? DeleteBeginning(LineToken[]? lineTokens, int toChIndex)
+public record struct LineTokenChangeRange(int FromLineNumber, int ToLineNumber);
+
+internal static class ContiguousTokensEditing
+{
+    public static readonly LineToken[] EmptyLineTokens = [];
+
+    [return: NotNullIfNotNull(nameof(lineTokens))]
+    public static LineToken[]? DeleteBeginning(LineToken[]? lineTokens, int toChIndex)
     {
         if (lineTokens is null || lineTokens == EmptyLineTokens)
             return lineTokens;
         return Delete(lineTokens, 0, toChIndex);
     }
 
-    private static LineToken[]? DeleteEnding(LineToken[]? lineTokens, int fromChIndex)
+    [return: NotNullIfNotNull(nameof(lineTokens))]
+    public static LineToken[]? DeleteEnding(LineToken[]? lineTokens, int fromChIndex)
     {
         if (lineTokens is null || lineTokens == EmptyLineTokens)
             return lineTokens;
         return Delete(lineTokens, fromChIndex, lineTokens[^1].EndOffset);
     }
 
-    private static LineToken[]? Delete(LineToken[]? lineTokens, int fromChIndex, int toChIndex)
+    [return: NotNullIfNotNull(nameof(lineTokens))]
+    public static LineToken[]? Delete(LineToken[]? lineTokens, int fromChIndex, int toChIndex)
     {
         if (lineTokens is null || lineTokens == EmptyLineTokens || fromChIndex == toChIndex)
             return lineTokens;
@@ -263,7 +283,8 @@ public class ContiguousTokensStore
         return lineTokens[0..dest];
     }
 
-    private static LineToken[]? Append(LineToken[]? lineTokens, LineToken[]? otherTokens)
+    [return: NotNullIfNotNull(nameof(lineTokens))]
+    public static LineToken[]? Append(LineToken[]? lineTokens, LineToken[]? otherTokens)
     {
         if (otherTokens == EmptyLineTokens)
             return lineTokens;
@@ -285,7 +306,8 @@ public class ContiguousTokensStore
         return result;
     }
 
-    private static LineToken[]? Insert(LineToken[]? lineTokens, int chIndex, int textLength)
+    [return: NotNullIfNotNull(nameof(lineTokens))]
+    public static LineToken[]? Insert(LineToken[]? lineTokens, int chIndex, int textLength)
     {
         if (lineTokens is null || lineTokens == EmptyLineTokens)
             return lineTokens; // nothing to do
@@ -306,21 +328,4 @@ public class ContiguousTokensStore
         }
         return lineTokens;
     }
-
-    #endregion
-
-    private static LineTokenMetadata GetDefaultMetadata(LanguageId topLevelLanguageId)
-    {
-        uint metadata =
-            ((uint)topLevelLanguageId << MetadataConsts.LANGUAGEID_OFFSET)
-            | ((uint)StandardTokenType.Other << MetadataConsts.TOKEN_TYPE_OFFSET)
-            | ((uint)FontStyle.None << MetadataConsts.FONT_STYLE_OFFSET)
-            | ((uint)ColorId.DefaultForeground << MetadataConsts.FOREGROUND_OFFSET)
-            | ((uint)ColorId.DefaultBackground << MetadataConsts.BACKGROUND_OFFSET)
-            // If there is no grammar, we just take a guess and try to match brackets.
-            | MetadataConsts.BALANCED_BRACKETS_MASK;
-        return new LineTokenMetadata(metadata);
-    }
 }
-
-public record struct LineTokenChangeRange(int FromLineNumber, int ToLineNumber);
