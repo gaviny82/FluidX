@@ -30,6 +30,13 @@ public class SparseMultilineTokens
     public override string ToString()
         => _tokens.ToString(StartLineNumber);
 
+    public SparseLineToken[]? GetLineTokens(int lineNumber)
+    {
+        if (StartLineNumber <= lineNumber && lineNumber <= EndLineNumber)
+            return _tokens.GetLineTokens(lineNumber - StartLineNumber);
+        return null;
+    }
+
     public FluidX.TextBuffers.Range? GetRange()
     {
         if (_tokens.Range is not FluidX.TextBuffers.Range deltaRange)
@@ -78,10 +85,10 @@ public class SparseMultilineTokens
     public void ApplyEdit(FluidX.TextBuffers.Range range, string text)
     {
         var (eolCount, firstlineLength, lastLineLength, _) = EOLCounter.CountEOL(text);
-        ApplyEdit(range, eolCount, firstlineLength, lastLineLength, text.Length > 0 ? text[0] : '\0');
+        AcceptEdit(range, eolCount, firstlineLength, lastLineLength, text.Length > 0 ? text[0] : '\0');
     }
 
-    public void ApplyEdit(FluidX.TextBuffers.Range range, int eolCount, int firstLineLength, int lastLineLength, char firstCharCode)
+    public void AcceptEdit(FluidX.TextBuffers.Range range, int eolCount, int firstLineLength, int lastLineLength, char firstCharCode)
     {
         AcceptDeleteRange(range);
         AcceptInsertText(

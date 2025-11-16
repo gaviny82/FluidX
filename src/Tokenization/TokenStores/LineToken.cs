@@ -7,6 +7,8 @@ public readonly struct LineTokenMetadata(uint metadata)
 {
     private readonly uint _metadata = metadata;
 
+    public uint RawValue => _metadata;
+
     public LanguageId LanguageId
         => (LanguageId)((_metadata & MetadataConsts.LANGUAGEID_MASK) >> MetadataConsts.LANGUAGEID_OFFSET);
 
