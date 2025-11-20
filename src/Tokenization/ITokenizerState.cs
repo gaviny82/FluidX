@@ -1,3 +1,6 @@
 ﻿namespace FluidX.Tokenization;
 
-public interface ITokenizerState : ICloneable, IEquatable<ITokenizerState> { }
+public interface ITokenizerState : IEquatable<ITokenizerState>
+{
+    ITokenizerState Clone();
+}

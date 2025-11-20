@@ -1,13 +1,7 @@
 ﻿using FluidX.TextModels;
-using System;
-using System.Linq;
 using System.Runtime.InteropServices;
 
 namespace FluidX.Tokenization;
-
-public class TokenizerWithStateStore
-{
-}
 
 public class TrackingTokenizationStateStore
 {
@@ -123,7 +117,7 @@ public class TrackingTokenizationStateStore
     }
 
     public int? FirstInvalidEndStateLineNumber => _invalidEndStatesLineNumbers.Min;
-    public int? FirstInvalidEndStateLineNumberOrMax => FirstInvalidEndStateLineNumber ?? int.MaxValue;
+    public int FirstInvalidEndStateLineNumberOrMax => FirstInvalidEndStateLineNumber ?? int.MaxValue;
     public bool AllStatesValid => _invalidEndStatesLineNumbers.Min is null;
 
     public ITokenizerState? GetStartState(int lineNumber, ITokenizerState initialState)
