@@ -3,7 +3,7 @@
 /// <summary>
 /// A range in the editor.
 /// </summary>
-public interface IRange
+public interface ITextRange
 {
     /// <summary>
     /// Line number on which the range starts (starts at 1).

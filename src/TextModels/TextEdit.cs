@@ -1,4 +1,4 @@
-﻿using Range = FluidX.TextBuffers.Range;
+﻿using TextRange = FluidX.TextBuffers.TextRange;
 
 namespace FluidX.TextModels;
 
@@ -20,7 +20,7 @@ public class TextEdit
     }
 }
 
-public record class TextReplacement(Range Range, string Text)
+public record class TextReplacement(TextRange Range, string Text)
 {
     public bool IsEmpty => Range.IsEmpty() && Text.Length == 0;
 }

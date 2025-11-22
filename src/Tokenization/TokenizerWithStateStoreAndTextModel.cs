@@ -59,7 +59,7 @@ public class TokenizerWithStateStoreAndTextModel
     }
 
     /** assumes state is up to date */
-    public StandardTokenType GetTokenTypeIfInsertingCharacter(FluidX.TextBuffers.Position position, string character)
+    public StandardTokenType GetTokenTypeIfInsertingCharacter(FluidX.TextBuffers.TextPosition position, string character)
     {
         var lineStartState = GetStartState(position.LineNumber);
         if (lineStartState is null)

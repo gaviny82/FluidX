@@ -1,9 +1,9 @@
 ﻿namespace FluidX.TextBuffers;
 
 /// <summary>
-/// A position in the editor.
+/// A position in a text document.
 /// </summary>
-public interface IPosition
+public interface ITextPosition
 {
     /// <summary>
     /// Line number (starts at 1).

@@ -178,7 +178,7 @@ public partial class PieceTreeBase
         return leftLen;
     }
 
-    public Position GetPositionAt(int offset)
+    public TextPosition GetPositionAt(int offset)
     {
         offset = Math.Max(0, offset);
 
@@ -200,10 +200,10 @@ public partial class PieceTreeBase
                 if (index == 0) {
                     int lineStartOffset = GetOffsetAt(lfCnt + 1, 1);
                     int column = originalOffset - lineStartOffset;
-                    return new Position(lfCnt + 1, column + 1);
+                    return new TextPosition(lfCnt + 1, column + 1);
                 }
 
-                return new Position(lfCnt + 1, remainder + 1);
+                return new TextPosition(lfCnt + 1, remainder + 1);
             }
             else
             {
@@ -215,7 +215,7 @@ public partial class PieceTreeBase
                     // last node
                     int lineStartOffset = GetOffsetAt(lfCnt + 1, 1);
                     int column = originalOffset - offset - lineStartOffset;
-                    return new Position(lfCnt + 1, column + 1);
+                    return new TextPosition(lfCnt + 1, column + 1);
                 }
                 else
                 {
@@ -224,10 +224,10 @@ public partial class PieceTreeBase
             }
         }
 
-        return new Position(1, 1);
+        return new TextPosition(1, 1);
     }
 
-    public string GetValueInRange(Range range, string? eol)
+    public string GetValueInRange(TextRange range, string? eol)
     {
         if (range.StartLineNumber == range.EndLineNumber && range.StartColumn == range.EndColumn)
         {
@@ -471,7 +471,7 @@ public partial class PieceTreeBase
     }
 
     public IReadOnlyList<FindMatch> FindMatchesLineByLine(
-        Range searchRange,
+        TextRange searchRange,
         SearchData searchData,
         bool captureMatches,
         int limitResultCount)
@@ -591,7 +591,7 @@ public partial class PieceTreeBase
                 int lineFeedCnt = GetLineFeedCnt(node.Piece.BufferIndex, startCursor, ret1);
                 int retStartColumn = ret1.Line == startCursor.Line ? ret1.Column - startCursor.Column + startColumn : ret1.Column + 1;
                 int retEndColumn = retStartColumn + m.Length;
-                result.Add(SearchUtils.CreateFindMatch(new Range(startLineNumber + lineFeedCnt, retStartColumn, startLineNumber + lineFeedCnt, retEndColumn), [m], captureMatches));
+                result.Add(SearchUtils.CreateFindMatch(new TextRange(startLineNumber + lineFeedCnt, retStartColumn, startLineNumber + lineFeedCnt, retEndColumn), [m], captureMatches));
 
                 if (offsetInBuffer(m.Index) + m.Length >= end)
                     return;
@@ -620,7 +620,7 @@ public partial class PieceTreeBase
             {
                 if (wordSeparators is null || SearchUtils.IsValidMatch(wordSeparators, text, text.Length, lastMatchIndex, searchString.Length))
                 {
-                    result.Add(new FindMatch(new Range(lineNumber, lastMatchIndex + 1 + deltaOffset, lineNumber, lastMatchIndex + 1 + searchString.Length + deltaOffset), null));
+                    result.Add(new FindMatch(new TextRange(lineNumber, lastMatchIndex + 1 + deltaOffset, lineNumber, lastMatchIndex + 1 + searchString.Length + deltaOffset), null));
                     if (result.Count >= limitResultCount)
                         return;
                 }
@@ -637,7 +637,7 @@ public partial class PieceTreeBase
             if (m is not null)
             {
                 result.Add(SearchUtils.CreateFindMatch(
-                    new Range(lineNumber, m.Index + 1 + deltaOffset, lineNumber, m.Index + 1 + m.Length + deltaOffset),
+                    new TextRange(lineNumber, m.Index + 1 + deltaOffset, lineNumber, m.Index + 1 + m.Length + deltaOffset),
                     [m],
                     captureMatches)
                 );

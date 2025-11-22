@@ -64,17 +64,17 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     public int GetOffsetAt(int lineNumber, int column) => _pieceTree.GetOffsetAt(lineNumber, column);
 
-    public Position GetPositionAt(int offset) => _pieceTree.GetPositionAt(offset);
+    public TextPosition GetPositionAt(int offset) => _pieceTree.GetPositionAt(offset);
 
-    public Range GetRangeAt(int start, int length)
+    public TextRange GetRangeAt(int start, int length)
     {
         int end = start + length;
         var startPosition = GetPositionAt(start);
         var endPosition = GetPositionAt(end);
-        return new Range(startPosition.LineNumber, startPosition.Column, endPosition.LineNumber, endPosition.Column);
+        return new TextRange(startPosition.LineNumber, startPosition.Column, endPosition.LineNumber, endPosition.Column);
     }
 
-    public string GetValueInRange(Range range, EndOfLinePreference eol = EndOfLinePreference.TextDefined)
+    public string GetValueInRange(TextRange range, EndOfLinePreference eol = EndOfLinePreference.TextDefined)
     {
         if (range.IsEmpty())
             return "";
@@ -83,7 +83,7 @@ public class PieceTreeTextBuffer : ITextBuffer
         return _pieceTree.GetValueInRange(range, lineEnding);
     }
 
-    public int GetValueLengthInRange(Range range, EndOfLinePreference eol = EndOfLinePreference.TextDefined)
+    public int GetValueLengthInRange(TextRange range, EndOfLinePreference eol = EndOfLinePreference.TextDefined)
     {
         if (range.IsEmpty())
             return 0;
@@ -111,7 +111,7 @@ public class PieceTreeTextBuffer : ITextBuffer
         return endOffset - startOffset + eolOffsetCompensation;
     }
 
-    public int GetCharacterCountInRange(Range range, EndOfLinePreference eol)
+    public int GetCharacterCountInRange(TextRange range, EndOfLinePreference eol)
     {
         if (_mightContainNonBasicASCII)
         {
@@ -190,7 +190,7 @@ public class PieceTreeTextBuffer : ITextBuffer
         _ => throw new Exception("Unknown EOL preference"),
     };
 
-    public IReadOnlyList<FindMatch> FindMatchesLineByLine(Range searchRange, SearchData searchData, bool captureMatches, int limitResultCount)
+    public IReadOnlyList<FindMatch> FindMatchesLineByLine(TextRange searchRange, SearchData searchData, bool captureMatches, int limitResultCount)
         => _pieceTree.FindMatchesLineByLine(searchRange, searchData, captureMatches, limitResultCount);
 
     #endregion
@@ -221,7 +221,7 @@ public class PieceTreeTextBuffer : ITextBuffer
             if (canReduceOperations && op.IsTracked)
                 canReduceOperations = false;
 
-            Range validatedRange = op.Range;
+            TextRange validatedRange = op.Range;
             if (!string.IsNullOrEmpty(op.Text))
             {
                 bool textMightContainNonBasicASCII = true;
@@ -297,7 +297,7 @@ public class PieceTreeTextBuffer : ITextBuffer
             operations = ReduceOperations(operations);
 
         // Delta encode operations
-        Range[] reverseRanges = computeUndoEdits || recordTrimAutoWhitespace
+        TextRange[] reverseRanges = computeUndoEdits || recordTrimAutoWhitespace
             ? GetInverseEditRanges(operations)
             : [];
         List<(int lineNumber, string oldContent)> newTrimAutoWhitespaceCandidates = [];
@@ -334,7 +334,7 @@ public class PieceTreeTextBuffer : ITextBuffer
             for (int i = 0; i < operations.Length; i++)
             {
                 ValidatedEditOperation op = operations[i];
-                Range reverseRange = reverseRanges[i];
+                TextRange reverseRange = reverseRanges[i];
                 string bufferText = GetValueInRange(op.Range);
                 int reverseRangeOffset = op.RangeOffset + reverseRangeDeltaOffset;
                 reverseRangeDeltaOffset += op.Text.Length - bufferText.Length;
@@ -404,9 +404,9 @@ public class PieceTreeTextBuffer : ITextBuffer
             return operations; // We know from empirical testing that a thousand edits work fine regardless of their shape.
 
         bool forceMoveMarkers = false;
-        Range firstEditRange = operations[0].Range;
-        Range lastEditRange = operations[^1].Range;
-        Range entireEditRange = new(firstEditRange.StartLineNumber, firstEditRange.StartColumn, lastEditRange.EndLineNumber, lastEditRange.EndColumn);
+        TextRange firstEditRange = operations[0].Range;
+        TextRange lastEditRange = operations[^1].Range;
+        TextRange entireEditRange = new(firstEditRange.StartLineNumber, firstEditRange.StartColumn, lastEditRange.EndLineNumber, lastEditRange.EndColumn);
         int lastEndLineNumber = firstEditRange.StartLineNumber;
         int lastEndColumn = firstEditRange.StartColumn;
         List<string> result = [];
@@ -414,12 +414,12 @@ public class PieceTreeTextBuffer : ITextBuffer
         for (int i = 0, len = operations.Length; i < len; i++)
         {
             ValidatedEditOperation operation = operations[i];
-            Range range = operation.Range;
+            TextRange range = operation.Range;
 
             forceMoveMarkers = forceMoveMarkers || operation.ForceMoveMarkers;
 
             // (1) -- Push old text
-            result.Add(GetValueInRange(new Range(lastEndLineNumber, lastEndColumn, range.StartLineNumber, range.StartColumn)));
+            result.Add(GetValueInRange(new TextRange(lastEndLineNumber, lastEndColumn, range.StartLineNumber, range.StartColumn)));
 
             // (2) -- Push new text
             if (operation.Text.Length > 0)
@@ -500,9 +500,9 @@ public class PieceTreeTextBuffer : ITextBuffer
     /**
      * Assumes `operations` are validated and sorted ascending
      */
-    internal static Range[] GetInverseEditRanges(ValidatedEditOperation[] operations)
+    internal static TextRange[] GetInverseEditRanges(ValidatedEditOperation[] operations)
     {
-        var result = new Range[operations.Length];
+        var result = new TextRange[operations.Length];
 
         int prevOpEndLineNumber = 0;
         int prevOpEndColumn = 0;
@@ -531,20 +531,20 @@ public class PieceTreeTextBuffer : ITextBuffer
                 startColumn = op.Range.StartColumn;
             }
 
-            Range resultRange;
+            TextRange resultRange;
             if (op.Text.Length > 0)
             {
                 // the operation inserts something
                 int lineCount = op.EOLCount + 1;
                 if (lineCount == 1) // single line insert
-                    resultRange = new Range(startLineNumber, startColumn, startLineNumber, startColumn + op.FirstLineLength);
+                    resultRange = new TextRange(startLineNumber, startColumn, startLineNumber, startColumn + op.FirstLineLength);
                 else // multi line insert
-                    resultRange = new Range(startLineNumber, startColumn, startLineNumber + lineCount - 1, op.LastLineLength + 1);
+                    resultRange = new TextRange(startLineNumber, startColumn, startLineNumber + lineCount - 1, op.LastLineLength + 1);
             }
             else
             {
                 // There is nothing to insert
-                resultRange = new Range(startLineNumber, startColumn, startLineNumber, startColumn);
+                resultRange = new TextRange(startLineNumber, startColumn, startLineNumber, startColumn);
             }
 
             prevOpEndLineNumber = resultRange.EndLineNumber;
@@ -558,7 +558,7 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     private static int SortOpsAscending(ValidatedEditOperation a, ValidatedEditOperation b)
     {
-        int r = Range.CompareRangesUsingEnds(a.Range, b.Range);
+        int r = TextRange.CompareRangesUsingEnds(a.Range, b.Range);
         if (r == 0)
             return a.SortIndex - b.SortIndex;
         return r;
@@ -566,7 +566,7 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     private static int SortOpsDescending(ValidatedEditOperation a, ValidatedEditOperation b)
     {
-        int r = Range.CompareRangesUsingEnds(a.Range, b.Range);
+        int r = TextRange.CompareRangesUsingEnds(a.Range, b.Range);
         if (r == 0)
             return b.SortIndex - a.SortIndex;
         return -r;

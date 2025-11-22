@@ -1,4 +1,4 @@
-﻿using Range = FluidX.TextBuffers.Range;
+﻿using TextRange = FluidX.TextBuffers.TextRange;
 using FluidX.TextBuffers;
 using FluidX.TextBuffers.PieceTree;
 using System.Diagnostics.CodeAnalysis;
@@ -46,7 +46,7 @@ public class TextModel : IDecorationTreesHost
     public bool CanUndo => _undoRedoStack.CanUndo;
     public bool CanRedo => _undoRedoStack.CanRedo;
 
-    Range IDecorationTreesHost.GetRangeAt(int start, int end)
+    TextRange IDecorationTreesHost.GetRangeAt(int start, int end)
         => TextBuffer.GetRangeAt(start, end - start);
 
     private readonly UndoRedoStack _undoRedoStack = new();
@@ -184,8 +184,8 @@ public class TextModel : IDecorationTreesHost
 
                 //var decorationsWithInjectedTextInEditedRange = this._decorationsTree.getInjectedTextInInterval(
                 //    this,
-                //    TextBuffer.GetOffsetAt(new Position(firstEditLineNumber, 1)),
-                //    TextBuffer.GetOffsetAt(new Position(lastInsertedLineNumber, TextBuffer.GetLineMaxColumn(lastInsertedLineNumber))),
+                //    TextBuffer.GetOffsetAt(new TextPosition(firstEditLineNumber, 1)),
+                //    TextBuffer.GetOffsetAt(new TextPosition(lastInsertedLineNumber, TextBuffer.GetLineMaxColumn(lastInsertedLineNumber))),
                 //    0
                 //);
 
@@ -294,7 +294,7 @@ public class TextModel : IDecorationTreesHost
             var rangeEnd = TextBuffer.GetPositionAt(change.NewEnd);
             return new EditOperation
             {
-                Range = new FluidX.TextBuffers.Range(
+                Range = new FluidX.TextBuffers.TextRange(
                     rangeStart.LineNumber,
                     rangeStart.Column,
                     rangeEnd.LineNumber,
@@ -322,7 +322,7 @@ public class TextModel : IDecorationTreesHost
             var rangeEnd = TextBuffer.GetPositionAt(change.OldEnd);
             return new EditOperation
             {
-                Range = new FluidX.TextBuffers.Range(
+                Range = new FluidX.TextBuffers.TextRange(
                     rangeStart.LineNumber,
                     rangeStart.Column,
                     rangeEnd.LineNumber,
@@ -382,7 +382,7 @@ public class TextModel : IDecorationTreesHost
                 Changes: [
                     new ModelContentChange
                     {
-                        Range = new FluidX.TextBuffers.Range(1, 1, endLineNumber, endColumn),
+                        Range = new FluidX.TextBuffers.TextRange(1, 1, endLineNumber, endColumn),
                         RangeOffset = 0,
                         RangeLength = oldModelValueLength,
                         Text = GetValue()
@@ -400,7 +400,7 @@ public class TextModel : IDecorationTreesHost
         );
     }
 
-    public FluidX.TextBuffers.Range GetFullModelRange()
+    public FluidX.TextBuffers.TextRange GetFullModelRange()
     {
         int lineCount = TextBuffer.LineCount;
         int endColumn = TextBuffer.GetLineMaxColumn(lineCount);

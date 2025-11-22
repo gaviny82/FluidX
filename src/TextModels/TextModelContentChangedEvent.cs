@@ -1,5 +1,5 @@
 ﻿using System.Reflection;
-using Range = FluidX.TextBuffers.Range;
+using TextRange = FluidX.TextBuffers.TextRange;
 
 namespace FluidX.TextModels;
 
@@ -146,7 +146,7 @@ public class ModelContentChange
     /// <summary>
     /// The old range that got replaced.
     /// </summary>
-    public required Range Range { get; init; }
+    public required TextRange Range { get; init; }
     /// <summary>
     /// The offset of the range that got replaced.
     /// </summary>

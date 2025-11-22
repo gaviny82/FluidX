@@ -60,47 +60,47 @@ public interface IReadOnlyTextBuffer : IEquatable<IReadOnlyTextBuffer>
     int GetOffsetAt(int lineNumber, int column);
 
     /// <summary>
-    /// Get the <see cref="Position"/> at an <paramref name="offset"/> from the start of the document.
+    /// Get the <see cref="TextPosition"/> at an <paramref name="offset"/> from the start of the document.
     /// </summary>
     /// <param name="offset">Length of characters from the first character in the document</param>
-    /// <returns><see cref="Position"/> of the character at the given <paramref name="offset"/>.</returns>
-    Position GetPositionAt(int offset);
+    /// <returns><see cref="TextPosition"/> of the character at the given <paramref name="offset"/>.</returns>
+    TextPosition GetPositionAt(int offset);
 
     /// <summary>
-    /// Get the <see cref="Range"/> of text of a given <paramref name="length"/> at a given <paramref name="offset"/>.
+    /// Get the <see cref="TextRange"/> of text of a given <paramref name="length"/> at a given <paramref name="offset"/>.
     /// </summary>
     /// <param name="offset">Length of characters from the first character in the document</param>
-    /// <param name="length">Length of the text in the <see cref="Range"/></param>
-    /// <returns>The <see cref="Range"/> of the text specified.</returns>
-    Range GetRangeAt(int offset, int length);
+    /// <param name="length">Length of the text in the <see cref="TextRange"/></param>
+    /// <returns>The <see cref="TextRange"/> of the text specified.</returns>
+    TextRange GetRangeAt(int offset, int length);
 
     #endregion
 
     #region Text operations
 
     /// <summary>
-    /// Get the text in a <see cref="Range"/> with the specified <see cref="EndOfLinePreference"/>.
+    /// Get the text in a <see cref="TextRange"/> with the specified <see cref="EndOfLinePreference"/>.
     /// </summary>
-    /// <param name="range"><see cref="Range"/> of text</param>
+    /// <param name="range"><see cref="TextRange"/> of text</param>
     /// <param name="eol">End-of-line preference</param>
     /// <returns>Text in <paramref name="range"/> with the specified <see cref="EndOfLinePreference"/>.<returns>
-    string GetValueInRange(Range range, EndOfLinePreference eol);
+    string GetValueInRange(TextRange range, EndOfLinePreference eol);
 
     /// <summary>
-    /// Get the length of text in a <see cref="Range"/> with the specified <see cref="EndOfLinePreference"/>.
+    /// Get the length of text in a <see cref="TextRange"/> with the specified <see cref="EndOfLinePreference"/>.
     /// </summary>
-    /// <param name="range">Range of text</param>
+    /// <param name="range">TextRange of text</param>
     /// <param name="eol">End-of-line preference</param>
     /// <returns>Length of text in <paramref name="range"/> with the specified <see cref="EndOfLinePreference"/>.</returns>
-    int GetValueLengthInRange(Range range, EndOfLinePreference eol);
+    int GetValueLengthInRange(TextRange range, EndOfLinePreference eol);
 
     /// <summary>
-    /// Get the number of Unicode characters in a <see cref="Range"/> with the specified <see cref="EndOfLinePreference"/>.
+    /// Get the number of Unicode characters in a <see cref="TextRange"/> with the specified <see cref="EndOfLinePreference"/>.
     /// </summary>
-    /// <param name="range">Range of text</param>
+    /// <param name="range">TextRange of text</param>
     /// <param name="eol">End-of-line preference</param>
     /// <returns>Number of characters in <paramref name="range"/> with the specified <see cref="EndOfLinePreference"/>.</returns>
-    int GetCharacterCountInRange(Range range, EndOfLinePreference eol);
+    int GetCharacterCountInRange(TextRange range, EndOfLinePreference eol);
 
     /// <summary>
     /// Total length of characters in the document.
@@ -180,7 +180,7 @@ public interface IReadOnlyTextBuffer : IEquatable<IReadOnlyTextBuffer>
     ITextSnapshot CreateSnapshot(bool preserveBOM);
 
     IReadOnlyList<FindMatch> FindMatchesLineByLine(
-        Range searchRange,
+        TextRange searchRange,
         SearchData searchData,
         bool captureMatches,
         int limitResultCount);

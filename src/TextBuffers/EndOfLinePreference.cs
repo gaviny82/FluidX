@@ -25,6 +25,6 @@ public enum EndOfLinePreference
 
 //public class FindMatch
 //{
-//    public required Range Range { get; init; }
+//    public required TextRange TextRange { get; init; }
 //    public required string[] Matches { get; init; }
 //}

@@ -1,5 +1,5 @@
 ﻿using FluidX.Decorations;
-using Range = FluidX.TextBuffers.Range;
+using TextRange = FluidX.TextBuffers.TextRange;
 
 namespace FluidX.TextModels;
 
@@ -164,14 +164,14 @@ public class TextModelDecorationTrees
             _decorationTree0.Delete(node);
     }
 
-    public Range GetNodeRange(IDecorationTreesHost host, IntervalNode node)
+    public TextRange GetNodeRange(IDecorationTreesHost host, IntervalNode node)
     {
         long versionId = host.VersionId;
         if (node.CachedVersionId != versionId)
             ResolveNode(node, versionId);
         if (node.Range is null)
             node.Range = host.GetRangeAt(node.CachedAbsoluteStart, node.CachedAbsoluteEnd);
-        return (Range)node.Range;
+        return (TextRange)node.Range;
     }
 
     private void ResolveNode(IntervalNode node, long cachedVersionId)
@@ -205,5 +205,5 @@ file static class IntervalNodeExtensions
 public interface IDecorationTreesHost
 {
     long VersionId { get; }
-    Range GetRangeAt(int start, int end);
+    TextRange GetRangeAt(int start, int end);
 }

@@ -96,10 +96,10 @@ public class SearchData
 
 public class FindMatch
 {
-    public Range Range { get; }
+    public TextRange Range { get; }
     public string[]? Matches { get; }
 
-    public FindMatch(Range range, string[]? matches)
+    public FindMatch(TextRange range, string[]? matches)
     {
         Range = range;
         Matches = matches;
@@ -158,7 +158,7 @@ internal static class SearchUtils
         return false;
     }
 
-    public static FindMatch CreateFindMatch(Range range, Match[] rawMatches, bool captureMatches)
+    public static FindMatch CreateFindMatch(TextRange range, Match[] rawMatches, bool captureMatches)
     {
         if (!captureMatches)
             return new FindMatch(range, null);

@@ -1,11 +1,12 @@
 ﻿namespace FluidX.TextBuffers;
 
 /// <summary>
-/// A position in the editor.
+/// A position in a text document.
 /// </summary>
 /// <param name="LineNumber">Line number (starts at 1)</param>
 /// <param name="Column">Column (the first character in a line is between column 1 and column 2)</param>
-public readonly record struct Position(int LineNumber, int Column) : IPosition
+public readonly record struct TextPosition(int LineNumber, int Column)
+    : ITextPosition, IComparable<TextPosition>, IEquatable<TextPosition>
 {
     /// <summary>
     /// Derive a new position from this position.
@@ -13,7 +14,7 @@ public readonly record struct Position(int LineNumber, int Column) : IPosition
     /// <param name="deltaLineNumber">Line number delta</param>
     /// <param name="deltaColumn">Column delta</param>
     /// <returns></returns>
-    public Position Delta(int deltaLineNumber = 0, int deltaColumn = 0) => this with
+    public TextPosition Delta(int deltaLineNumber = 0, int deltaColumn = 0) => this with
     {
         LineNumber = LineNumber + deltaLineNumber,
         Column = Column + deltaColumn
@@ -23,12 +24,12 @@ public readonly record struct Position(int LineNumber, int Column) : IPosition
     /// Test if this position equals other position.
     /// </summary>
     /// <param name="other">Other position</param>
-    public bool Equals(IPosition other) => Equals(this, other);
+    public bool Equals(ITextPosition other) => Equals(this, other);
 
     /// <summary>
     /// Test if position <paramref name="a"/> equals position <paramref name="b"/>.
     /// </summary>
-    public static bool Equals(IPosition a, IPosition b)
+    public static bool Equals(ITextPosition a, ITextPosition b)
     {
         if (a is null && b is null)
             return true;
@@ -42,13 +43,13 @@ public readonly record struct Position(int LineNumber, int Column) : IPosition
     /// </summary>
     /// <param name="other">Another position</param>
     /// <returns>If the two positions are equal, the result will be <see langword="false"/>.</returns>
-    public bool IsBefore(IPosition other) => IsBefore(this, other);
+    public bool IsBefore(ITextPosition other) => IsBefore(this, other);
 
     /// <summary>
     /// Test if position <paramref name="a"/> equals position <paramref name="b"/>.
     /// </summary>
     /// <returns>If the two positions are equal, the result will be <see langword="false"/>.</returns>
-    public static bool IsBefore(IPosition a, IPosition b)
+    public static bool IsBefore(ITextPosition a, ITextPosition b)
     {
         if (a.LineNumber < b.LineNumber)
             return true;
@@ -61,13 +62,13 @@ public readonly record struct Position(int LineNumber, int Column) : IPosition
     /// Test if this position is before or equal to another position.
     /// </summary>
     /// <returns>If the two positions are equal, the result will be <see langword="true"/>.</returns>
-    public bool IsBeforeOrEqual(IPosition other) => IsBeforeOrEqual(this, other);
+    public bool IsBeforeOrEqual(ITextPosition other) => IsBeforeOrEqual(this, other);
 
     /// <summary>
     /// Test if position <paramref name="a"/> is before or equal to position <paramref name="b"/>.
     /// </summary>
     /// <returns>If the two positions are equal, the result will be <see langword="true"/>.</returns>
-    public static bool IsBeforeOrEqual(IPosition a, IPosition b)
+    public static bool IsBeforeOrEqual(ITextPosition a, ITextPosition b)
     {
         if (a.LineNumber < b.LineNumber)
             return true;
@@ -76,10 +77,12 @@ public readonly record struct Position(int LineNumber, int Column) : IPosition
         return a.Column <= b.Column;
     }
 
+    public int CompareTo(TextPosition other) => Compare(this, other);
+
     /// <summary>
     /// Compare two positions, useful for sorting.
     /// </summary>
-    public static int Compare(IPosition a, IPosition b)
+    public static int Compare(ITextPosition a, ITextPosition b)
     {
         int aLineNumber = a.LineNumber;
         int bLineNumber = b.LineNumber;
@@ -96,10 +99,10 @@ public readonly record struct Position(int LineNumber, int Column) : IPosition
     public override string ToString() => $"({LineNumber}, {Column})";
 
     /// <summary>
-    /// Create a <see cref="Position"/> from an <see cref="IPosition"/>.
+    /// Create a <see cref="TextPosition"/> from an <see cref="ITextPosition"/>.
     /// </summary>
-    public static Position Lift(IPosition pos)
+    public static TextPosition Lift(ITextPosition pos)
     {
-        return new Position(pos.LineNumber, pos.Column);
+        return new TextPosition(pos.LineNumber, pos.Column);
     }
 }

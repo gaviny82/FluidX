@@ -1,13 +1,13 @@
 ﻿namespace FluidX.TextBuffers;
 
-public readonly record struct Range : IRange
+public readonly record struct TextRange : ITextRange
 {
     public int StartLineNumber { get; }
     public int StartColumn { get; }
     public int EndLineNumber { get; }
     public int EndColumn { get; }
 
-    public Range(int startLineNumber, int startColumn, int endLineNumber, int endColumn)
+    public TextRange(int startLineNumber, int startColumn, int endLineNumber, int endColumn)
     {
         // When the start position is after the end position, set the start position to the end position
         if (startLineNumber > endLineNumber || (startLineNumber == endLineNumber && startColumn > endColumn))
@@ -28,11 +28,11 @@ public readonly record struct Range : IRange
 
     public bool IsEmpty() => IsEmpty(this);
 
-    public static bool IsEmpty(IRange range) => range.StartLineNumber == range.EndLineNumber && range.StartColumn == range.EndColumn;
+    public static bool IsEmpty(ITextRange range) => range.StartLineNumber == range.EndLineNumber && range.StartColumn == range.EndColumn;
 
-    public bool ContainsPosition(IPosition position) => ContainsPosition(this, position);
+    public bool ContainsPosition(ITextPosition position) => ContainsPosition(this, position);
 
-    public static bool ContainsPosition(IRange range, IPosition position)
+    public static bool ContainsPosition(ITextRange range, ITextPosition position)
     {
         if (position.LineNumber < range.StartLineNumber || position.LineNumber > range.EndLineNumber)
             return false;
@@ -43,7 +43,7 @@ public readonly record struct Range : IRange
         return true;
     }
 
-    public static bool StrictContainsPosition(IRange range, IPosition position)
+    public static bool StrictContainsPosition(ITextRange range, ITextPosition position)
     {
         if (position.LineNumber < range.StartLineNumber || position.LineNumber > range.EndLineNumber)
             return false;
@@ -54,9 +54,9 @@ public readonly record struct Range : IRange
         return true;
     }
 
-    public bool ContainsRange(IRange otherRange) => ContainsRange(this, otherRange);
+    public bool ContainsRange(ITextRange otherRange) => ContainsRange(this, otherRange);
 
-    public static bool ContainsRange(IRange range, IRange otherRange)
+    public static bool ContainsRange(ITextRange range, ITextRange otherRange)
     {
         if (otherRange.StartLineNumber < range.StartLineNumber || otherRange.EndLineNumber < range.StartLineNumber)
             return false;
@@ -69,9 +69,9 @@ public readonly record struct Range : IRange
         return true;
     }
 
-    public bool StrictContainsRange(IRange range) => StrictContainsRange(this, range);
+    public bool StrictContainsRange(ITextRange range) => StrictContainsRange(this, range);
 
-    public static bool StrictContainsRange(IRange range, IRange otherRange)
+    public static bool StrictContainsRange(ITextRange range, ITextRange otherRange)
     {
         if (otherRange.StartLineNumber < range.StartLineNumber || otherRange.EndLineNumber < range.StartLineNumber)
             return false;
@@ -84,9 +84,9 @@ public readonly record struct Range : IRange
         return true;
     }
 
-    public Range PlusRange(IRange range) => PlusRange(this, range);
+    public TextRange PlusRange(ITextRange range) => PlusRange(this, range);
 
-    public static Range PlusRange(IRange a, IRange b)
+    public static TextRange PlusRange(ITextRange a, ITextRange b)
     {
         int startLineNumber, startColumn, endLineNumber, endColumn;
 
@@ -122,12 +122,12 @@ public readonly record struct Range : IRange
             endColumn = a.EndColumn;
         }
 
-        return new Range(startLineNumber, startColumn, endLineNumber, endColumn);
+        return new TextRange(startLineNumber, startColumn, endLineNumber, endColumn);
     }
 
-    public Range? IntersectRanges(IRange range) => IntersectRanges(this, range);
+    public TextRange? IntersectRanges(ITextRange range) => IntersectRanges(this, range);
 
-    public static Range? IntersectRanges(IRange a, IRange b)
+    public static TextRange? IntersectRanges(ITextRange a, ITextRange b)
     {
         int resultStartLineNumber = a.StartLineNumber;
         int resultStartColumn = a.StartColumn;
@@ -165,12 +165,12 @@ public readonly record struct Range : IRange
         if (resultStartLineNumber == resultEndLineNumber && resultStartColumn > resultEndColumn)
             return null;
 
-        return new Range(resultStartLineNumber, resultStartColumn, resultEndLineNumber, resultEndColumn);
+        return new TextRange(resultStartLineNumber, resultStartColumn, resultEndLineNumber, resultEndColumn);
     }
 
-    public bool EqualsRange(IRange? other) => EqualsRange(this, other);
+    public bool EqualsRange(ITextRange? other) => EqualsRange(this, other);
 
-    public static bool EqualsRange(IRange? a, IRange? b)
+    public static bool EqualsRange(ITextRange? a, ITextRange? b)
     {
         if (a is null && b is null)
             return true;
@@ -182,52 +182,52 @@ public readonly record struct Range : IRange
                a.EndColumn == b.EndColumn;
     }
 
-    public Position GetEndPosition() => GetEndPosition(this);
+    public TextPosition GetEndPosition() => GetEndPosition(this);
 
-    public static Position GetEndPosition(IRange range)
-        => new Position(range.EndLineNumber, range.EndColumn);
+    public static TextPosition GetEndPosition(ITextRange range)
+        => new TextPosition(range.EndLineNumber, range.EndColumn);
 
-    public Position GetStartPosition() => GetStartPosition(this);
+    public TextPosition GetStartPosition() => GetStartPosition(this);
 
-    public static Position GetStartPosition(IRange range)
-        => new Position(range.StartLineNumber, range.EndLineNumber);
+    public static TextPosition GetStartPosition(ITextRange range)
+        => new TextPosition(range.StartLineNumber, range.EndLineNumber);
 
     public override string ToString()
         => $"[{StartLineNumber},{StartColumn} -> {EndLineNumber},{EndColumn}]";
 
-    public Range SetEndPosition(int endLineNumber, int endColumn)
-        => new Range(StartLineNumber, StartColumn, endLineNumber, endColumn);
+    public TextRange SetEndPosition(int endLineNumber, int endColumn)
+        => new TextRange(StartLineNumber, StartColumn, endLineNumber, endColumn);
 
-    public Range SetStartPosition(int startLineNumber, int startColumn)
-        => new Range(startLineNumber, startColumn, EndLineNumber, EndColumn);
+    public TextRange SetStartPosition(int startLineNumber, int startColumn)
+        => new TextRange(startLineNumber, startColumn, EndLineNumber, EndColumn);
 
-    public Range CollapseToStart() => CollapseToStart(this);
+    public TextRange CollapseToStart() => CollapseToStart(this);
 
-    public static Range CollapseToStart(IRange range)
-        => new Range(range.StartLineNumber, range.StartColumn, range.StartLineNumber, range.StartColumn);
+    public static TextRange CollapseToStart(ITextRange range)
+        => new TextRange(range.StartLineNumber, range.StartColumn, range.StartLineNumber, range.StartColumn);
 
-    public Range CollapseToEnd() => CollapseToEnd(this);
+    public TextRange CollapseToEnd() => CollapseToEnd(this);
 
-    public static Range CollapseToEnd(IRange range)
-        => new Range(range.EndLineNumber, range.EndColumn, range.EndLineNumber, range.EndColumn);
+    public static TextRange CollapseToEnd(ITextRange range)
+        => new TextRange(range.EndLineNumber, range.EndColumn, range.EndLineNumber, range.EndColumn);
 
-    public Range Delta(int lineCount)
-        => new Range(StartLineNumber + lineCount, StartColumn, EndLineNumber + lineCount, EndColumn);
+    public TextRange Delta(int lineCount)
+        => new TextRange(StartLineNumber + lineCount, StartColumn, EndLineNumber + lineCount, EndColumn);
 
-    public static Range FromPositions(Position start, Position? end = null)
+    public static TextRange FromPositions(TextPosition start, TextPosition? end = null)
     {
-        Position endPos = end ?? start;
-        return new Range(start.LineNumber, start.Column, endPos.LineNumber, endPos.Column);
+        TextPosition endPos = end ?? start;
+        return new TextRange(start.LineNumber, start.Column, endPos.LineNumber, endPos.Column);
     }
 
-    public static Range? Lift(IRange? range)
+    public static TextRange? Lift(ITextRange? range)
     {
         if (range is null)
             return null;
-        return new Range(range.StartLineNumber, range.StartColumn, range.EndLineNumber, range.EndColumn);
+        return new TextRange(range.StartLineNumber, range.StartColumn, range.EndLineNumber, range.EndColumn);
     }
 
-    public static bool AreIntersectingOrTouching(IRange a, IRange b)
+    public static bool AreIntersectingOrTouching(ITextRange a, ITextRange b)
     {
         // Check if `a` is before `b`
         if (a.EndLineNumber < b.StartLineNumber || (a.EndLineNumber == b.StartLineNumber && a.EndColumn < b.StartColumn))
@@ -241,7 +241,7 @@ public readonly record struct Range : IRange
         return true;
     }
 
-    public static bool AreIntersecting(IRange a, IRange b)
+    public static bool AreIntersecting(ITextRange a, ITextRange b)
     {
         // Check if `a` is before `b`
         if (a.EndLineNumber < b.StartLineNumber || (a.EndLineNumber == b.StartLineNumber && a.EndColumn <= b.StartColumn))
@@ -255,7 +255,7 @@ public readonly record struct Range : IRange
         return true;
     }
 
-    public static int CompareRangesUsingStarts(IRange? a, IRange? b)
+    public static int CompareRangesUsingStarts(ITextRange? a, ITextRange? b)
     {
         if (a is not null && b is not null)
         {
@@ -291,7 +291,7 @@ public readonly record struct Range : IRange
         return aExists - bExists;
     }
 
-    public static int CompareRangesUsingEnds(IRange a, IRange b)
+    public static int CompareRangesUsingEnds(ITextRange a, ITextRange b)
     {
         if (a.EndLineNumber == b.EndLineNumber)
         {
@@ -308,5 +308,5 @@ public readonly record struct Range : IRange
         return a.EndLineNumber - b.EndLineNumber;
     }
 
-    public static bool SpansMultipleLines(IRange range) => range.EndLineNumber > range.StartLineNumber;
+    public static bool SpansMultipleLines(ITextRange range) => range.EndLineNumber > range.StartLineNumber;
 }
