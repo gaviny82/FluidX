@@ -1,4 +1,4 @@
-﻿namespace FluidX.TextBuffers;
+﻿namespace FluidX;
 
 /// <summary>
 /// A position in a text document.

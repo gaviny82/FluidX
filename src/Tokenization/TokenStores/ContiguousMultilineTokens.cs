@@ -29,14 +29,14 @@ public class ContiguousMultilineTokens
 
     #region Editing
 
-    public void ApplyEdit(FluidX.TextBuffers.TextRange range, string text)
+    public void ApplyEdit(TextRange range, string text)
     {
         var result = EOLCounter.CountEOL(text);
         AcceptDeleteRange(range);
         AcceptInsertText(range.GetStartPosition(), result.eolCount, result.firstLineLength);
     }
 
-    private void AcceptDeleteRange(FluidX.TextBuffers.TextRange range)
+    private void AcceptDeleteRange(TextRange range)
     {
         if (range.IsEmpty())
             return; // Nothing to delete

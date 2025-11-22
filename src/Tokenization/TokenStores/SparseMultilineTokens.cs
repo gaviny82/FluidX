@@ -37,9 +37,9 @@ public class SparseMultilineTokens
         return null;
     }
 
-    public FluidX.TextBuffers.TextRange? GetRange()
+    public TextRange? GetRange()
     {
-        if (_tokens.Range is not FluidX.TextBuffers.TextRange deltaRange)
+        if (_tokens.Range is not TextRange deltaRange)
             return null;
         return new(
             StartLineNumber + deltaRange.StartLineNumber,
@@ -49,7 +49,7 @@ public class SparseMultilineTokens
         );
     }
 
-    public void RemoveTokens(FluidX.TextBuffers.TextRange range)
+    public void RemoveTokens(TextRange range)
     {
         int startLineIndex = range.StartLineNumber - StartLineNumber;
         int endLineIndex = range.EndLineNumber - StartLineNumber;
@@ -62,7 +62,7 @@ public class SparseMultilineTokens
         );
     }
 
-    public (SparseMultilineTokens, SparseMultilineTokens) Split(FluidX.TextBuffers.TextRange range)
+    public (SparseMultilineTokens, SparseMultilineTokens) Split(TextRange range)
     {
         // split tokens to two:
         // a) all the tokens before `range`
@@ -82,13 +82,13 @@ public class SparseMultilineTokens
         );
     }
 
-    public void ApplyEdit(FluidX.TextBuffers.TextRange range, string text)
+    public void ApplyEdit(TextRange range, string text)
     {
         var (eolCount, firstlineLength, lastLineLength, _) = EOLCounter.CountEOL(text);
         AcceptEdit(range, eolCount, firstlineLength, lastLineLength, text.Length > 0 ? text[0] : '\0');
     }
 
-    public void AcceptEdit(FluidX.TextBuffers.TextRange range, int eolCount, int firstLineLength, int lastLineLength, char firstCharCode)
+    public void AcceptEdit(TextRange range, int eolCount, int firstLineLength, int lastLineLength, char firstCharCode)
     {
         AcceptDeleteRange(range);
         AcceptInsertText(
@@ -100,7 +100,7 @@ public class SparseMultilineTokens
         );
     }
 
-    private void AcceptDeleteRange(FluidX.TextBuffers.TextRange range)
+    private void AcceptDeleteRange(TextRange range)
     {
         if (range.IsEmpty())
             return; // Nothing to delete
@@ -176,7 +176,7 @@ public class SparseMultilineTokenStorage
     public bool IsEmpty => _tokens.Count == 0;
     public int TokenCount => _tokens.Count;
     public int MaxDeltaLine => TokenCount == 0 ? -1 : _tokens[^1].DeltaLine;
-    public FluidX.TextBuffers.TextRange? Range => TokenCount == 0 ? null : new(
+    public TextRange? Range => TokenCount == 0 ? null : new(
         0,
         _tokens[0].StartIndex + 1,
         MaxDeltaLine,

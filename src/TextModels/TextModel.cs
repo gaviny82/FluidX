@@ -1,4 +1,4 @@
-﻿using TextRange = FluidX.TextBuffers.TextRange;
+﻿using TextRange = FluidX.TextRange;
 using FluidX.TextBuffers;
 using FluidX.TextBuffers.PieceTree;
 using System.Diagnostics.CodeAnalysis;
@@ -400,7 +400,7 @@ public class TextModel : IDecorationTreesHost
         );
     }
 
-    public FluidX.TextBuffers.TextRange GetFullModelRange()
+    public TextRange GetFullModelRange()
     {
         int lineCount = TextBuffer.LineCount;
         int endColumn = TextBuffer.GetLineMaxColumn(lineCount);

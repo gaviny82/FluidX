@@ -1,4 +1,4 @@
-﻿using TextRange = FluidX.TextBuffers.TextRange;
+﻿using TextRange = FluidX.TextRange;
 
 namespace FluidX.Decorations;
 

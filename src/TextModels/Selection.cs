@@ -1,4 +1,4 @@
-﻿using TextRange = FluidX.TextBuffers.TextRange;
+﻿using TextRange = FluidX.TextRange;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -6,7 +6,7 @@ using System.Text;
 namespace FluidX.TextModels;
 
 /// <summary>
-/// A selection in the editor. The selection is a <see cref="FluidX.TextBuffers.TextRange"/> that has an orientation.
+/// A selection in the editor. The selection is a <see cref="FluidX.TextRange"/> that has an orientation.
 /// </summary>
 /// <param name="SelectionStartLineNumber">The line number on which the selection has started.</param>
 /// <param name="SelectionStartColumn">The column on `selectionStartLineNumber` where the selection has started.</param>

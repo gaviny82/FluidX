@@ -1,4 +1,4 @@
-﻿namespace FluidX.TextBuffers;
+﻿namespace FluidX;
 
 /// <summary>
 /// A range in a text document.
