@@ -1,7 +1,7 @@
 ﻿namespace FluidX.TextBuffers;
 
 /// <summary>
-/// A range in the editor.
+/// A range in a text document.
 /// </summary>
 public interface ITextRange
 {

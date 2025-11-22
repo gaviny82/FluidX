@@ -1,6 +1,9 @@
 ﻿namespace FluidX.TextBuffers;
 
-public readonly record struct TextRange : ITextRange
+/// <summary>
+/// A range in a text document.
+/// </summary>
+public readonly record struct TextRange : ITextRange, IEquatable<TextRange>
 {
     public int StartLineNumber { get; }
     public int StartColumn { get; }
@@ -25,6 +28,13 @@ public readonly record struct TextRange : ITextRange
             EndColumn = endColumn;
         }
     }
+
+    public TextRange(TextPosition start, TextPosition end) : this(
+        start.LineNumber,
+        start.Column,
+        end.LineNumber,
+        end.Column)
+    { }
 
     public bool IsEmpty() => IsEmpty(this);
 
@@ -56,6 +66,12 @@ public readonly record struct TextRange : ITextRange
 
     public bool ContainsRange(ITextRange otherRange) => ContainsRange(this, otherRange);
 
+    /// <summary>
+    /// Test if <paramref name="otherRange"/> is in <paramref name="range"/>. If the ranges are equal, will return <see langword="true"/>.
+    /// </summary>
+    /// <param name="range">The range to test if it contains <paramref name="otherRange"/>.</param>
+    /// <param name="otherRange">The range to test if it is contained by <paramref name="range"/>.</param>
+    /// <returns></returns>
     public static bool ContainsRange(ITextRange range, ITextRange otherRange)
     {
         if (otherRange.StartLineNumber < range.StartLineNumber || otherRange.EndLineNumber < range.StartLineNumber)
@@ -71,6 +87,12 @@ public readonly record struct TextRange : ITextRange
 
     public bool StrictContainsRange(ITextRange range) => StrictContainsRange(this, range);
 
+    /// <summary>
+    /// Test if <paramref name="otherRange"/> is in <paramref name="range"/> (must start after, and end before). If the ranges are equal, will return <see langword="false"/>.
+    /// </summary>
+    /// <param name="range">The range to test if it contains <paramref name="otherRange"/>.</param>
+    /// <param name="otherRange">The range to test if it is contained by <paramref name="range"/>.</param>
+    /// <returns></returns>
     public static bool StrictContainsRange(ITextRange range, ITextRange otherRange)
     {
         if (otherRange.StartLineNumber < range.StartLineNumber || otherRange.EndLineNumber < range.StartLineNumber)
