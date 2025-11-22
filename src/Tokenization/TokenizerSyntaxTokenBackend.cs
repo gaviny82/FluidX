@@ -5,10 +5,9 @@ namespace FluidX.Tokenization;
 
 public class TokenizerSyntaxTokenBackend : SyntaxTokenBackendBase
 {
-    // TODO:
-    // private _tokenizer: TokenizerWithStateStoreAndTextModel | null = null;
-    // private _defaultBackgroundTokenizer: DefaultBackgroundTokenizer | null = null;
-    // private readonly _attachedViewStates = this._register(new DisposableMap<IAttachedView, AttachedViewHandler>());
+    private TokenizerWithStateStoreAndTextModel? _tokenizer = null;
+    private DefaultBackgroundTokenizer ? _defaultBackgroundTokenizer = null;
+    // TODO: private readonly _attachedViewStates = this._register(new DisposableMap<IAttachedView, AttachedViewHandler>());
 
     private BackgroundTokenizationState BackgroundTokenizationState
     {
