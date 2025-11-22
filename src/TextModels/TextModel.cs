@@ -25,6 +25,8 @@ public class TextModel : IDecorationTreesHost
     /// </summary>
     public long AlternativeVersionId { get; private set; } = 1;
 
+    public string LanguageId { get; set; } = "plaintext"; // TODO: Move to tokenization part
+
     public TextModelOptions Options { get; private set; } = new(
         TabSize: 4,
         IndentSize: 4,
