@@ -1,8 +1,6 @@
 ﻿using FluidX.TextBuffers;
-using System;
 using System.Buffers.Binary;
 using System.Runtime.InteropServices;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace FluidX.Tokenization.TokenStores;
 

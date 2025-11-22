@@ -1,6 +1,4 @@
-﻿using System.Text.RegularExpressions;
-
-namespace FluidX.TextBuffers.PieceTree;
+﻿namespace FluidX.TextBuffers.PieceTree;
 
 public class PieceTreeTextBufferFactory
 {

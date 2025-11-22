@@ -1,6 +1,4 @@
-﻿using TextRange = FluidX.TextRange;
-
-namespace FluidX.Decorations;
+﻿namespace FluidX.Decorations;
 
 public class IntervalNode : IModelDecoration
 {

@@ -1,7 +1,4 @@
-﻿using System.Reflection;
-using TextRange = FluidX.TextRange;
-
-namespace FluidX.TextModels;
+﻿namespace FluidX.TextModels;
 
 public enum RawContentChangedType
 {

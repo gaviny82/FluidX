@@ -1,6 +1,4 @@
-﻿using TextRange = FluidX.TextRange;
-
-namespace FluidX.TextModels;
+﻿namespace FluidX.TextModels;
 
 public class TextEdit
 {

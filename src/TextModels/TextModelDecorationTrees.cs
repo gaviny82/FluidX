@@ -1,5 +1,4 @@
 ﻿using FluidX.Decorations;
-using TextRange = FluidX.TextRange;
 
 namespace FluidX.TextModels;
 

@@ -1,6 +1,4 @@
 ﻿using System.Diagnostics.CodeAnalysis;
-using static System.Runtime.InteropServices.JavaScript.JSType;
-using TextRange = FluidX.TextRange;
 
 namespace FluidX.Tokenization.TokenStores;
 

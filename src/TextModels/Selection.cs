@@ -1,9 +1,4 @@
-﻿using TextRange = FluidX.TextRange;
-using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace FluidX.TextModels;
+﻿namespace FluidX.TextModels;
 
 /// <summary>
 /// A selection in the editor. The selection is a <see cref="FluidX.TextRange"/> that has an orientation.

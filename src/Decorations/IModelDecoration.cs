@@ -1,6 +1,4 @@
-﻿using TextRange = FluidX.TextRange;
-
-namespace FluidX.Decorations;
+﻿namespace FluidX.Decorations;
 
 /// <summary>
 /// A decoration in the model.
