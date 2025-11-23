@@ -7,143 +7,91 @@ namespace FluidX.Tokenization;
 // Edits to the text buffer must acquire a write lock before changing the text buffer and invalidating tokenizer states,
 // while the background tokenizer acquires a read lock before reading text lines and tokenizing.
 // The tokenizer must release the read lock periodically to allow edits to proceed on the UI thread.
-public sealed class DefaultBackgroundTokenizer : IDisposable
+public class DefaultBackgroundTokenizer
 {
+    private readonly ReaderWriterLockSlim _lock = new();
     private readonly TokenizerWithStateStoreAndTextModel _tokenizerWithStateStore;
-    private readonly IBackgroundTokenizationStore _backgroundTokenStore;
+    private readonly ContiguousTokensStore _tokenStore;
 
-    private int _isScheduled; // 0 = not scheduled, 1 = scheduled
-    private bool _isDisposed;
+    public BackgroundTokenizationState BackgroundTokenizationState
+    {
+        get => field;
+        set
+        {
+            field = value;
+            BackgroundTokenizationStateChanged?.Invoke(this, EventArgs.Empty);
+        }
+    } = BackgroundTokenizationState.InProgress;
 
-    // Time budget for a whole scheduling slice (rough analog to requestIdleCallback).
-    private static readonly TimeSpan BatchBudget = TimeSpan.FromMilliseconds(8);
+    public EventHandler? BackgroundTokenizationStateChanged;
 
-    // Minimum continuous processing time before yielding (≈1ms).
-    private static readonly TimeSpan MinSlice = TimeSpan.FromMilliseconds(1);
+
+    private bool _isRunning = false;
+
+    private bool HasLinesToTokenize
+        => !_tokenizerWithStateStore.Store.AllStatesValid;
+
 
     public DefaultBackgroundTokenizer(
         TokenizerWithStateStoreAndTextModel tokenizerWithStateStore,
-        IBackgroundTokenizationStore backgroundTokenStore)
+        ContiguousTokensStore tokenStore)
     {
         _tokenizerWithStateStore = tokenizerWithStateStore;
-        _backgroundTokenStore = backgroundTokenStore;
-    }
-
-    public void Dispose()
-    {
-        if (_isDisposed) return;
-        _isDisposed = true;
+        _tokenStore = tokenStore;
     }
 
     /// <summary>
-    /// Entry point when content/attachment changes happen.
-    /// Schedules a background pass if needed.
+    /// Requests the background tokenization worker to tokenize the document if there is any invalid lines.
     /// </summary>
-    public void HandleChanges()
+    public void StartBackgroundTokenizationIfNeeded()
     {
-        BeginBackgroundTokenization();
-    }
+        if (Interlocked.Exchange(ref _isRunning, true) == true)
+            return; // Background tokenization task already running
 
-    /// <summary>
-    /// If all states are valid, notify the token store that background tokenization is complete.
-    /// </summary>
-    public void CheckFinished()
-    {
-        if (_isDisposed) return;
-        if (_tokenizerWithStateStore.Store.AllStatesValid)
+        if (!HasLinesToTokenize)
         {
-            _backgroundTokenStore.BackgroundTokenizationFinished();
-        }
-    }
-
-    /// <summary>
-    /// Requests re-tokenization for the line range [startLineNumber, endLineNumberExclusive).
-    /// </summary>
-    public void RequestTokens(int startLineNumber, int endLineNumberExclusive)
-    {
-        _tokenizerWithStateStore.Store.InvalidateEndStateRange(new(startLineNumber, endLineNumberExclusive));
-    }
-
-    private void BeginBackgroundTokenization()
-    {
-        if (_isDisposed || Interlocked.Exchange(ref _isScheduled, 1) == 1)
-            return; // Already scheduled or disposed
-
-        // If not scheduled, schedule a background tokenization task only if there is invalid lines.
-        if (!HasLinesToTokenize())
-        {
-            Interlocked.Exchange(ref _isScheduled, 0);
+            // Nothing to do, reset _isRunning flag
+            Interlocked.Exchange(ref _isRunning, false);
             return;
         }
 
-        _ = Task.Run(BackgroundTokenizeWithBudgetAsync);
-    }
-
-    private async Task BackgroundTokenizeWithBudgetAsync()
-    {
-        try
-        {
-            var deadline = DateTime.UtcNow + BatchBudget;
-
-            while (HasLinesToTokenize())
-            {
-                BackgroundTokenizeForAtLeast(MinSlice);
-
-                // Emit the batch we just produced (if any) happens inside BackgroundTokenizeForAtLeast.
-                // If we still have time in this budget, yield briefly to avoid monopolizing the thread.
-                if (DateTime.UtcNow >= deadline)
-                {
-                    break;
-                }
-
-                // Yield to the scheduler to keep UI responsive.
-                await Task.Yield();
-            }
-        }
-        finally
-        {
-            // Allow re-scheduling
-            Interlocked.Exchange(ref _isScheduled, 0);
-
-            // If there is more to do and we are still attached, schedule again.
-            if (!_isDisposed && HasLinesToTokenize())
-            {
-                BeginBackgroundTokenization();
-            }
-        }
+        // Start a background tokenization task only if there are invalid lines and no tokenization task is running.
+        _ = TokenizeInBackgroundAsync();
     }
 
     /// <summary>
-    /// Perform background tokenization work for at least <paramref name="minSlice"/>.
-    /// Builds a token batch and submits it to the store.
+    /// Requests re-tokenization for the line range. The caller must acquire the
+    /// write lock on <see cref="TokenizerLock"/> before calling this method.
     /// </summary>
-    private void BackgroundTokenizeForAtLeast(TimeSpan minSlice)
+    /// <param name="range">The range of lines to invalidate.</param>
+    public void InvalidateLines(Range range)
     {
-        int lineCount = _tokenizerWithStateStore.TextModel.TextBuffer.LineCount;
-        var builder = new ContiguousMultilineTokensBuilder();
-        var sw = Stopwatch.StartNew();
+        _lock.EnterWriteLock();
+        _tokenizerWithStateStore.Store.InvalidateEndStateRange(range);
+        _lock.ExitWriteLock();
+    }
 
-        do
+    private async Task TokenizeInBackgroundAsync()
+    {
+        try
         {
-            if (_isDisposed) break;
-
-            int tokenizedLineNumber = TokenizeOneInvalidLine(builder);
-            if (tokenizedLineNumber >= lineCount)
+            _lock.EnterReadLock();
+            var builder = new ContiguousMultilineTokensBuilder();
+            // Keep tokenizing in background until all lines are valid
+            // or a write lock is requested (e.g. user edit)
+            while (HasLinesToTokenize)
             {
-                // Reached end of document or nothing left in this pass
-                break;
+                TokenizeOneInvalidLine(builder);
             }
+            // Commit the tokens obtained in this task
+            var chunk = builder.Finalize();
+            _tokenStore.SetMultilineTokens(chunk.ToArray(), _tokenizerWithStateStore.TextModel);
         }
-        while (sw.Elapsed <= minSlice && HasLinesToTokenize());
-
-        // Push out the tokens we accumulated in this slice.
-        var chunk = builder.Finalize();
-        if (chunk != null && chunk.Count > 0)
+        finally
         {
-            _backgroundTokenStore.SetTokens(chunk.ToArray());
+            Interlocked.Exchange(ref _isRunning, false);
+            _lock.ExitReadLock();
         }
-
-        CheckFinished();
     }
 
     /// <summary>
@@ -161,7 +109,4 @@ public sealed class DefaultBackgroundTokenizer : IDisposable
         _tokenizerWithStateStore.UpdateTokensUntilLine(builder, firstInvalid.Value.lineNumber);
         return firstInvalid.Value.lineNumber;
     }
-
-    private bool HasLinesToTokenize()
-        => !_tokenizerWithStateStore.Store.AllStatesValid;
 }

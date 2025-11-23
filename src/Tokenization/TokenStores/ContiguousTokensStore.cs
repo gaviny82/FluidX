@@ -1,4 +1,5 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using FluidX.TextModels;
+using System.Diagnostics.CodeAnalysis;
 
 namespace FluidX.Tokenization.TokenStores;
 
@@ -186,7 +187,54 @@ public class ContiguousTokensStore
         InsertLines(position.LineNumber, eolCount);
     }
 
-    //TODO: public LineTokenChangeRange[] SetMultilineTokens(ContiguousMultilineTokens tokens, ITextModel textModel)
+    // TODO: Use ITextModel
+    public LineTokenChangeRange[] SetMultilineTokens(ContiguousMultilineTokens[] tokens, TextModel textModel)
+    {
+        if (tokens.Length == 0)
+            return [];
+
+        List<LineTokenChangeRange> ranges = [];
+        for (int i = 0; i < tokens.Length; i++)
+        {
+            var element = tokens[i];
+            int minChangedLineNumber = 0;
+            int maxChangedLineNumber = 0;
+            bool hasChange = false;
+            for (int lineNumber = element.StartLineNumber; lineNumber < element.EndLineNumber; lineNumber++)
+            {
+                if (hasChange)
+                {
+                    SetTokens(
+                        textModel.LanguageId,
+                        lineNumber - 1,
+                        textModel.TextBuffer.GetLineLength(lineNumber),
+                        element.GetLineTokens(lineNumber),
+                        false);
+                    maxChangedLineNumber = lineNumber;
+                }
+                else
+                {
+                    bool lineHasChange = SetTokens(
+                        textModel.LanguageId,
+                        lineNumber - 1,
+                        textModel.TextBuffer.GetLineLength(lineNumber),
+                        element.GetLineTokens(lineNumber),
+                        true);
+                    if (lineHasChange)
+                    {
+                        hasChange = true;
+                        minChangedLineNumber = lineNumber;
+                        maxChangedLineNumber= lineNumber;
+                    }
+                }
+            }
+            if (hasChange)
+            {
+                ranges.Add(new(minChangedLineNumber, maxChangedLineNumber));
+            }
+        }
+        return ranges.ToArray();
+    }
 
     private static LineTokenMetadata GetDefaultMetadata(LanguageId topLevelLanguageId) => new LineTokenMetadata
     {
