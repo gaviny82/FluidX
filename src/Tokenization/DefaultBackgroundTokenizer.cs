@@ -3,10 +3,10 @@ using System.Diagnostics;
 
 namespace FluidX.Tokenization;
 
-// TODO: Use ReaderWriterLockSlim to implement a real background tokenizer that runs in a separate thread.
+// Tokenization runs on a background task and synchronizes with the main thread using a ReaderWriterLockSlim.
 // Edits to the text buffer must acquire a write lock before changing the text buffer and invalidating tokenizer states,
 // while the background tokenizer acquires a read lock before reading text lines and tokenizing.
-// The tokenizer must release the read lock periodically to allow edits to proceed on the UI thread.
+// The tokenizer must release the read lock when the write lock is requested to allow edits to proceed on the UI thread.
 public class DefaultBackgroundTokenizer
 {
     private readonly ReaderWriterLockSlim _lock = new();
@@ -27,6 +27,7 @@ public class DefaultBackgroundTokenizer
 
 
     private bool _isRunning = false;
+    private bool _isWriteLockRequested = false;
 
     private bool HasLinesToTokenize
         => !_tokenizerWithStateStore.Store.AllStatesValid;
@@ -59,30 +60,50 @@ public class DefaultBackgroundTokenizer
         _ = TokenizeInBackgroundAsync();
     }
 
+    public void BeginTextBufferEdit()
+    {
+        _isWriteLockRequested = true; // Sets a request flag to interrupt background tokenization.
+        _lock.EnterWriteLock(); // Assume the background tokenization task will release the read lock shortly when the requested.
+        _isWriteLockRequested = false; // Reset the request flag when the write lock is acquired.
+    }
+
+    public void EndTextBufferEdit()
+    {
+        _lock.ExitWriteLock();
+        // The edit may have invalidated some lines or interrupted a background tokenization task,
+        // so background tokenization should be restarted.
+        StartBackgroundTokenizationIfNeeded();
+    }
+
     /// <summary>
-    /// Requests re-tokenization for the line range. The caller must acquire the
-    /// write lock on <see cref="TokenizerLock"/> before calling this method.
+    /// Requests re-tokenization for the line range. The caller must call <see cref="BeginTextBufferEdit"/>
+    /// to acquire the write lock before calling this method.
     /// </summary>
     /// <param name="range">The range of lines to invalidate.</param>
     public void InvalidateLines(Range range)
     {
-        _lock.EnterWriteLock();
         _tokenizerWithStateStore.Store.InvalidateEndStateRange(range);
-        _lock.ExitWriteLock();
     }
 
     private async Task TokenizeInBackgroundAsync()
     {
         try
         {
+            // Assumes the writer lock held by the UI thread will be released shortly.
+            // TODO: If the read lock cannot be acquired quickly, we might need to wait for some time before retrying
+            // to avoid contention, i.e. use TryEnterReadLock with a timeout.
             _lock.EnterReadLock();
-            var builder = new ContiguousMultilineTokensBuilder();
+
             // Keep tokenizing in background until all lines are valid
             // or a write lock is requested (e.g. user edit)
-            while (HasLinesToTokenize)
+            var builder = new ContiguousMultilineTokensBuilder();
+            while (HasLinesToTokenize && !_isWriteLockRequested)
             {
+                // To ensure the read lock can be released quickly, work in this while loop should not take too much time.
                 TokenizeOneInvalidLine(builder);
             }
+            // TODO: Consider committing tokens in smaller chunks to improve responsiveness to write lock requests.
+
             // Commit the tokens obtained in this task
             var chunk = builder.Finalize();
             _tokenStore.SetMultilineTokens(chunk.ToArray(), _tokenizerWithStateStore.TextModel);
