@@ -31,10 +31,10 @@ public static class ITextRangeExtensions
     extension(ITextRange range)
     {
         public bool ContainsPosition(ITextPosition position)
-        => range.Lift().ContainsPosition(TextPosition.Lift(position));
+        => range.Lift().ContainsPosition(position.Lift());
 
         public bool StrictContainsPosition(ITextPosition position)
-            => range.Lift().StrictContainsPosition(TextPosition.Lift(position));
+            => range.Lift().StrictContainsPosition(position.Lift());
 
         /// <summary>
         /// Test if <paramref name="otherRange"/> is in <paramref name="range"/>. If the ranges are equal, will return <see langword="true"/>.

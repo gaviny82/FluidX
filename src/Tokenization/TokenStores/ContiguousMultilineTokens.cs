@@ -31,7 +31,7 @@ public class ContiguousMultilineTokens
     {
         var result = EOLCounter.CountEOL(text);
         AcceptDeleteRange(range);
-        AcceptInsertText(range.GetStartPosition(), result.eolCount, result.firstLineLength);
+        AcceptInsertText(range.StartPosition, result.eolCount, result.firstLineLength);
     }
 
     private void AcceptDeleteRange(TextRange range)

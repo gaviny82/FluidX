@@ -10,7 +10,7 @@ public class TextEdit
         {
             var item1 = replacements[i];
             var item2 = replacements[i + 1];
-            bool isValid = item1.Range.GetEndPosition().IsBeforeOrEqual(item2.Range.GetStartPosition());
+            bool isValid = item1.Range.EndPosition.IsBeforeOrEqual(item2.Range.StartPosition);
             if (!isValid)
                 throw new ArgumentException("Replacements must not overlap and must be in order", nameof(replacements));
         }

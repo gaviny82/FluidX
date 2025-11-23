@@ -128,7 +128,7 @@ public class ContiguousTokensStore
     public void AcceptEdit(TextRange range, int eolCount, int firstLineLength)
     {
         AcceptDeleteRange(range);
-        AcceptInsertText(range.GetStartPosition(), eolCount, firstLineLength);
+        AcceptInsertText(range.StartPosition, eolCount, firstLineLength);
     }
 
     private void AcceptDeleteRange(TextRange range)

@@ -277,8 +277,8 @@ public class PieceTreeTextBuffer : ITextBuffer
         bool hasTouchingRanges = false;
         for (int i = 0, count = operations.Length - 1; i < count; i++)
         {
-            var rangeEnd = operations[i].Range.GetEndPosition();
-            var nextRangeStart = operations[i + 1].Range.GetStartPosition();
+            var rangeEnd = operations[i].Range.EndPosition;
+            var nextRangeStart = operations[i + 1].Range.StartPosition;
 
             if (nextRangeStart.IsBeforeOrEqual(rangeEnd))
             {
