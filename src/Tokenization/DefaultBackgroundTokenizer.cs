@@ -1,5 +1,4 @@
 ﻿using FluidX.Tokenization.TokenStores;
-using System.Diagnostics;
 
 namespace FluidX.Tokenization;
 
@@ -13,11 +12,14 @@ public class DefaultBackgroundTokenizer
     private readonly TokenizerWithStateStoreAndTextModel _tokenizerWithStateStore;
     private readonly ContiguousTokensStore _tokenStore;
 
+    // TODO: Update BackgroundTokenizationState
     public BackgroundTokenizationState BackgroundTokenizationState
     {
         get => field;
         set
         {
+            if (field == value) return;
+            // Only fires the event when the state actually changes
             field = value;
             BackgroundTokenizationStateChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -46,9 +48,16 @@ public class DefaultBackgroundTokenizer
     /// </summary>
     public void StartBackgroundTokenizationIfNeeded()
     {
+        // FIXME: lock is not acquired here, this might lead to race conditions.
+        // If the background tokenization task has exited the while loop but not yet reset _isRunning,
+        // the following check may incorrectly conclude that a background task is still running. If some lines
+        // are invalid at this time, they will not be tokenized until the next call to this function.
+
         if (Interlocked.Exchange(ref _isRunning, true) == true)
             return; // Background tokenization task already running
 
+        // FIXME: if the background task is already started, setting this to false might
+        // lead to multiple background tasks running concurrently and editing the token store at the same time.
         if (!HasLinesToTokenize)
         {
             // Nothing to do, reset _isRunning flag
