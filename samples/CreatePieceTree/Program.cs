@@ -1,4 +1,5 @@
-﻿using FluidX.TextBuffers;
+﻿using FluidX;
+using FluidX.TextBuffers;
 using FluidX.TextBuffers.PieceTree;
 
 var pieceTreeBuilder = new PieceTreeTextBufferBuilder();
@@ -11,14 +12,14 @@ var buffer = pieceTreeFactory.Create(DefaultEndOfLine.LF);
 Console.WriteLine(buffer.LineCount); // 2
 Console.WriteLine(buffer.GetLineContent(1)); // Hello
 Console.WriteLine(buffer.GetLineContent(2)); // world
-Console.WriteLine(buffer.GetValueInRange(new FluidX.TextBuffers.TextRange(1, 2, 2, 2), EndOfLinePreference.LF)); // ello\nw
+Console.WriteLine(buffer.GetValueInRange(new TextRange(1, 2, 2, 2), EndOfLinePreference.LF)); // ello\nw
 
 // Writing to the buffer
 
 // INSERT a character 'a' at (line 2, column 4)
 var insertEdit = new EditOperation
 {
-    Range = new FluidX.TextBuffers.TextRange(2, 4, 2, 4), // Empty range = insert at this position
+    Range = new TextRange(2, 4, 2, 4), // Empty range = insert at this position
     Text = "a", // Text to insert
     ForceMoveMarkers = false,
     IsAutoWhitespaceEdit = false,
@@ -32,7 +33,7 @@ PrintAllLines();
 // E.g., to delete a single character at (1,4), use range (1,4)-(1,5)
 var deleteEdit = new EditOperation
 {
-    Range = new FluidX.TextBuffers.TextRange(1, 4, 1, 5), // Covers single character
+    Range = new TextRange(1, 4, 1, 5), // Covers single character
     Text = "", // Empty text = delete
     ForceMoveMarkers = false,
     IsAutoWhitespaceEdit = false,

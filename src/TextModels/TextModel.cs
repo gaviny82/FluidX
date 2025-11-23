@@ -289,7 +289,7 @@ public class TextModel : IDecorationTreesHost
             var rangeEnd = TextBuffer.GetPositionAt(change.NewEnd);
             return new EditOperation
             {
-                Range = new FluidX.TextBuffers.TextRange(
+                Range = new TextRange(
                     rangeStart.LineNumber,
                     rangeStart.Column,
                     rangeEnd.LineNumber,
@@ -317,7 +317,7 @@ public class TextModel : IDecorationTreesHost
             var rangeEnd = TextBuffer.GetPositionAt(change.OldEnd);
             return new EditOperation
             {
-                Range = new FluidX.TextBuffers.TextRange(
+                Range = new TextRange(
                     rangeStart.LineNumber,
                     rangeStart.Column,
                     rangeEnd.LineNumber,
@@ -377,7 +377,7 @@ public class TextModel : IDecorationTreesHost
                 Changes: [
                     new ModelContentChange
                     {
-                        Range = new FluidX.TextBuffers.TextRange(1, 1, endLineNumber, endColumn),
+                        Range = new TextRange(1, 1, endLineNumber, endColumn),
                         RangeOffset = 0,
                         RangeLength = oldModelValueLength,
                         Text = GetValue()

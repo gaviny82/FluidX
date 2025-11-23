@@ -36,7 +36,7 @@ public class ContiguousMultilineTokens
 
     private void AcceptDeleteRange(TextRange range)
     {
-        if (range.IsEmpty())
+        if (range.IsEmpty)
             return; // Nothing to delete
 
         int firstLineIndex = range.StartLineNumber - _startLineNumber;

@@ -53,7 +53,7 @@ public class TextModelDecorationTrees
     {
         long versionId = host.VersionId;
         var result = _injectedTextDecorationTree.IntervalSearch(start, end, filterOwnerId, false, false, versionId, false);
-        return EnsureNodesHaveRanges(host, result).Where((i) => i.Options.ShowIfCollapsed || i.Range?.IsEmpty() == false);
+        return EnsureNodesHaveRanges(host, result).Where((i) => i.Options.ShowIfCollapsed || i.Range?.IsEmpty == false);
     }
 
     public IEnumerable<IModelDecoration> GetFontDecorationsInInterval(
@@ -71,7 +71,7 @@ public class TextModelDecorationTrees
     {
         long versionId = host.VersionId;
         var result = _injectedTextDecorationTree.Search(filterOwnerId, false, false, versionId, false);
-        return EnsureNodesHaveRanges(host, result).Where((i) => i.Options.ShowIfCollapsed || i.Range?.IsEmpty() == false);
+        return EnsureNodesHaveRanges(host, result).Where((i) => i.Options.ShowIfCollapsed || i.Range?.IsEmpty == false);
     }
 
     public IEnumerable<IModelDecoration> GetAllCustomLineHeights(IDecorationTreesHost host, int filterOwnerId)

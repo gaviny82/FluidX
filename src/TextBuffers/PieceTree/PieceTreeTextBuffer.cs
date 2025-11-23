@@ -74,7 +74,7 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     public string GetValueInRange(TextRange range, EndOfLinePreference eol = EndOfLinePreference.TextDefined)
     {
-        if (range.IsEmpty())
+        if (range.IsEmpty)
             return "";
 
         string lineEnding = GetEndOfLine(eol);
@@ -83,7 +83,7 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     public int GetValueLengthInRange(TextRange range, EndOfLinePreference eol = EndOfLinePreference.TextDefined)
     {
-        if (range.IsEmpty())
+        if (range.IsEmpty)
             return 0;
 
         if (range.StartLineNumber == range.EndLineNumber)
@@ -294,7 +294,7 @@ public class PieceTreeTextBuffer : ITextBuffer
         if (canReduceOperations)
             operations = ReduceOperations(operations);
 
-        // Delta encode operations
+        // WithLineDelta encode operations
         TextRange[] reverseRanges = computeUndoEdits || recordTrimAutoWhitespace
             ? GetInverseEditRanges(operations)
             : [];
@@ -306,7 +306,7 @@ public class PieceTreeTextBuffer : ITextBuffer
                 var op = operations[i];
                 var reverseRange = reverseRanges[i];
 
-                if (op.IsAutoWhitespaceEdit && op.Range.IsEmpty())
+                if (op.IsAutoWhitespaceEdit && op.Range.IsEmpty)
                 {
                     // Record already the future line numbers that might be auto whitespace removal candidates on next edit
                     for (int lineNumber = reverseRange.StartLineNumber; lineNumber < reverseRange.EndLineNumber; lineNumber++)

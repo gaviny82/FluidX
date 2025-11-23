@@ -102,7 +102,7 @@ public class SparseMultilineTokens
 
     private void AcceptDeleteRange(TextRange range)
     {
-        if (range.IsEmpty())
+        if (range.IsEmpty)
             return; // Nothing to delete
 
         int firstLineIndex = range.StartLineNumber - StartLineNumber;

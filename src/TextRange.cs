@@ -1,4 +1,6 @@
-﻿namespace FluidX;
+﻿using System;
+
+namespace FluidX;
 
 /// <summary>
 /// A range in a text document.
@@ -9,6 +11,11 @@ public readonly record struct TextRange : ITextRange, IEquatable<TextRange>
     public int StartColumn { get; }
     public int EndLineNumber { get; }
     public int EndColumn { get; }
+
+    public TextPosition StartPosition => new(StartLineNumber, StartColumn);
+    public TextPosition EndPosition => new(EndLineNumber, EndColumn);
+    public bool IsEmpty => StartLineNumber == EndLineNumber && StartColumn == EndColumn;
+    public bool SpansMultipleLines => EndLineNumber > StartLineNumber;
 
     public TextRange(int startLineNumber, int startColumn, int endLineNumber, int endColumn)
     {
@@ -36,130 +43,134 @@ public readonly record struct TextRange : ITextRange, IEquatable<TextRange>
         end.Column)
     { }
 
-    public bool IsEmpty() => IsEmpty(this);
+    #region Overlapping Checks
 
-    public static bool IsEmpty(ITextRange range) => range.StartLineNumber == range.EndLineNumber && range.StartColumn == range.EndColumn;
-
-    public bool ContainsPosition(ITextPosition position) => ContainsPosition(this, position);
-
-    public static bool ContainsPosition(ITextRange range, ITextPosition position)
+    public bool ContainsPosition(TextPosition position)
     {
-        if (position.LineNumber < range.StartLineNumber || position.LineNumber > range.EndLineNumber)
+        if (position.LineNumber < StartLineNumber || position.LineNumber > EndLineNumber)
             return false;
-        if (position.LineNumber == range.StartLineNumber && position.Column < range.StartColumn)
+        if (position.LineNumber == StartLineNumber && position.Column < StartColumn)
             return false;
-        if (position.LineNumber == range.EndLineNumber && position.Column > range.EndColumn)
+        if (position.LineNumber == EndLineNumber && position.Column > EndColumn)
             return false;
         return true;
     }
 
-    public static bool StrictContainsPosition(ITextRange range, ITextPosition position)
+    public bool StrictContainsPosition(TextPosition position)
     {
-        if (position.LineNumber < range.StartLineNumber || position.LineNumber > range.EndLineNumber)
+        if (position.LineNumber < StartLineNumber || position.LineNumber > EndLineNumber)
             return false;
-        if (position.LineNumber == range.StartLineNumber && position.Column <= range.StartColumn)
+        if (position.LineNumber == StartLineNumber && position.Column <= StartColumn)
             return false;
-        if (position.LineNumber == range.EndLineNumber && position.Column >= range.EndColumn)
+        if (position.LineNumber == EndLineNumber && position.Column >= EndColumn)
             return false;
         return true;
     }
 
-    public bool ContainsRange(ITextRange otherRange) => ContainsRange(this, otherRange);
-
-    /// <summary>
-    /// Test if <paramref name="otherRange"/> is in <paramref name="range"/>. If the ranges are equal, will return <see langword="true"/>.
-    /// </summary>
-    /// <param name="range">The range to test if it contains <paramref name="otherRange"/>.</param>
-    /// <param name="otherRange">The range to test if it is contained by <paramref name="range"/>.</param>
-    /// <returns></returns>
-    public static bool ContainsRange(ITextRange range, ITextRange otherRange)
+    public bool ContainsRange(TextRange range)
     {
-        if (otherRange.StartLineNumber < range.StartLineNumber || otherRange.EndLineNumber < range.StartLineNumber)
+        if (range.StartLineNumber < StartLineNumber || range.EndLineNumber < StartLineNumber)
             return false;
-        if (otherRange.StartLineNumber > range.EndLineNumber || otherRange.EndLineNumber > range.EndLineNumber)
+        if (range.StartLineNumber > EndLineNumber || range.EndLineNumber > EndLineNumber)
             return false;
-        if (otherRange.StartLineNumber == range.StartLineNumber && otherRange.StartColumn < range.StartColumn)
+        if (range.StartLineNumber == StartLineNumber && range.StartColumn < StartColumn)
             return false;
-        if (otherRange.EndLineNumber == range.EndLineNumber && otherRange.EndColumn > range.EndColumn)
+        if (range.EndLineNumber == EndLineNumber && range.EndColumn > EndColumn)
             return false;
         return true;
     }
 
-    public bool StrictContainsRange(ITextRange range) => StrictContainsRange(this, range);
-
-    /// <summary>
-    /// Test if <paramref name="otherRange"/> is in <paramref name="range"/> (must start after, and end before). If the ranges are equal, will return <see langword="false"/>.
-    /// </summary>
-    /// <param name="range">The range to test if it contains <paramref name="otherRange"/>.</param>
-    /// <param name="otherRange">The range to test if it is contained by <paramref name="range"/>.</param>
-    /// <returns></returns>
-    public static bool StrictContainsRange(ITextRange range, ITextRange otherRange)
+    public bool StrictContainsRange(TextRange range)
     {
-        if (otherRange.StartLineNumber < range.StartLineNumber || otherRange.EndLineNumber < range.StartLineNumber)
+        if (range.StartLineNumber < StartLineNumber || range.EndLineNumber < StartLineNumber)
             return false;
-        if (otherRange.StartLineNumber > range.EndLineNumber || otherRange.EndLineNumber > range.EndLineNumber)
+        if (range.StartLineNumber > EndLineNumber || range.EndLineNumber > EndLineNumber)
             return false;
-        if (otherRange.StartLineNumber == range.StartLineNumber && otherRange.StartColumn <= range.StartColumn)
+        if (range.StartLineNumber == StartLineNumber && range.StartColumn <= StartColumn)
             return false;
-        if (otherRange.EndLineNumber == range.EndLineNumber && otherRange.EndColumn >= range.EndColumn)
+        if (range.EndLineNumber == EndLineNumber && range.EndColumn >= EndColumn)
             return false;
         return true;
     }
 
-    public TextRange PlusRange(ITextRange range) => PlusRange(this, range);
+    public bool IsIntersectingOrTouching(TextRange range)
+    {
+        // Check if `this` is before `range`
+        if (EndLineNumber < range.StartLineNumber || (EndLineNumber == range.StartLineNumber && EndColumn < range.StartColumn))
+            return false;
+        // Check if `range` is before `this`
+        if (range.EndLineNumber < StartLineNumber || (range.EndLineNumber == StartLineNumber && range.EndColumn < StartColumn))
+            return false;
+        // These ranges must intersect
+        return true;
+    }
 
-    public static TextRange PlusRange(ITextRange a, ITextRange b)
+    public bool IsIntersecting(TextRange range)
+    {
+        // Check if `this` is before `range`
+        if (EndLineNumber < range.StartLineNumber || (EndLineNumber == range.StartLineNumber && EndColumn <= range.StartColumn))
+            return false;
+        // Check if `range` is before `this`
+        if (range.EndLineNumber < StartLineNumber || (range.EndLineNumber == StartLineNumber && range.EndColumn <= StartColumn))
+            return false;
+        // These ranges must intersect
+        return true;
+    }
+
+    #endregion
+
+    #region Modifications
+
+    public TextRange PlusRange(TextRange range)
     {
         int startLineNumber, startColumn, endLineNumber, endColumn;
 
-        if (b.StartLineNumber < a.StartLineNumber)
+        if (range.StartLineNumber < StartLineNumber)
         {
-            startLineNumber = b.StartLineNumber;
-            startColumn = b.StartColumn;
+            startLineNumber = range.StartLineNumber;
+            startColumn = range.StartColumn;
         }
-        else if (b.StartLineNumber == a.StartLineNumber)
+        else if (range.StartLineNumber == StartLineNumber)
         {
-            startLineNumber = b.StartLineNumber;
-            startColumn = Math.Min(b.StartColumn, a.StartColumn);
+            startLineNumber = range.StartLineNumber;
+            startColumn = Math.Min(range.StartColumn, StartColumn);
         }
         else
         {
-            startLineNumber = a.StartLineNumber;
-            startColumn = a.StartColumn;
+            startLineNumber = StartLineNumber;
+            startColumn = StartColumn;
         }
 
-        if (b.EndLineNumber > a.EndLineNumber)
+        if (range.EndLineNumber > EndLineNumber)
         {
-            endLineNumber = b.EndLineNumber;
-            endColumn = b.EndColumn;
+            endLineNumber = range.EndLineNumber;
+            endColumn = range.EndColumn;
         }
-        else if (b.EndLineNumber == a.EndLineNumber)
+        else if (range.EndLineNumber == EndLineNumber)
         {
-            endLineNumber = b.EndLineNumber;
-            endColumn = Math.Max(b.EndColumn, a.EndColumn);
+            endLineNumber = range.EndLineNumber;
+            endColumn = Math.Max(range.EndColumn, EndColumn);
         }
         else
         {
-            endLineNumber = a.EndLineNumber;
-            endColumn = a.EndColumn;
+            endLineNumber = EndLineNumber;
+            endColumn = EndColumn;
         }
 
         return new TextRange(startLineNumber, startColumn, endLineNumber, endColumn);
     }
 
-    public TextRange? IntersectRanges(ITextRange range) => IntersectRanges(this, range);
-
-    public static TextRange? IntersectRanges(ITextRange a, ITextRange b)
+    public TextRange? Intersection(TextRange range)
     {
-        int resultStartLineNumber = a.StartLineNumber;
-        int resultStartColumn = a.StartColumn;
-        int resultEndLineNumber = a.EndLineNumber;
-        int resultEndColumn = a.EndColumn;
+        int resultStartLineNumber = StartLineNumber;
+        int resultStartColumn = StartColumn;
+        int resultEndLineNumber = EndLineNumber;
+        int resultEndColumn = EndColumn;
 
-        int otherStartLineNumber = b.StartLineNumber;
-        int otherStartColumn = b.StartColumn;
-        int otherEndLineNumber = b.EndLineNumber;
-        int otherEndColumn = b.EndColumn;
+        int otherStartLineNumber = range.StartLineNumber;
+        int otherStartColumn = range.StartColumn;
+        int otherEndLineNumber = range.EndLineNumber;
+        int otherEndColumn = range.EndColumn;
 
         if (resultStartLineNumber < otherStartLineNumber)
         {
@@ -190,130 +201,54 @@ public readonly record struct TextRange : ITextRange, IEquatable<TextRange>
         return new TextRange(resultStartLineNumber, resultStartColumn, resultEndLineNumber, resultEndColumn);
     }
 
-    public bool EqualsRange(ITextRange? other) => EqualsRange(this, other);
+    public TextRange WithNewEndPosition(int endLineNumber, int endColumn)
+        => new(StartLineNumber, StartColumn, endLineNumber, endColumn);
 
-    public static bool EqualsRange(ITextRange? a, ITextRange? b)
+    public TextRange WithNewStartPosition(int startLineNumber, int startColumn)
+        => new(startLineNumber, startColumn, EndLineNumber, EndColumn);
+
+    public TextRange CollapseToStart()
+        => new(StartLineNumber, StartColumn, StartLineNumber, StartColumn);
+
+    public TextRange CollapseToEnd()
+        => new(EndLineNumber, EndColumn, EndLineNumber, EndColumn);
+
+    public TextRange WithLineDelta(int lineCount)
+        => new(StartLineNumber + lineCount, StartColumn, EndLineNumber + lineCount, EndColumn);
+
+    #endregion
+
+    #region Comparisons
+
+    public static int CompareRangesUsingStarts(TextRange a, TextRange b)
     {
-        if (a is null && b is null)
-            return true;
+        int aStartLineNumber = a.StartLineNumber;
+        int bStartLineNumber = b.StartLineNumber;
 
-        return a is not null && b is not null &&
-               a.StartLineNumber == b.StartLineNumber &&
-               a.StartColumn == b.StartColumn &&
-               a.EndLineNumber == b.EndLineNumber &&
-               a.EndColumn == b.EndColumn;
-    }
-
-    public TextPosition GetEndPosition() => GetEndPosition(this);
-
-    public static TextPosition GetEndPosition(ITextRange range)
-        => new TextPosition(range.EndLineNumber, range.EndColumn);
-
-    public TextPosition GetStartPosition() => GetStartPosition(this);
-
-    public static TextPosition GetStartPosition(ITextRange range)
-        => new TextPosition(range.StartLineNumber, range.EndLineNumber);
-
-    public override string ToString()
-        => $"[{StartLineNumber},{StartColumn} -> {EndLineNumber},{EndColumn}]";
-
-    public TextRange SetEndPosition(int endLineNumber, int endColumn)
-        => new TextRange(StartLineNumber, StartColumn, endLineNumber, endColumn);
-
-    public TextRange SetStartPosition(int startLineNumber, int startColumn)
-        => new TextRange(startLineNumber, startColumn, EndLineNumber, EndColumn);
-
-    public TextRange CollapseToStart() => CollapseToStart(this);
-
-    public static TextRange CollapseToStart(ITextRange range)
-        => new TextRange(range.StartLineNumber, range.StartColumn, range.StartLineNumber, range.StartColumn);
-
-    public TextRange CollapseToEnd() => CollapseToEnd(this);
-
-    public static TextRange CollapseToEnd(ITextRange range)
-        => new TextRange(range.EndLineNumber, range.EndColumn, range.EndLineNumber, range.EndColumn);
-
-    public TextRange Delta(int lineCount)
-        => new TextRange(StartLineNumber + lineCount, StartColumn, EndLineNumber + lineCount, EndColumn);
-
-    public static TextRange FromPositions(TextPosition start, TextPosition? end = null)
-    {
-        TextPosition endPos = end ?? start;
-        return new TextRange(start.LineNumber, start.Column, endPos.LineNumber, endPos.Column);
-    }
-
-    public static TextRange? Lift(ITextRange? range)
-    {
-        if (range is null)
-            return null;
-        return new TextRange(range.StartLineNumber, range.StartColumn, range.EndLineNumber, range.EndColumn);
-    }
-
-    public static bool AreIntersectingOrTouching(ITextRange a, ITextRange b)
-    {
-        // Check if `a` is before `b`
-        if (a.EndLineNumber < b.StartLineNumber || (a.EndLineNumber == b.StartLineNumber && a.EndColumn < b.StartColumn))
-            return false;
-
-        // Check if `b` is before `a`
-        if (b.EndLineNumber < a.StartLineNumber || (b.EndLineNumber == a.StartLineNumber && b.EndColumn < a.StartColumn))
-            return false;
-
-        // These ranges must intersect
-        return true;
-    }
-
-    public static bool AreIntersecting(ITextRange a, ITextRange b)
-    {
-        // Check if `a` is before `b`
-        if (a.EndLineNumber < b.StartLineNumber || (a.EndLineNumber == b.StartLineNumber && a.EndColumn <= b.StartColumn))
-            return false;
-
-        // Check if `b` is before `a`
-        if (b.EndLineNumber < a.StartLineNumber || (b.EndLineNumber == a.StartLineNumber && b.EndColumn <= a.StartColumn))
-            return false;
-
-        // These ranges must intersect
-        return true;
-    }
-
-    public static int CompareRangesUsingStarts(ITextRange? a, ITextRange? b)
-    {
-        if (a is not null && b is not null)
+        if (aStartLineNumber == bStartLineNumber)
         {
-            int aStartLineNumber = a.StartLineNumber;
-            int bStartLineNumber = b.StartLineNumber;
+            int aStartColumn = a.StartColumn;
+            int bStartColumn = b.StartColumn;
 
-            if (aStartLineNumber == bStartLineNumber)
+            if (aStartColumn == bStartColumn)
             {
-                int aStartColumn = a.StartColumn;
-                int bStartColumn = b.StartColumn;
+                int aEndLineNumber = a.EndLineNumber;
+                int bEndLineNumber = b.EndLineNumber;
 
-                if (aStartColumn == bStartColumn)
+                if (aEndLineNumber == bEndLineNumber)
                 {
-                    int aEndLineNumber = a.EndLineNumber;
-                    int bEndLineNumber = b.EndLineNumber;
-
-                    if (aEndLineNumber == bEndLineNumber)
-                    {
-                        int aEndColumn = a.EndColumn;
-                        int bEndColumn = b.EndColumn;
-                        return aEndColumn - bEndColumn;
-                    }
-                    return aEndLineNumber - bEndLineNumber;
+                    int aEndColumn = a.EndColumn;
+                    int bEndColumn = b.EndColumn;
+                    return aEndColumn - bEndColumn;
                 }
-                return aStartColumn - bStartColumn;
+                return aEndLineNumber - bEndLineNumber;
             }
-            return aStartLineNumber - bStartLineNumber;
+            return aStartColumn - bStartColumn;
         }
-
-        // Handle cases where one or both are null
-        int aExists = a is not null ? 1 : 0;
-        int bExists = b is not null ? 1 : 0;
-        return aExists - bExists;
+        return aStartLineNumber - bStartLineNumber;
     }
 
-    public static int CompareRangesUsingEnds(ITextRange a, ITextRange b)
+    public static int CompareRangesUsingEnds(TextRange a, TextRange b)
     {
         if (a.EndLineNumber == b.EndLineNumber)
         {
@@ -330,5 +265,63 @@ public readonly record struct TextRange : ITextRange, IEquatable<TextRange>
         return a.EndLineNumber - b.EndLineNumber;
     }
 
-    public static bool SpansMultipleLines(ITextRange range) => range.EndLineNumber > range.StartLineNumber;
+    #endregion
+
+    public override string ToString()
+        => $"[{StartLineNumber},{StartColumn} -> {EndLineNumber},{EndColumn}]";
+
+    #region ITextRange Helpers
+
+    public static bool ContainsPosition(ITextRange range, ITextPosition position)
+        => Lift(range).ContainsPosition(TextPosition.Lift(position));
+
+    public static bool StrictContainsPosition(ITextRange range, ITextPosition position)
+        => Lift(range).StrictContainsPosition(TextPosition.Lift(position));
+
+    /// <summary>
+    /// Test if <paramref name="otherRange"/> is in <paramref name="range"/>. If the ranges are equal, will return <see langword="true"/>.
+    /// </summary>
+    /// <param name="range">The range to test if it contains <paramref name="otherRange"/>.</param>
+    /// <param name="otherRange">The range to test if it is contained by <paramref name="range"/>.</param>
+    /// <returns></returns>
+    public static bool ContainsRange(ITextRange range, ITextRange otherRange)
+        => Lift(range).ContainsRange(Lift(otherRange));
+
+    /// <summary>
+    /// Test if <paramref name="otherRange"/> is in <paramref name="range"/> (must start after, and end before). If the ranges are equal, will return <see langword="false"/>.
+    /// </summary>
+    /// <param name="range">The range to test if it contains <paramref name="otherRange"/>.</param>
+    /// <param name="otherRange">The range to test if it is contained by <paramref name="range"/>.</param>
+    /// <returns></returns>
+    public static bool StrictContainsRange(ITextRange range, ITextRange otherRange)
+        => Lift(range).StrictContainsRange(Lift(otherRange));
+
+    public static TextRange PlusRange(ITextRange a, ITextRange b)
+        => Lift(a).PlusRange(Lift(b));
+
+    public static TextRange? Intersection(ITextRange a, ITextRange b)
+        => Lift(a).Intersection(Lift(b));
+
+    public static bool Equals(ITextRange? a, ITextRange? b)
+    {
+        if (a is null && b is null)
+            return true;
+
+        return a is not null && b is not null &&
+               a.StartLineNumber == b.StartLineNumber &&
+               a.StartColumn == b.StartColumn &&
+               a.EndLineNumber == b.EndLineNumber &&
+               a.EndColumn == b.EndColumn;
+    }
+
+    public static TextRange CollapseToStart(ITextRange range)
+        => Lift(range).CollapseToStart();
+
+    public static TextRange CollapseToEnd(ITextRange range)
+        => Lift(range).CollapseToEnd();
+
+    public static TextRange Lift(ITextRange range)
+        => new(range.StartLineNumber, range.StartColumn, range.EndLineNumber, range.EndColumn);
+
+    #endregion
 }
