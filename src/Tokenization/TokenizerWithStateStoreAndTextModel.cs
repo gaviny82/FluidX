@@ -241,12 +241,14 @@ public struct NullState : ITokenizerState
 
     public static EncodedTokenizationResult NullTokenizeEncoded(LanguageId languageId, ITokenizerState? state)
     {
-        uint metadataBits = ((uint)languageId << MetadataConsts.LANGUAGEID_OFFSET)
-            | ((uint)StandardTokenType.Other << MetadataConsts.TOKEN_TYPE_OFFSET)
-            | ((uint)FontStyle.None << MetadataConsts.FONT_STYLE_OFFSET)
-            | ((uint)ColorId.DefaultForeground << MetadataConsts.FOREGROUND_OFFSET)
-            | ((uint)ColorId.DefaultBackground << MetadataConsts.BACKGROUND_OFFSET);
-        EncodedTokenizerToken token = new(0, new(metadataBits));
-        return new EncodedTokenizationResult([token], state ?? new NullState());
+        var metadata = new LineTokenMetadata
+        {
+            LanguageId = languageId,
+            TokenType = StandardTokenType.Other,
+            FontStyle = FontStyle.None,
+            Foreground = ColorId.DefaultForeground,
+            Background = ColorId.DefaultBackground
+        };
+        return new EncodedTokenizationResult([new EncodedTokenizerToken(0, metadata)], state ?? new NullState());
     }
 }

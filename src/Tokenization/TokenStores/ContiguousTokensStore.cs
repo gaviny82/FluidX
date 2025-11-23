@@ -188,18 +188,15 @@ public class ContiguousTokensStore
 
     //TODO: public LineTokenChangeRange[] SetMultilineTokens(ContiguousMultilineTokens tokens, ITextModel textModel)
 
-    private static LineTokenMetadata GetDefaultMetadata(LanguageId topLevelLanguageId)
+    private static LineTokenMetadata GetDefaultMetadata(LanguageId topLevelLanguageId) => new LineTokenMetadata
     {
-        uint metadata =
-            ((uint)topLevelLanguageId << MetadataConsts.LANGUAGEID_OFFSET)
-            | ((uint)StandardTokenType.Other << MetadataConsts.TOKEN_TYPE_OFFSET)
-            | ((uint)FontStyle.None << MetadataConsts.FONT_STYLE_OFFSET)
-            | ((uint)ColorId.DefaultForeground << MetadataConsts.FOREGROUND_OFFSET)
-            | ((uint)ColorId.DefaultBackground << MetadataConsts.BACKGROUND_OFFSET)
-            // If there is no grammar, we just take a guess and try to match brackets.
-            | MetadataConsts.BALANCED_BRACKETS_MASK;
-        return new LineTokenMetadata(metadata);
-    }
+        LanguageId = topLevelLanguageId,
+        TokenType = StandardTokenType.Other,
+        FontStyle = FontStyle.None,
+        Foreground = ColorId.DefaultForeground,
+        Background = ColorId.DefaultBackground,
+        ContainsBalancedBrackets = true // If there is no grammar, we just take a guess and try to match brackets.
+    };
 }
 
 public record struct LineTokenChangeRange(int FromLineNumber, int ToLineNumber);

@@ -20,11 +20,12 @@ public class LineTokens : IEnumerable<LineToken>
         LanguageIdCodec = decoder;
     }
 
-    public static LineTokenMetadata DefaultTokenMetadata = new(
-        ((uint)FontStyle.None << MetadataConsts.FONT_STYLE_OFFSET)
-        | ((uint)ColorId.DefaultForeground << MetadataConsts.FOREGROUND_OFFSET)
-        | ((uint)ColorId.DefaultBackground << MetadataConsts.BACKGROUND_OFFSET)
-    );
+    public static LineTokenMetadata DefaultTokenMetadata = new LineTokenMetadata
+    {
+        FontStyle = FontStyle.None,
+        Foreground = ColorId.DefaultForeground,
+        Background = ColorId.DefaultBackground,
+    };
 
     public static LineTokens CreateEmpty(string lineContent, ILanguageIdCodec decoder)
     {
