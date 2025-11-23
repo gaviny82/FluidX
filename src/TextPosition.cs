@@ -21,10 +21,77 @@ public readonly record struct TextPosition(int LineNumber, int Column)
     };
 
     /// <summary>
+    /// Test if this position is before another position.
+    /// </summary>
+    /// <param name="other">Another position</param>
+    /// <returns>If the two positions are equal, the result will be <see langword="false"/>.</returns>
+    public bool IsBefore(TextPosition other)
+    {
+        if (LineNumber < other.LineNumber)
+            return true;
+        if (LineNumber > other.LineNumber)
+            return false;
+        return Column < other.Column;
+    }
+
+    /// <summary>
+    /// Test if this position is before or equal to another position.
+    /// </summary>
+    /// <returns>If the two positions are equal, the result will be <see langword="true"/>.</returns>
+    public bool IsBeforeOrEqual(TextPosition other)
+    {
+        if (LineNumber < other.LineNumber)
+            return true;
+        if (LineNumber > other.LineNumber)
+            return false;
+        return Column <= other.Column;
+    }
+
+    /// <summary>
+    /// Compare <see langword="this"/> with another position for sorting.
+    /// </summary>
+    /// <param name="other">The other position to compare with.</param>
+    /// <returns>A value indicating the comparison between <see langword="this"/> and <paramref name="other"/>.</returns>
+    public int CompareTo(TextPosition other)
+    {
+        if (LineNumber == other.LineNumber)
+            return Column - other.Column;
+
+        return LineNumber - LineNumber;
+    }
+
+    /// <summary>
+    /// Convert to a human-readable representation.
+    /// </summary>
+    public override string ToString() => $"({LineNumber}, {Column})";
+
+    #region ITextPosition Helpers
+
+    /// <summary>
+    /// Test if position <paramref name="a"/> equals position <paramref name="b"/>.
+    /// </summary>
+    /// <returns>If the two positions are equal, the result will be <see langword="false"/>.</returns>
+    public static bool IsBefore(ITextPosition a, ITextPosition b)
+        => Lift(a).IsBefore(Lift(b));
+
+    /// <summary>
+    /// Test if position <paramref name="a"/> is before or equal to position <paramref name="b"/>.
+    /// </summary>
+    /// <returns>If the two positions are equal, the result will be <see langword="true"/>.</returns>
+    public static bool IsBeforeOrEqual(ITextPosition a, ITextPosition b)
+        => Lift(a).IsBeforeOrEqual(Lift(b));
+
+    /// <summary>
+    /// Compare two positions for sorting.
+    /// </summary>
+    public static int CompareTo(ITextPosition a, ITextPosition b)
+        => Lift(a).CompareTo(Lift(b));
+
+    /// <summary>
     /// Test if this position equals other position.
     /// </summary>
     /// <param name="other">Other position</param>
-    public bool Equals(ITextPosition other) => Equals(this, other);
+    public bool Equals(ITextPosition other) => Equals(Lift(other));
 
     /// <summary>
     /// Test if position <paramref name="a"/> equals position <paramref name="b"/>.
@@ -35,74 +102,14 @@ public readonly record struct TextPosition(int LineNumber, int Column)
             return true;
         if (a is null || b is null)
             return false;
-        return a.LineNumber == b.LineNumber && a.Column == b.Column;
+        return Lift(a).Equals(Lift(b));
     }
-
-    /// <summary>
-    /// Test if this position is before another position.
-    /// </summary>
-    /// <param name="other">Another position</param>
-    /// <returns>If the two positions are equal, the result will be <see langword="false"/>.</returns>
-    public bool IsBefore(ITextPosition other) => IsBefore(this, other);
-
-    /// <summary>
-    /// Test if position <paramref name="a"/> equals position <paramref name="b"/>.
-    /// </summary>
-    /// <returns>If the two positions are equal, the result will be <see langword="false"/>.</returns>
-    public static bool IsBefore(ITextPosition a, ITextPosition b)
-    {
-        if (a.LineNumber < b.LineNumber)
-            return true;
-        if (a.LineNumber > b.LineNumber)
-            return false;
-        return a.Column < b.Column;
-    }
-
-    /// <summary>
-    /// Test if this position is before or equal to another position.
-    /// </summary>
-    /// <returns>If the two positions are equal, the result will be <see langword="true"/>.</returns>
-    public bool IsBeforeOrEqual(ITextPosition other) => IsBeforeOrEqual(this, other);
-
-    /// <summary>
-    /// Test if position <paramref name="a"/> is before or equal to position <paramref name="b"/>.
-    /// </summary>
-    /// <returns>If the two positions are equal, the result will be <see langword="true"/>.</returns>
-    public static bool IsBeforeOrEqual(ITextPosition a, ITextPosition b)
-    {
-        if (a.LineNumber < b.LineNumber)
-            return true;
-        if (a.LineNumber > b.LineNumber)
-            return false;
-        return a.Column <= b.Column;
-    }
-
-    public int CompareTo(TextPosition other) => Compare(this, other);
-
-    /// <summary>
-    /// Compare two positions, useful for sorting.
-    /// </summary>
-    public static int Compare(ITextPosition a, ITextPosition b)
-    {
-        int aLineNumber = a.LineNumber;
-        int bLineNumber = b.LineNumber;
-
-        if (aLineNumber == bLineNumber)
-            return a.Column - b.Column;
-
-        return aLineNumber - bLineNumber;
-    }
-
-    /// <summary>
-    /// Convert to a human-readable representation.
-    /// </summary>
-    public override string ToString() => $"({LineNumber}, {Column})";
 
     /// <summary>
     /// Create a <see cref="TextPosition"/> from an <see cref="ITextPosition"/>.
     /// </summary>
     public static TextPosition Lift(ITextPosition pos)
-    {
-        return new TextPosition(pos.LineNumber, pos.Column);
-    }
+        => new(pos.LineNumber, pos.Column);
+
+    #endregion
 }
