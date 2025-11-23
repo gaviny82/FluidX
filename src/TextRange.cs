@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace FluidX;
+﻿namespace FluidX;
 
 /// <summary>
 /// A range in a text document.
@@ -269,59 +267,4 @@ public readonly record struct TextRange : ITextRange, IEquatable<TextRange>
 
     public override string ToString()
         => $"[{StartLineNumber},{StartColumn} -> {EndLineNumber},{EndColumn}]";
-
-    #region ITextRange Helpers
-
-    public static bool ContainsPosition(ITextRange range, ITextPosition position)
-        => Lift(range).ContainsPosition(TextPosition.Lift(position));
-
-    public static bool StrictContainsPosition(ITextRange range, ITextPosition position)
-        => Lift(range).StrictContainsPosition(TextPosition.Lift(position));
-
-    /// <summary>
-    /// Test if <paramref name="otherRange"/> is in <paramref name="range"/>. If the ranges are equal, will return <see langword="true"/>.
-    /// </summary>
-    /// <param name="range">The range to test if it contains <paramref name="otherRange"/>.</param>
-    /// <param name="otherRange">The range to test if it is contained by <paramref name="range"/>.</param>
-    /// <returns></returns>
-    public static bool ContainsRange(ITextRange range, ITextRange otherRange)
-        => Lift(range).ContainsRange(Lift(otherRange));
-
-    /// <summary>
-    /// Test if <paramref name="otherRange"/> is in <paramref name="range"/> (must start after, and end before). If the ranges are equal, will return <see langword="false"/>.
-    /// </summary>
-    /// <param name="range">The range to test if it contains <paramref name="otherRange"/>.</param>
-    /// <param name="otherRange">The range to test if it is contained by <paramref name="range"/>.</param>
-    /// <returns></returns>
-    public static bool StrictContainsRange(ITextRange range, ITextRange otherRange)
-        => Lift(range).StrictContainsRange(Lift(otherRange));
-
-    public static TextRange PlusRange(ITextRange a, ITextRange b)
-        => Lift(a).PlusRange(Lift(b));
-
-    public static TextRange? Intersection(ITextRange a, ITextRange b)
-        => Lift(a).Intersection(Lift(b));
-
-    public static bool Equals(ITextRange? a, ITextRange? b)
-    {
-        if (a is null && b is null)
-            return true;
-
-        return a is not null && b is not null &&
-               a.StartLineNumber == b.StartLineNumber &&
-               a.StartColumn == b.StartColumn &&
-               a.EndLineNumber == b.EndLineNumber &&
-               a.EndColumn == b.EndColumn;
-    }
-
-    public static TextRange CollapseToStart(ITextRange range)
-        => Lift(range).CollapseToStart();
-
-    public static TextRange CollapseToEnd(ITextRange range)
-        => Lift(range).CollapseToEnd();
-
-    public static TextRange Lift(ITextRange range)
-        => new(range.StartLineNumber, range.StartColumn, range.EndLineNumber, range.EndColumn);
-
-    #endregion
 }
