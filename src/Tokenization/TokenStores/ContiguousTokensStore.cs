@@ -277,17 +277,16 @@ internal static class ContiguousTokensEditing
         return lineTokens[0..dest];
     }
 
-    [return: NotNullIfNotNull(nameof(lineTokens))]
-    public static LineToken[]? Append(LineToken[]? lineTokens, LineToken[]? otherTokens)
+    public static LineToken[] Append(LineToken[]? lineTokens, LineToken[]? otherTokens)
     {
         if (otherTokens == EmptyLineTokens)
-            return lineTokens;
+            return lineTokens ?? [];
         if (lineTokens == EmptyLineTokens)
-            return otherTokens;
+            return otherTokens ?? [];
         if (lineTokens is null)
-            return lineTokens;
+            return otherTokens ?? [];
         if (otherTokens is null)
-            return null; // cannot determine combined line length...
+            return [];
 
         var result = new LineToken[lineTokens.Length + otherTokens.Length];
         lineTokens.CopyTo((Array)result, 0);
