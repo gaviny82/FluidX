@@ -20,7 +20,7 @@ public class LineTokens : IEnumerable<LineToken>
         LanguageIdCodec = decoder;
     }
 
-    public static LineTokenMetadata DefaultTokenMetadata = new LineTokenMetadata
+    public readonly static LineTokenMetadata DefaultTokenMetadata = new()
     {
         FontStyle = FontStyle.None,
         Foreground = ColorId.DefaultForeground,
