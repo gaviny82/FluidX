@@ -1,6 +1,4 @@
-﻿using Range = FluidX.TextBuffers.Range;
-
-namespace FluidX.Decorations;
+﻿namespace FluidX.Decorations;
 
 public class IntervalNode : IModelDecoration
 {
@@ -68,8 +66,8 @@ public class IntervalNode : IModelDecoration
     public long CachedVersionId { get; set; }
     public int CachedAbsoluteStart { get; set; }
     public int CachedAbsoluteEnd { get; set; }
-    public Range? Range { get; set; }
-    Range IModelDecoration.Range => (Range)Range!; // Range must not be null when accessed via IModelDecoration
+    public TextRange? Range { get; set; }
+    TextRange IModelDecoration.Range => (TextRange)Range!; // TextRange must not be null when accessed via IModelDecoration
 
     public IntervalNode(string id, int start, int end)
     {
@@ -100,7 +98,7 @@ public class IntervalNode : IModelDecoration
         IsVisited = false;
     }
 
-    public void Reset(int versionId, int start, int end, Range range)
+    public void Reset(int versionId, int start, int end, TextRange range)
     {
         Start = start;
         End = end;

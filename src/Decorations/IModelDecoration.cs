@@ -1,6 +1,4 @@
-﻿using Range = FluidX.TextBuffers.Range;
-
-namespace FluidX.Decorations;
+﻿namespace FluidX.Decorations;
 
 /// <summary>
 /// A decoration in the model.
@@ -18,9 +16,9 @@ public interface IModelDecoration
     int OwnerId { get; }
 
     /// <summary>
-    /// Range that this decoration covers.
+    /// TextRange that this decoration covers.
     /// </summary>
-    Range Range { get; }
+    TextRange Range { get; }
 
     /// <summary>
     /// Options associated with this decoration.

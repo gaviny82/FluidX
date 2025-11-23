@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using TokenInfo = (int Length, int Metadata);
+﻿using TokenInfo = (int Length, int Metadata);
 
 namespace FluidX.Decorations;
 

@@ -37,7 +37,7 @@ public class SparseTokensStore
         }
     }
 
-    public FluidX.TextBuffers.Range SetPartial(FluidX.TextBuffers.Range _range, List<SparseMultilineTokens> pieces)
+    public TextRange SetPartial(TextRange _range, List<SparseMultilineTokens> pieces)
     {
         // console.log(`setPartial ${_range} ${pieces.map(p => p.toString()).join(', ')}`);
 
@@ -257,7 +257,7 @@ public class SparseTokensStore
     }
 
     public void AcceptEdit(
-        FluidX.TextBuffers.Range range,
+        TextRange range,
         int eolCount,
         int firstLineLength,
         int lastLineLength,

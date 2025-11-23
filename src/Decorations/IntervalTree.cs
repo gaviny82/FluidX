@@ -1,6 +1,4 @@
-﻿using System.Xml.Linq;
-
-namespace FluidX.Decorations;
+﻿namespace FluidX.Decorations;
 
 public class IntervalTree
 {

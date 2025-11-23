@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Runtime.InteropServices;
 
 namespace FluidX.TextBuffers.LineArray;
 
@@ -61,7 +56,7 @@ internal class LineArrayTextBuffer : ITextBuffer
         throw new NotImplementedException();
     }
 
-    public int GetCharacterCountInRange(Range range, EndOfLinePreference eol)
+    public int GetCharacterCountInRange(TextRange range, EndOfLinePreference eol)
     {
         throw new NotImplementedException();
     }
@@ -122,22 +117,22 @@ internal class LineArrayTextBuffer : ITextBuffer
         throw new NotImplementedException();
     }
 
-    public Position GetPositionAt(int offset)
+    public TextPosition GetPositionAt(int offset)
     {
         throw new NotImplementedException();
     }
 
-    public Range GetRangeAt(int offset, int length)
+    public TextRange GetRangeAt(int offset, int length)
     {
         throw new NotImplementedException();
     }
 
-    public string GetValueInRange(Range range, EndOfLinePreference eol)
+    public string GetValueInRange(TextRange range, EndOfLinePreference eol)
     {
         throw new NotImplementedException();
     }
 
-    public int GetValueLengthInRange(Range range, EndOfLinePreference eol)
+    public int GetValueLengthInRange(TextRange range, EndOfLinePreference eol)
     {
         throw new NotImplementedException();
     }
@@ -166,7 +161,7 @@ internal class LineArrayTextBuffer : ITextBuffer
         throw new NotImplementedException();
     }
 
-    public IReadOnlyList<FindMatch> FindMatchesLineByLine(Range searchRange, SearchData searchData, bool captureMatches, int limitResultCount)
+    public IReadOnlyList<FindMatch> FindMatchesLineByLine(TextRange searchRange, SearchData searchData, bool captureMatches, int limitResultCount)
     {
         throw new NotImplementedException();
     }

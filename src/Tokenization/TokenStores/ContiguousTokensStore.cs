@@ -1,7 +1,4 @@
-﻿using FluidX.TextBuffers;
-using System.Diagnostics.CodeAnalysis;
-using static System.Runtime.InteropServices.JavaScript.JSType;
-using Range = FluidX.TextBuffers.Range;
+﻿using System.Diagnostics.CodeAnalysis;
 
 namespace FluidX.Tokenization.TokenStores;
 
@@ -128,13 +125,13 @@ public class ContiguousTokensStore
         return a.SequenceEqual(b);
     }
 
-    public void AcceptEdit(Range range, int eolCount, int firstLineLength)
+    public void AcceptEdit(TextRange range, int eolCount, int firstLineLength)
     {
         AcceptDeleteRange(range);
-        AcceptInsertText(range.GetStartPosition(), eolCount, firstLineLength);
+        AcceptInsertText(range.StartPosition, eolCount, firstLineLength);
     }
 
-    private void AcceptDeleteRange(Range range)
+    private void AcceptDeleteRange(TextRange range)
     {
         int firstLineIndex = range.StartLineNumber - 1;
         if (firstLineIndex >= _lineTokens.Count)
@@ -167,7 +164,7 @@ public class ContiguousTokensStore
         DeleteLines(range.StartLineNumber, range.EndLineNumber - range.StartLineNumber);
     }
 
-    private void AcceptInsertText(Position position, int eolCount, int firstLineLength)
+    private void AcceptInsertText(TextPosition position, int eolCount, int firstLineLength)
     {
         if (eolCount == 0 && firstLineLength == 0)
             return; // Nothing to insert

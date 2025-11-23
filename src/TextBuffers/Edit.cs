@@ -5,7 +5,7 @@ namespace FluidX.TextBuffers;
 
 public class EditOperation
 {
-    public required Range Range { get; init; }
+    public required TextRange Range { get; init; }
     public required string? Text { get; init; }
     public required bool ForceMoveMarkers { get; init; }
     public required bool IsAutoWhitespaceEdit { get; init; }
@@ -15,7 +15,7 @@ public class EditOperation
 internal class ValidatedEditOperation
 {
     public required int SortIndex { get; init; }
-    public required Range Range { get; init; }
+    public required TextRange Range { get; init; }
     public required int RangeOffset { get; init; }
     public required int RangeLength { get; init; }
     public required string Text { get; init; }
@@ -38,7 +38,7 @@ public class ReverseSingleEditOperation
     /// <summary>
     /// The range to replace. This can be empty to emulate a simple insert.
     /// </summary>
-    public required Range Range { get; init; }
+    public required TextRange Range { get; init; }
     /// <summary>
     /// The text to replace with. This can be empty to emulate a simple delete.
     /// </summary>
@@ -148,7 +148,7 @@ public class InternalModelContentChange
     /// <summary>
     /// The old range that got replaced.
     /// </summary>
-    public required Range Range { get; init; }
+    public required TextRange Range { get; init; }
     /// <summary>
     /// The offset of the range that got replaced.
     /// </summary>

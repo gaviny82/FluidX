@@ -1,8 +1,6 @@
 ﻿using FluidX.TextBuffers;
-using System;
 using System.Buffers.Binary;
 using System.Runtime.InteropServices;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace FluidX.Tokenization.TokenStores;
 
@@ -29,16 +27,16 @@ public class ContiguousMultilineTokens
 
     #region Editing
 
-    public void ApplyEdit(FluidX.TextBuffers.Range range, string text)
+    public void ApplyEdit(TextRange range, string text)
     {
         var result = EOLCounter.CountEOL(text);
         AcceptDeleteRange(range);
-        AcceptInsertText(range.GetStartPosition(), result.eolCount, result.firstLineLength);
+        AcceptInsertText(range.StartPosition, result.eolCount, result.firstLineLength);
     }
 
-    private void AcceptDeleteRange(FluidX.TextBuffers.Range range)
+    private void AcceptDeleteRange(TextRange range)
     {
-        if (range.IsEmpty())
+        if (range.IsEmpty)
             return; // Nothing to delete
 
         int firstLineIndex = range.StartLineNumber - _startLineNumber;
@@ -112,7 +110,7 @@ public class ContiguousMultilineTokens
         }
     }
 
-    private void AcceptInsertText(Position position, int eolCount, int firstLineLength)
+    private void AcceptInsertText(TextPosition position, int eolCount, int firstLineLength)
     {
         if (eolCount == 0 && firstLineLength == 0)
             return; // Noting to insert
