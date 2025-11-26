@@ -1,4 +1,5 @@
 ﻿using FluidX.Tokenization.TokenStores;
+using System.Diagnostics;
 
 namespace FluidX.Tokenization;
 
@@ -98,22 +99,28 @@ public class DefaultBackgroundTokenizer
     {
         try
         {
-            // Assumes the writer lock held by the UI thread will be released shortly.
-            await _lock.WaitAsync();
+            var sw = Stopwatch.StartNew();
+            TimeSpan maxTimeSlice = TimeSpan.FromMilliseconds(2);
 
-            // Keep tokenizing in background until all lines are valid
-            // or a write lock is requested (e.g. user edit)
-            var builder = new ContiguousMultilineTokensBuilder();
+            await _lock.WaitAsync(); // Assumes the writer lock held by the UI thread will be released shortly.
+
+            // Keep tokenizing in background until all lines are valid or a write lock is requested (e.g. user edit)
             while (HasLinesToTokenize && !_isWriteLockRequested)
             {
-                // To ensure the read lock can be released quickly, work in this while loop should not take too much time.
-                TokenizeOneInvalidLine(builder);
-            }
-            // TODO: Consider committing tokens in smaller chunks to improve responsiveness to write lock requests.
+                // To ensure responsiveness, i.e. the read lock can be released quickly,
+                // work in this while loop should not take too much time.
+                sw.Restart();
 
-            // Commit the tokens obtained in this task
-            var chunk = builder.Finalize();
-            _tokenStore.SetMultilineTokens(chunk.ToArray(), _tokenizerWithStateStore.TextModel);
+                // Tokenize in a fixed-time slice
+                var builder = new ContiguousMultilineTokensBuilder();
+                while (HasLinesToTokenize && sw.Elapsed < maxTimeSlice)
+                {
+                    TokenizeOneInvalidLine(builder);
+                }
+
+                // Commit the tokens obtained in this slice
+                _tokenStore.SetMultilineTokens(builder.Finalize().ToArray(), _tokenizerWithStateStore.TextModel);
+            }
         }
         finally
         {
