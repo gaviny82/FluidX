@@ -8,7 +8,7 @@ namespace FluidX.Tokenization;
 // The tokenizer must release the read lock when the write lock is requested to allow edits to proceed on the UI thread.
 public class DefaultBackgroundTokenizer
 {
-    private readonly ReaderWriterLockSlim _lock = new();
+    private readonly SemaphoreSlim _lock = new(1, 1);
     private readonly TokenizerWithStateStoreAndTextModel _tokenizerWithStateStore;
     private readonly ContiguousTokensStore _tokenStore;
 
@@ -72,13 +72,13 @@ public class DefaultBackgroundTokenizer
     public void BeginTextBufferEdit()
     {
         _isWriteLockRequested = true; // Sets a request flag to interrupt background tokenization.
-        _lock.EnterWriteLock(); // Assume the background tokenization task will release the read lock shortly when the requested.
+        _lock.Wait(); // Assume the background tokenization task will release the read lock shortly when the requested.
         _isWriteLockRequested = false; // Reset the request flag when the write lock is acquired.
     }
 
     public void EndTextBufferEdit()
     {
-        _lock.ExitWriteLock();
+        _lock.Release();
         // The edit may have invalidated some lines or interrupted a background tokenization task,
         // so background tokenization should be restarted.
         StartBackgroundTokenizationIfNeeded();
@@ -99,9 +99,7 @@ public class DefaultBackgroundTokenizer
         try
         {
             // Assumes the writer lock held by the UI thread will be released shortly.
-            // TODO: If the read lock cannot be acquired quickly, we might need to wait for some time before retrying
-            // to avoid contention, i.e. use TryEnterReadLock with a timeout.
-            _lock.EnterReadLock();
+            await _lock.WaitAsync();
 
             // Keep tokenizing in background until all lines are valid
             // or a write lock is requested (e.g. user edit)
@@ -120,7 +118,7 @@ public class DefaultBackgroundTokenizer
         finally
         {
             Interlocked.Exchange(ref _isRunning, false);
-            _lock.ExitReadLock();
+            _lock.Release();
         }
     }
 
