@@ -7,6 +7,10 @@ namespace FluidX.Tokenization;
 // Edits to the text buffer must acquire a write lock before changing the text buffer and invalidating tokenizer states,
 // while the background tokenizer acquires a read lock before reading text lines and tokenizing.
 // The tokenizer must release the read lock when the write lock is requested to allow edits to proceed on the UI thread.
+// Future work:
+// 1. implement lock-free reads using per-line atomic replacements or snapshoting
+// so rendering does not require the write lock.
+// 2. Cancellation token + clean task exit
 public class DefaultBackgroundTokenizer
 {
     private readonly SemaphoreSlim _writeLock = new(1, 1);
@@ -32,7 +36,7 @@ public class DefaultBackgroundTokenizer
 
 
     private Task? _tokenizationTask = null;
-    private bool _isWriteRequested = false;
+    private volatile bool _isWriteRequested = false; // Must be volatile to ensure visibility across threads.
 
     private bool HasLinesToTokenize
         => !_tokenizerWithStateStore.Store.AllStatesValid;
@@ -53,15 +57,24 @@ public class DefaultBackgroundTokenizer
     public void StartBackgroundTokenizationIfNeeded()
     {
         // Starts the background tokenization task if not already running.
+        // TODO: A lock might be needed to guard this, if called from multiple threads.
+        // If there is always a single UI thread calling this, then it is fine.
         if (_tokenizationTask is null)
             _tokenizationTask = TokenizeInBackgroundAsync();
 
-        if (HasLinesToTokenize)
-            _workAvailable.Release(); // Signals the background task to continue tokenization
+        if (HasLinesToTokenize && _workAvailable.CurrentCount == 0)
+        {
+            try
+            {
+                _workAvailable.Release(); // Signals the background task to continue tokenization
+            }
+            catch { /* ignore */ }
+        }
     }
 
     /// <summary>
-    /// Obtains the write lock and interrupts the background tokenizer.
+    /// Obtains the write lock and interrupts the background tokenizer. Must be called on the UI thread only,
+    /// and before making any edits to the text buffer or reading the token store.
     /// Must call <see cref="StartBackgroundTokenizationIfNeeded"/> to resume tokenization.
     /// </summary>
     public void BeginTextBufferEdit()
@@ -71,6 +84,9 @@ public class DefaultBackgroundTokenizer
         _isWriteRequested = false; // Reset the request flag when the write lock is acquired.
     }
 
+    /// <summary>
+    /// Releases the write lock and allows the background tokenizer to resume.
+    /// </summary>
     public void EndTextBufferEdit()
     {
         _writeLock.Release();
@@ -92,7 +108,7 @@ public class DefaultBackgroundTokenizer
                 await _writeLock.WaitAsync(); // Acquires the write lock to wait for any ongoing edits to complete.
 
                 // Tokenize in fixed-time slices to ensure responsiveness
-                while (!_isWriteRequested)
+                while (HasLinesToTokenize && !_isWriteRequested)
                 {
                     var builder = new ContiguousMultilineTokensBuilder();
                     sw.Restart();
