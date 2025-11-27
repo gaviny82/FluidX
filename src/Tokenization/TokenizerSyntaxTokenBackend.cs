@@ -72,5 +72,5 @@ public class TokenizerSyntaxTokenBackend : SyntaxTokenBackendBase
 public enum BackgroundTokenizationState
 {
     InProgress = 1,
-    Completed = 2,
+    Done = 2,
 }

@@ -19,7 +19,6 @@ public class DefaultBackgroundTokenizer
     private readonly TokenizerWithStateStoreAndTextModel _tokenizerWithStateStore;
     private readonly ContiguousTokensStore _tokenStore;
 
-    // TODO: Update BackgroundTokenizationState
     public BackgroundTokenizationState BackgroundTokenizationState
     {
         get => field;
@@ -108,8 +107,16 @@ public class DefaultBackgroundTokenizer
                 await _writeLock.WaitAsync(); // Acquires the write lock to wait for any ongoing edits to complete.
 
                 // Tokenize in fixed-time slices to ensure responsiveness
-                while (HasLinesToTokenize && !_isWriteRequested)
+                while (!_isWriteRequested)
                 {
+                    // Exit and notify when all lines are valid
+                    if (!HasLinesToTokenize)
+                    {
+                        BackgroundTokenizationState = BackgroundTokenizationState.Done;
+                        break;
+                    }
+                    // Begins a new slice
+                    BackgroundTokenizationState = BackgroundTokenizationState.InProgress;
                     var builder = new ContiguousMultilineTokensBuilder();
                     sw.Restart();
                     // When a text edit is requested, the slice is stopped and comitted immediately when tokenization
