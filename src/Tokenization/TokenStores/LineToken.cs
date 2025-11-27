@@ -3,31 +3,51 @@
 namespace FluidX.Tokenization.TokenStores;
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
-public readonly struct LineTokenMetadata(uint metadata)
+public struct LineTokenMetadata
 {
-    private readonly uint _metadata = metadata;
+    public uint RawValue { get; private set; } = 0;
 
-    public uint RawValue => _metadata;
+    public LineTokenMetadata() { }
+
+    public LineTokenMetadata(uint rawValue) => RawValue = rawValue;
 
     public LanguageId LanguageId
-        => (LanguageId)((_metadata & MetadataConsts.LANGUAGEID_MASK) >> MetadataConsts.LANGUAGEID_OFFSET);
+    {
+        readonly get => (LanguageId)((RawValue & MetadataConsts.LANGUAGEID_MASK) >> MetadataConsts.LANGUAGEID_OFFSET);
+        set => RawValue |= ((uint)value << MetadataConsts.LANGUAGEID_OFFSET) & MetadataConsts.LANGUAGEID_MASK;
+    }
 
     public StandardTokenType TokenType
-        => (StandardTokenType)((_metadata & MetadataConsts.TOKEN_TYPE_MASK) >> MetadataConsts.TOKEN_TYPE_OFFSET);
+    {
+        readonly get => (StandardTokenType)((RawValue & MetadataConsts.TOKEN_TYPE_MASK) >> MetadataConsts.TOKEN_TYPE_OFFSET);
+        set => RawValue |= ((uint)value << MetadataConsts.TOKEN_TYPE_OFFSET) & MetadataConsts.TOKEN_TYPE_MASK;
+    }
 
     public bool ContainsBalancedBrackets
-        => ((_metadata & MetadataConsts.BALANCED_BRACKETS_MASK) >> MetadataConsts.BALANCED_BRACKETS_OFFSET) != 0;
+    {
+        readonly get => ((RawValue & MetadataConsts.BALANCED_BRACKETS_MASK) >> MetadataConsts.BALANCED_BRACKETS_OFFSET) != 0;
+        set => RawValue |= (value ? 1u : 0u) << MetadataConsts.BALANCED_BRACKETS_OFFSET;
+    }
 
     public FontStyle FontStyle
-        => (FontStyle)((_metadata & MetadataConsts.FONT_STYLE_MASK) >> MetadataConsts.FONT_STYLE_OFFSET);
+    {
+        readonly get => (FontStyle)((RawValue & MetadataConsts.FONT_STYLE_MASK) >> MetadataConsts.FONT_STYLE_OFFSET);
+        set => RawValue |= ((uint)value << MetadataConsts.FONT_STYLE_OFFSET) & MetadataConsts.FONT_STYLE_MASK;
+    }
 
     public ColorId Foreground
-        => (ColorId)((_metadata & MetadataConsts.FOREGROUND_MASK) >> MetadataConsts.FOREGROUND_OFFSET);
+    {
+        readonly get => (ColorId)((RawValue & MetadataConsts.FOREGROUND_MASK) >> MetadataConsts.FOREGROUND_OFFSET);
+        set => RawValue |= ((uint)value << MetadataConsts.FOREGROUND_OFFSET) & MetadataConsts.FOREGROUND_MASK;
+    }
 
     public ColorId Background
-        => (ColorId)((_metadata & MetadataConsts.BACKGROUND_MASK) >> MetadataConsts.BACKGROUND_OFFSET);
+    {
+        readonly get => (ColorId)((RawValue & MetadataConsts.BACKGROUND_MASK) >> MetadataConsts.BACKGROUND_OFFSET);
+        set => RawValue |= ((uint)value << MetadataConsts.BACKGROUND_OFFSET) & MetadataConsts.BACKGROUND_MASK;
+    }
 
-    public string GetClassName()
+    public readonly string GetClassName()
     {
         string className = $"mtk{Foreground}";
         FontStyle fontStyle = FontStyle;
@@ -42,7 +62,7 @@ public readonly struct LineTokenMetadata(uint metadata)
         return className;
     }
 
-    public string GetInlineStyle(string[] colorMap)
+    public readonly string GetInlineStyle(string[] colorMap)
     {
         var foreground = Foreground;
         var fontStyle = FontStyle;
@@ -72,7 +92,7 @@ public readonly struct LineTokenMetadata(uint metadata)
         return result;
     }
 
-    public TokenPresentation GetPresentation()
+    public readonly TokenPresentation GetPresentation()
     {
         var foreground = Foreground;
         var fontStyle = FontStyle;
@@ -113,7 +133,7 @@ public readonly record struct LineToken(int EndOffset, LineTokenMetadata Metadat
  *  - b = background color (8 bits)
  *
  */
-public static class MetadataConsts
+internal static class MetadataConsts
 {
     public const uint LANGUAGEID_MASK /*            */ = 0b00000000_00000000_00000000_11111111;
     public const uint TOKEN_TYPE_MASK /*            */ = 0b00000000_00000000_00000011_00000000;

@@ -11,7 +11,7 @@ public class ContiguousMultilineTokens
 
     public int StartLineNumber => _startLineNumber;
     public int EndLineNumber => _startLineNumber + _tokens.Count - 1;
-    public System.Range LineRange => new(_startLineNumber, _startLineNumber + _tokens.Count);
+    public Range LineRange => new(_startLineNumber, _startLineNumber + _tokens.Count);
 
     public ContiguousMultilineTokens(int startLineNumber, List<LineToken[]> tokens)
     {

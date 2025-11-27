@@ -1,4 +1,5 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using FluidX.TextModels;
+using System.Diagnostics.CodeAnalysis;
 
 namespace FluidX.Tokenization.TokenStores;
 
@@ -186,20 +187,64 @@ public class ContiguousTokensStore
         InsertLines(position.LineNumber, eolCount);
     }
 
-    //TODO: public LineTokenChangeRange[] SetMultilineTokens(ContiguousMultilineTokens tokens, ITextModel textModel)
-
-    private static LineTokenMetadata GetDefaultMetadata(LanguageId topLevelLanguageId)
+    // TODO: Use ITextModel
+    public LineTokenChangeRange[] SetMultilineTokens(ContiguousMultilineTokens[] tokens, TextModel textModel)
     {
-        uint metadata =
-            ((uint)topLevelLanguageId << MetadataConsts.LANGUAGEID_OFFSET)
-            | ((uint)StandardTokenType.Other << MetadataConsts.TOKEN_TYPE_OFFSET)
-            | ((uint)FontStyle.None << MetadataConsts.FONT_STYLE_OFFSET)
-            | ((uint)ColorId.DefaultForeground << MetadataConsts.FOREGROUND_OFFSET)
-            | ((uint)ColorId.DefaultBackground << MetadataConsts.BACKGROUND_OFFSET)
-            // If there is no grammar, we just take a guess and try to match brackets.
-            | MetadataConsts.BALANCED_BRACKETS_MASK;
-        return new LineTokenMetadata(metadata);
+        if (tokens.Length == 0)
+            return [];
+
+        List<LineTokenChangeRange> ranges = [];
+        for (int i = 0; i < tokens.Length; i++)
+        {
+            var element = tokens[i];
+            int minChangedLineNumber = 0;
+            int maxChangedLineNumber = 0;
+            bool hasChange = false;
+            for (int lineNumber = element.StartLineNumber; lineNumber < element.EndLineNumber; lineNumber++)
+            {
+                if (hasChange)
+                {
+                    SetTokens(
+                        textModel.LanguageId,
+                        lineNumber - 1,
+                        textModel.TextBuffer.GetLineLength(lineNumber),
+                        element.GetLineTokens(lineNumber),
+                        false);
+                    maxChangedLineNumber = lineNumber;
+                }
+                else
+                {
+                    bool lineHasChange = SetTokens(
+                        textModel.LanguageId,
+                        lineNumber - 1,
+                        textModel.TextBuffer.GetLineLength(lineNumber),
+                        element.GetLineTokens(lineNumber),
+                        true);
+                    if (lineHasChange)
+                    {
+                        hasChange = true;
+                        minChangedLineNumber = lineNumber;
+                        maxChangedLineNumber= lineNumber;
+                    }
+                }
+            }
+            if (hasChange)
+            {
+                ranges.Add(new(minChangedLineNumber, maxChangedLineNumber));
+            }
+        }
+        return ranges.ToArray();
     }
+
+    private static LineTokenMetadata GetDefaultMetadata(LanguageId topLevelLanguageId) => new LineTokenMetadata
+    {
+        LanguageId = topLevelLanguageId,
+        TokenType = StandardTokenType.Other,
+        FontStyle = FontStyle.None,
+        Foreground = ColorId.DefaultForeground,
+        Background = ColorId.DefaultBackground,
+        ContainsBalancedBrackets = true // If there is no grammar, we just take a guess and try to match brackets.
+    };
 }
 
 public record struct LineTokenChangeRange(int FromLineNumber, int ToLineNumber);
@@ -280,17 +325,16 @@ internal static class ContiguousTokensEditing
         return lineTokens[0..dest];
     }
 
-    [return: NotNullIfNotNull(nameof(lineTokens))]
-    public static LineToken[]? Append(LineToken[]? lineTokens, LineToken[]? otherTokens)
+    public static LineToken[] Append(LineToken[]? lineTokens, LineToken[]? otherTokens)
     {
         if (otherTokens == EmptyLineTokens)
-            return lineTokens;
+            return lineTokens ?? [];
         if (lineTokens == EmptyLineTokens)
-            return otherTokens;
+            return otherTokens ?? [];
         if (lineTokens is null)
-            return lineTokens;
+            return otherTokens ?? [];
         if (otherTokens is null)
-            return null; // cannot determine combined line length...
+            return [];
 
         var result = new LineToken[lineTokens.Length + otherTokens.Length];
         lineTokens.CopyTo((Array)result, 0);

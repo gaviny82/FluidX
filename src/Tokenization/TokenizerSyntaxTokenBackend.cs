@@ -5,19 +5,8 @@ namespace FluidX.Tokenization;
 
 public class TokenizerSyntaxTokenBackend : SyntaxTokenBackendBase
 {
-    private TokenizerWithStateStoreAndTextModel? _tokenizer = null;
-    private DefaultBackgroundTokenizer ? _defaultBackgroundTokenizer = null;
+    private DefaultBackgroundTokenizer? _tokenizer = null;
     // TODO: private readonly _attachedViewStates = this._register(new DisposableMap<IAttachedView, AttachedViewHandler>());
-
-    private BackgroundTokenizationState BackgroundTokenizationState
-    {
-        get => field;
-        set
-        {
-            field = value;
-            BackgroundTokenizationStateChanged?.Invoke(this, EventArgs.Empty);
-        }
-    } = BackgroundTokenizationState.InProgress;
 
     private readonly ContiguousTokensStore _tokens;
 
@@ -83,5 +72,5 @@ public class TokenizerSyntaxTokenBackend : SyntaxTokenBackendBase
 public enum BackgroundTokenizationState
 {
     InProgress = 1,
-    Completed = 2,
+    Done = 2,
 }
