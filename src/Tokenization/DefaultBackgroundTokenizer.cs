@@ -19,6 +19,9 @@ public class DefaultBackgroundTokenizer
     private readonly TokenizerWithStateStoreAndTextModel _tokenizerWithStateStore;
     private readonly ContiguousTokensStore _tokenStore;
 
+    public TokenizerWithStateStoreAndTextModel TokenizerWithStateStore
+        => _tokenizerWithStateStore;
+
     public BackgroundTokenizationState BackgroundTokenizationState
     {
         get => field;
@@ -32,6 +35,10 @@ public class DefaultBackgroundTokenizer
     } = BackgroundTokenizationState.InProgress;
 
     public EventHandler? BackgroundTokenizationStateChanged;
+
+    //TODO: TokensChanged event
+
+    // TODO: Dispose method to clean up resources
 
 
     private Task? _tokenizationTask = null;
@@ -103,8 +110,8 @@ public class DefaultBackgroundTokenizer
         {
             try
             {
-                await _workAvailable.WaitAsync(); // Only continues if the UI thread signals that there is work to do.
-                await _writeLock.WaitAsync(); // Acquires the write lock to wait for any ongoing edits to complete.
+                await _workAvailable.WaitAsync().ConfigureAwait(false); // Only continues if the UI thread signals that there is work to do.
+                await _writeLock.WaitAsync().ConfigureAwait(false); // Acquires the write lock to wait for any ongoing edits to complete.
 
                 // Tokenize in fixed-time slices to ensure responsiveness
                 while (!_isWriteRequested)

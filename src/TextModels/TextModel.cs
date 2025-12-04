@@ -30,6 +30,11 @@ public class TextModel : IDecorationTreesHost
         TrimAutoWhitespace: true
     );
 
+    public bool IsTooLargeForTokenization { get; private init; }
+
+    private const int LargeFileSizeThreshold = 20 * 1024 * 1024; // 20 MB;
+    private const int LargeFileLineCountThreshold = 300 * 1000; // 300K lines
+
     public event TextModelModelContentChangedEventHandler? ContentChanged;
 
     public EndOfLineSequence EOL => TextBuffer.GetEOL() switch
@@ -52,6 +57,10 @@ public class TextModel : IDecorationTreesHost
         var builder = new PieceTreeTextBufferBuilder();
         builder.AcceptChunk(source);
         TextBuffer = builder.Finish().Create(eol);
+
+        int bufferLineCount = TextBuffer.LineCount;
+        int bufferTextLength = TextBuffer.GetValueLengthInRange(new(1, 1, bufferLineCount, TextBuffer.GetLineMaxColumn(bufferLineCount)), EndOfLinePreference.TextDefined);
+        IsTooLargeForTokenization = bufferTextLength > LargeFileSizeThreshold || bufferLineCount > LargeFileLineCountThreshold;
     }
 
     public void Edit(TextEdit edit)

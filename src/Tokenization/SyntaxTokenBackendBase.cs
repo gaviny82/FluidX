@@ -16,7 +16,7 @@ public abstract class SyntaxTokenBackendBase : IDisposable
     public abstract bool HasTokens { get; }
 
     internal EventHandler? BackgroundTokenizationStateChanged;
-    internal EventHandler? TokensChanged;
+    internal EventHandler<ModelTokensChangedEventArgs>? TokensChanged;
 
     public SyntaxTokenBackendBase(ILanguageIdCodec languageIdCodec, TextModel textModel)
     {
@@ -50,3 +50,8 @@ public abstract class SyntaxTokenBackendBase : IDisposable
 
     public virtual void Dispose() { }
 }
+
+public record class ModelTokensChangedEventArgs(
+    bool SemanticTokensApplied,
+    Range[] Ranges
+);
