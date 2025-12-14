@@ -411,6 +411,34 @@ public class TextModel : IDecorationTreesHost
         return new(1, 1, lineCount, endColumn);
     }
 
+    public TextPosition ValidatePosition(TextPosition position, bool allowInSurrogatePairs = false)
+    {
+        int lineNumber = position.LineNumber;
+        int column = position.Column;
+        int lineCount = TextBuffer.LineCount;
+
+        if (lineNumber < 1)
+            return new TextPosition(1, 1);
+        if (lineNumber > lineCount)
+            return new TextPosition(lineCount, TextBuffer.GetLineMaxColumn(lineCount));
+        if (column <= 1)
+            return new TextPosition(lineNumber, 1);
+        int maxColumn = TextBuffer.GetLineMaxColumn(lineNumber);
+        if (column > maxColumn)
+            return new TextPosition(lineNumber, maxColumn);
+
+        if (!allowInSurrogatePairs)
+        {
+            // If the position would end up in the middle of a high-low surrogate pair,
+            // we move it to before the pair. At this point, column > 1 is requried.
+            char charCodeBefore = TextBuffer.GetLineCharCode(lineNumber, column - 2);
+            if (char.IsHighSurrogate(charCodeBefore))
+                return new TextPosition(lineNumber, column - 1);
+        }
+
+        return position;
+    }
+
     /// <summary>
     /// Get all text
     /// </summary>

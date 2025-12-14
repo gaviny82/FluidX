@@ -11,7 +11,7 @@ namespace FluidX.Tokenization;
 // 1. implement lock-free reads using per-line atomic replacements or snapshoting
 // so rendering does not require the write lock.
 // 2. Cancellation token + clean task exit
-public class DefaultBackgroundTokenizer : IDisposable
+public class DefaultBackgroundTokenizer : IDisposable, IBackgroundTokenizer
 {
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly SemaphoreSlim _workAvailable = new(0, 1);
@@ -176,5 +176,10 @@ public class DefaultBackgroundTokenizer : IDisposable
         _workAvailable.Dispose();
         _cts.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    public void RequestTokens(int startLineNumber, int endLineNumberExclusive)
+    {
+        _tokenizerWithStateStore.Store.InvalidateEndStateRange(new Range(startLineNumber, endLineNumberExclusive));
     }
 }
