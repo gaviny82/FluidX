@@ -11,7 +11,7 @@ namespace FluidX.Tokenization;
 // 1. implement lock-free reads using per-line atomic replacements or snapshoting
 // so rendering does not require the write lock.
 // 2. Cancellation token + clean task exit
-public class DefaultBackgroundTokenizer
+public class DefaultBackgroundTokenizer : IDisposable
 {
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly SemaphoreSlim _workAvailable = new(0, 1);
@@ -38,11 +38,10 @@ public class DefaultBackgroundTokenizer
 
     //TODO: TokensChanged event
 
-    // TODO: Dispose method to clean up resources
-
 
     private Task? _tokenizationTask = null;
     private volatile bool _isWriteRequested = false; // Must be volatile to ensure visibility across threads.
+    private CancellationTokenSource _cts = new();
 
     private bool HasLinesToTokenize
         => !_tokenizerWithStateStore.Store.AllStatesValid;
@@ -66,7 +65,7 @@ public class DefaultBackgroundTokenizer
         // TODO: A lock might be needed to guard this, if called from multiple threads.
         // If there is always a single UI thread calling this, then it is fine.
         if (_tokenizationTask is null)
-            _tokenizationTask = TokenizeInBackgroundAsync();
+            _tokenizationTask = TokenizeInBackgroundAsync(_cts.Token);
 
         if (HasLinesToTokenize && _workAvailable.CurrentCount == 0)
         {
@@ -101,17 +100,17 @@ public class DefaultBackgroundTokenizer
         StartBackgroundTokenizationIfNeeded();
     }
 
-    private async Task TokenizeInBackgroundAsync()
+    private async Task TokenizeInBackgroundAsync(CancellationToken cancellationToken)
     {
         var sw = Stopwatch.StartNew();
         TimeSpan maxTimeSlice = TimeSpan.FromMilliseconds(2);
 
-        while (true)
+        while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
-                await _workAvailable.WaitAsync().ConfigureAwait(false); // Only continues if the UI thread signals that there is work to do.
-                await _writeLock.WaitAsync().ConfigureAwait(false); // Acquires the write lock to wait for any ongoing edits to complete.
+                await _workAvailable.WaitAsync(cancellationToken).ConfigureAwait(false); // Only continues if the UI thread signals that there is work to do.
+                await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false); // Acquires the write lock to wait for any ongoing edits to complete.
 
                 // Tokenize in fixed-time slices to ensure responsiveness
                 while (!_isWriteRequested)
@@ -167,5 +166,15 @@ public class DefaultBackgroundTokenizer
     public void InvalidateLines(Range range)
     {
         _tokenizerWithStateStore.Store.InvalidateEndStateRange(range);
+    }
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _tokenizationTask?.Wait();
+        _writeLock.Dispose();
+        _workAvailable.Dispose();
+        _cts.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

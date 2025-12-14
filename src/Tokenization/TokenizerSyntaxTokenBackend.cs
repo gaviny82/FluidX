@@ -64,15 +64,20 @@ public class TokenizerSyntaxTokenBackend : SyntaxTokenBackendBase
         var (tokenizationSupport, initialState) = initializeTokenization();
         if (tokenizationSupport is not null && initialState is not null)
         {
-            _tokenizer = new TokenizerWithStateStoreAndTextModel(
+            _backgroundTokenizer?.Dispose();
+            _backgroundTokenizer = new DefaultBackgroundTokenizer(
+                new TokenizerWithStateStoreAndTextModel(
                 _textModel.TextBuffer.LineCount,
                 tokenizationSupport,
                 _textModel,
-                _languageIdCodec);
+                _languageIdCodec),
+                _tokens
+            );
         }
         else
         {
-            _tokenizer = null;
+            _backgroundTokenizer?.Dispose();
+            _backgroundTokenizer = null;
         }
     }
 
