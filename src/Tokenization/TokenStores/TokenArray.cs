@@ -23,7 +23,7 @@ public class TokenArray
         }
     }
 
-    public LineTokens ToLineTokens(string lineContent, ILanguageIdCodec decoder)
+    public LineTokens ToLineTokens(string lineContent)
     {
         LineToken[] lineTokens = new LineToken[_tokenInfo.Length];
         int offset = 0;
@@ -37,7 +37,7 @@ public class TokenArray
                 Metadata = token.Metadata
             };
         }
-        return new LineTokens(lineTokens, lineContent, decoder);
+        return new LineTokens(lineTokens, lineContent);
     }
 
     public TokenArray Slice(int fromIndex, int length)

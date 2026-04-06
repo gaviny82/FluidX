@@ -13,8 +13,8 @@ public struct LineTokenMetadata
 
     public LanguageId LanguageId
     {
-        readonly get => (LanguageId)((RawValue & MetadataConsts.LANGUAGEID_MASK) >> MetadataConsts.LANGUAGEID_OFFSET);
-        set => RawValue |= ((uint)value << MetadataConsts.LANGUAGEID_OFFSET) & MetadataConsts.LANGUAGEID_MASK;
+        readonly get => new((RawValue & MetadataConsts.LANGUAGEID_MASK) >> MetadataConsts.LANGUAGEID_OFFSET);
+        set => RawValue |= (value.Value << MetadataConsts.LANGUAGEID_OFFSET) & MetadataConsts.LANGUAGEID_MASK;
     }
 
     public StandardTokenType TokenType
@@ -164,13 +164,15 @@ internal static class MetadataConsts
     public const int BACKGROUND_OFFSET = 24;
 }
 
-/**
- * Open ended enum at runtime
- */
-public enum LanguageId
+public readonly record struct LanguageId(uint Value)
 {
-    Null = 0,
-    PlainText = 1
+    public static readonly LanguageId Null = new(0);
+    public static readonly LanguageId PlainText = new(1);
+
+    public static implicit operator uint(LanguageId languageId) => languageId.Value;
+    public static explicit operator LanguageId(uint value) => new(value);
+
+    public override string ToString() => Value.ToString();
 }
 
 /**
@@ -205,10 +207,4 @@ public enum StandardTokenType
     Comment = 1,
     String = 2,
     RegEx = 3
-}
-
-public interface ILanguageIdCodec
-{
-    LanguageId EncodeLanguageId(string languageId);
-    string DecodeLanguageId(LanguageId languageId);
 }

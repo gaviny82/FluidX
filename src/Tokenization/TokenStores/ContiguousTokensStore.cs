@@ -9,36 +9,32 @@ namespace FluidX.Tokenization.TokenStores;
 public class ContiguousTokensStore
 {
     private readonly List<LineToken[]?> _lineTokens = [];
-    private readonly ILanguageIdCodec _languageIdCodec;
 
     public bool HasTokens => _lineTokens.Count > 0;
 
-    public ContiguousTokensStore(ILanguageIdCodec languageIdCodec)
-    {
-        _languageIdCodec = languageIdCodec;
-    }
+    public ContiguousTokensStore() { }
 
     public void Flush()
     {
         _lineTokens.Clear();
     }
 
-    public LineTokens GetTokens(string topLevelLanguageId, int lineIndex, string lineText)
+    public LineTokens GetTokens(LanguageId topLevelLanguageId, int lineIndex, string lineText)
     {
         LineToken[]? rawLineTokens = null;
         if (lineIndex< _lineTokens.Count)
             rawLineTokens = _lineTokens[lineIndex];
         if (rawLineTokens is not null && rawLineTokens != ContiguousTokensEditing.EmptyLineTokens)
-            return new LineTokens(rawLineTokens, lineText, _languageIdCodec);
+            return new LineTokens(rawLineTokens, lineText);
 
         LineToken[] lineTokens = [
             new LineToken
             {
                 EndOffset = lineText.Length,
-                Metadata = GetDefaultMetadata(_languageIdCodec.EncodeLanguageId(topLevelLanguageId))
+                Metadata = GetDefaultMetadata(topLevelLanguageId)
             }
         ];
-        return new LineTokens(lineTokens, lineText, _languageIdCodec);
+        return new LineTokens(lineTokens, lineText);
     }
 
     private static LineToken[] MassageTokens(LanguageId topLevelLanguageId, int lineTextLength, LineToken[]? tokens)
@@ -98,10 +94,10 @@ public class ContiguousTokensStore
         }
     }
 
-    public bool SetTokens(string topLevelLanguageid, int lineIndex, int lineTextLength, LineToken[]? tokens, bool checkEquality)
+    public bool SetTokens(LanguageId topLevelLanguageid, int lineIndex, int lineTextLength, LineToken[]? tokens, bool checkEquality)
     {
         tokens = MassageTokens(
-            _languageIdCodec.EncodeLanguageId(topLevelLanguageid),
+            topLevelLanguageid,
             lineTextLength,
             tokens
         );

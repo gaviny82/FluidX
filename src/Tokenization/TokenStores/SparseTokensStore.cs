@@ -8,16 +8,14 @@ namespace FluidX.Tokenization.TokenStores;
 public class SparseTokensStore
 {
     private List<SparseMultilineTokens> _pieces;
-    private readonly ILanguageIdCodec _languageIdCodec;
     public bool IsComplete { get; private set; }
 
     public bool IsEmpty => _pieces.Count == 0;
 
-    public SparseTokensStore(ILanguageIdCodec languageIdCodec)
+    public SparseTokensStore()
     {
         _pieces = [];
         IsComplete = false;
-        _languageIdCodec = languageIdCodec;
     }
 
     public void Flush()
@@ -224,7 +222,7 @@ public class SparseTokensStore
             aIndex++;
         }
 
-        return new LineTokens(result.ToArray(), aTokens.LineContent, _languageIdCodec);
+        return new LineTokens(result.ToArray(), aTokens.LineContent);
     }
 
     private static int FindFirstPieceWithLine(List<SparseMultilineTokens> pieces, int lineNumber)
