@@ -62,6 +62,10 @@ public class TokenizerSyntaxTokenBackend : SyntaxTokenBackendBase
             return (tokenizationSupport, tokenizationSupport.GetInitialState());
         };
         var (tokenizationSupport, initialState) = initializeTokenization();
+        if (_backgroundTokenizer is not null)
+        {
+            _backgroundTokenizer.BackgroundTokenizationStateChanged -= OnBackgroundTokenizationStateChanged;
+        }
         if (tokenizationSupport is not null && initialState is not null)
         {
             _backgroundTokenizer?.Dispose();
@@ -73,12 +77,20 @@ public class TokenizerSyntaxTokenBackend : SyntaxTokenBackendBase
                 _languageIdCodec),
                 _tokens
             );
+            _backgroundTokenizer.BackgroundTokenizationStateChanged += OnBackgroundTokenizationStateChanged;
         }
         else
         {
             _backgroundTokenizer?.Dispose();
             _backgroundTokenizer = null;
         }
+
+        BackgroundTokenizationStateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnBackgroundTokenizationStateChanged(object? sender, EventArgs e)
+    {
+        BackgroundTokenizationStateChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public override void HandleDidChangeAttached()
@@ -177,10 +189,13 @@ public class TokenizerSyntaxTokenBackend : SyntaxTokenBackendBase
         return _tokenizer.IsCheapToTokenize(lineNumber);
     }
 
+    public override BackgroundTokenizationState BackgroundTokenizationState
+        => _backgroundTokenizer?.BackgroundTokenizationState ?? BackgroundTokenizationState.Done;
+
     public override LineTokens GetLineTokens(int lineNumber)
     {
         string lineText = _textModel.TextBuffer.GetLineContent(lineNumber);
-        return _tokens.GetTokens(_textModel.LanguageId, lineNumber - 1, lineText);
+        return _tokens.GetTokens(_languageId, lineNumber - 1, lineText);
     }
 
     public override StandardTokenType GetTokenTypeIfInsertingCharacter(int lineNumber, int column, string character)

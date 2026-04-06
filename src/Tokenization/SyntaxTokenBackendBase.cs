@@ -8,10 +8,7 @@ public abstract class SyntaxTokenBackendBase : IDisposable
     protected readonly ILanguageIdCodec _languageIdCodec;
     protected readonly TextModel _textModel;
 
-    //protected abstract _backgroundTokenizationState: BackgroundTokenizationState;
-    //public get backgroundTokenizationState(): BackgroundTokenizationState {
-    //return this._backgroundTokenizationState;
-    //}
+    public abstract BackgroundTokenizationState BackgroundTokenizationState { get; }
 
     public abstract bool HasTokens { get; }
 
