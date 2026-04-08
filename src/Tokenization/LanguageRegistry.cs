@@ -6,11 +6,11 @@ public sealed class LanguageRegistry
 {
     public static LanguageRegistry Instance { get; private set; } = new();
 
-    private readonly Dictionary<LanguageId, string> _idToName = [];
-    private readonly Dictionary<string, LanguageId> _nameToId = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<LanguageId, ITokenizationSupport> _tokenizationSupports = [];
-    private readonly Dictionary<LanguageId, IAsyncTokenizationSupportFactory> _factories = [];
-    private uint _nextLanguageId = LanguageId.PlainText.Value + 1;
+    private readonly Dictionary<GlobalLanguageId, string> _idToName = [];
+    private readonly Dictionary<string, GlobalLanguageId> _nameToId = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<GlobalLanguageId, ITokenizationSupport> _tokenizationSupports = [];
+    private readonly Dictionary<GlobalLanguageId, IAsyncTokenizationSupportFactory> _factories = [];
+    private uint _nextLanguageId = GlobalLanguageId.PlainText.Value + 1;
 
     public event EventHandler<LanguageSupportsChangedEventArgs>? SupportsChanged;
 
@@ -39,57 +39,54 @@ public sealed class LanguageRegistry
 
     public LanguageRegistry()
     {
-        RegisterLanguageInternal(string.Empty, LanguageId.Null);
-        RegisterLanguageInternal("plaintext", LanguageId.PlainText);
+        RegisterLanguageInternal(string.Empty, GlobalLanguageId.Null);
+        RegisterLanguageInternal("plaintext", GlobalLanguageId.PlainText);
     }
 
-    private void RegisterLanguageInternal(string name, LanguageId id)
+    private void RegisterLanguageInternal(string name, GlobalLanguageId id)
     {
         _idToName[id] = name;
         _nameToId[name] = id;
     }
 
-    public LanguageId RegisterLanguage(string languageName)
+    public GlobalLanguageId RegisterLanguage(string languageName)
     {
         if (_nameToId.TryGetValue(languageName, out var existing))
             return existing;
 
-        if (_nextLanguageId > byte.MaxValue)
-            throw new InvalidOperationException("Maximum of 255 registered languages reached.");
-
-        var id = new LanguageId(_nextLanguageId++);
+        var id = new GlobalLanguageId(_nextLanguageId++);
         RegisterLanguageInternal(languageName, id);
         return id;
     }
 
-    public bool TryGetLanguageId(string languageName, out LanguageId languageId)
+    public bool TryGetLanguageId(string languageName, out GlobalLanguageId languageId)
         => _nameToId.TryGetValue(languageName, out languageId);
 
-    public bool TryGetLanguageName(LanguageId languageId, out string name)
+    public bool TryGetLanguageName(GlobalLanguageId languageId, out string name)
     {
         bool hasValue = _idToName.TryGetValue(languageId, out var lanName);
         name = lanName ?? string.Empty;
         return hasValue;
     }
 
-    public ITokenizationSupport? GetSupport(LanguageId languageId)
+    public ITokenizationSupport? GetSupport(GlobalLanguageId languageId)
         => _tokenizationSupports.TryGetValue(languageId, out var result) ? result : null;
 
-    public bool IsResolved(LanguageId languageId)
+    public bool IsResolved(GlobalLanguageId languageId)
         => _tokenizationSupports.ContainsKey(languageId);
 
-    public void Register(LanguageId languageId, ITokenizationSupport support)
+    public void Register(GlobalLanguageId languageId, ITokenizationSupport support)
     {
         _tokenizationSupports[languageId] = support;
         OnSupportsChanged([languageId]);
     }
 
-    public void RegisterFactory(LanguageId languageId, IAsyncTokenizationSupportFactory factory)
+    public void RegisterFactory(GlobalLanguageId languageId, IAsyncTokenizationSupportFactory factory)
     {
         _factories[languageId] = factory;
     }
 
-    public async ValueTask<ITokenizationSupport?> GetOrCreateSupportAsync(LanguageId languageId)
+    public async ValueTask<ITokenizationSupport?> GetOrCreateSupportAsync(GlobalLanguageId languageId)
     {
         if (_tokenizationSupports.TryGetValue(languageId, out var support))
             return support;
@@ -103,7 +100,7 @@ public sealed class LanguageRegistry
         return support;
     }
 
-    private void OnSupportsChanged(LanguageId[] languageIds)
+    private void OnSupportsChanged(GlobalLanguageId[] languageIds)
     {
         SupportsChanged?.Invoke(
             this,
@@ -113,7 +110,7 @@ public sealed class LanguageRegistry
 }
 
 public readonly record struct LanguageSupportsChangedEventArgs(
-    LanguageId[] ChangedLanguages,
+    GlobalLanguageId[] ChangedLanguages,
     bool IsColorMapChanged
 );
 

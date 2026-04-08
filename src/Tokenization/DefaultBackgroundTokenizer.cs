@@ -132,7 +132,9 @@ public class DefaultBackgroundTokenizer : IDisposable, IBackgroundTokenizer
                         TokenizeOneInvalidLine(builder);
                     }
                     // Commit the tokens obtained in this slice
-                    _tokenStore.SetMultilineTokens(builder.Finalize().ToArray(), _tokenizerWithStateStore.TextModel);
+                    _tokenStore.SetMultilineTokens(
+                        builder.Finalize().ToArray(),
+                        _tokenizerWithStateStore.TextModel);
                 }
             }
             finally

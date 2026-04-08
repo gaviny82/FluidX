@@ -164,11 +164,13 @@ internal static class MetadataConsts
     public const int BACKGROUND_OFFSET = 24;
 }
 
+/// <summary>
+/// Model-local language identifier used by token metadata.
+/// This id is constrained to 8 bits because it is packed into <see cref="LineTokenMetadata.RawValue"/>.
+/// Use <see cref="GlobalLanguageId"/> at registry and public model boundaries.
+/// </summary>
 public readonly record struct LanguageId(uint Value)
 {
-    public static readonly LanguageId Null = new(0);
-    public static readonly LanguageId PlainText = new(1);
-
     public static implicit operator uint(LanguageId languageId) => languageId.Value;
     public static explicit operator LanguageId(uint value) => new(value);
 

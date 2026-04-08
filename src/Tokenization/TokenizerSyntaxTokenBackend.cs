@@ -8,7 +8,9 @@ public class TokenizerSyntaxTokenBackend : SyntaxTokenBackendBase
 {
     private DefaultBackgroundTokenizer? _backgroundTokenizer = null;
     private readonly ContiguousTokensStore _tokens;
-    private readonly string _languageId;
+    private readonly GlobalLanguageId _languageId;
+    private readonly ModelLanguageIdMapper _languageIdMapper;
+    private LanguageId LocalLanguageId => _languageIdMapper.Encode(_languageId);
 
     private TokenizerWithStateStoreAndTextModel? _tokenizer => _backgroundTokenizer?.TokenizerWithStateStore;
 
@@ -19,17 +21,18 @@ public class TokenizerSyntaxTokenBackend : SyntaxTokenBackendBase
     public override bool HasTokens => _tokens.HasTokens;
 
     public TokenizerSyntaxTokenBackend(
-        ILanguageIdCodec languageIdCodec,
         TextModel textModel,
-        string languageId)
-        : base(languageIdCodec, textModel)
+        GlobalLanguageId languageId,
+        ModelLanguageIdMapper languageIdMapper)
+        : base(textModel)
     {
-        _tokens = new ContiguousTokensStore(languageIdCodec);
+        _tokens = new ContiguousTokensStore();
         _languageId = languageId;
-        TokenizationRegistry.Instance.TokenizationSupportsChanged += OnTokenizationSupportsChanged;
+        _languageIdMapper = languageIdMapper;
+        LanguageRegistry.Instance.SupportsChanged += OnTokenizationSupportsChanged;
     }
 
-    private void OnTokenizationSupportsChanged(object? sender, TokenizationSupportsChangedEventArgs e)
+    private void OnTokenizationSupportsChanged(object? sender, LanguageSupportsChangedEventArgs e)
     {
         if (e.ChangedLanguages.Contains(_languageId))
             ResetTokenization();
@@ -37,7 +40,7 @@ public class TokenizerSyntaxTokenBackend : SyntaxTokenBackendBase
 
     public override void Dispose()
     {
-        TokenizationRegistry.Instance.TokenizationSupportsChanged -= OnTokenizationSupportsChanged;
+        LanguageRegistry.Instance.SupportsChanged -= OnTokenizationSupportsChanged;
         GC.SuppressFinalize(this);
     }
 
@@ -56,7 +59,7 @@ public class TokenizerSyntaxTokenBackend : SyntaxTokenBackendBase
         {
             if (_textModel.IsTooLargeForTokenization)
                 return (null, null);
-            var tokenizationSupport = TokenizationRegistry.Instance.GetSupport(_languageId);
+            var tokenizationSupport = LanguageRegistry.Instance.GetSupport(_languageId);
             if (tokenizationSupport is null)
                 return (null, null);
             return (tokenizationSupport, tokenizationSupport.GetInitialState());
@@ -74,7 +77,7 @@ public class TokenizerSyntaxTokenBackend : SyntaxTokenBackendBase
                 _textModel.TextBuffer.LineCount,
                 tokenizationSupport,
                 _textModel,
-                _languageIdCodec),
+                _languageIdMapper),
                 _tokens
             );
             _backgroundTokenizer.BackgroundTokenizationStateChanged += OnBackgroundTokenizationStateChanged;
@@ -195,7 +198,7 @@ public class TokenizerSyntaxTokenBackend : SyntaxTokenBackendBase
     public override LineTokens GetLineTokens(int lineNumber)
     {
         string lineText = _textModel.TextBuffer.GetLineContent(lineNumber);
-        return _tokens.GetTokens(_languageId, lineNumber - 1, lineText);
+        return _tokens.GetTokens(LocalLanguageId, lineNumber - 1, lineText);
     }
 
     public override StandardTokenType GetTokenTypeIfInsertingCharacter(int lineNumber, int column, string character)

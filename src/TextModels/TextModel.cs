@@ -1,5 +1,6 @@
-﻿using FluidX.TextBuffers;
+using FluidX.TextBuffers;
 using FluidX.TextBuffers.PieceTree;
+using FluidX.Tokenization;
 
 namespace FluidX.TextModels;
 
@@ -20,7 +21,9 @@ public class TextModel : IDecorationTreesHost
     /// </summary>
     public long AlternativeVersionId { get; private set; } = 1;
 
-    public string LanguageId { get; set; } = "plaintext"; // TODO: Move to tokenization part
+    public GlobalLanguageId LanguageId => Tokenization.LanguageId;
+
+    public TokenizationTextModelPart Tokenization { get; }
 
     public TextModelOptions Options { get; private set; } = new(
         TabSize: 4,
@@ -52,7 +55,10 @@ public class TextModel : IDecorationTreesHost
     private readonly UndoRedoStack _undoRedoStack = new();
     private int[]? _trimAutoWhitespaceLineNumbers;
 
-    public TextModel(string source, DefaultEndOfLine eol)
+    public TextModel(
+        string source,
+        DefaultEndOfLine eol,
+        GlobalLanguageId languageId)
     {
         var builder = new PieceTreeTextBufferBuilder();
         builder.AcceptChunk(source);
@@ -61,6 +67,8 @@ public class TextModel : IDecorationTreesHost
         int bufferLineCount = TextBuffer.LineCount;
         int bufferTextLength = TextBuffer.GetValueLengthInRange(new(1, 1, bufferLineCount, TextBuffer.GetLineMaxColumn(bufferLineCount)), EndOfLinePreference.TextDefined);
         IsTooLargeForTokenization = bufferTextLength > LargeFileSizeThreshold || bufferLineCount > LargeFileLineCountThreshold;
+
+        Tokenization = new TokenizationTextModelPart(this, languageId);
     }
 
     public void Edit(TextEdit edit)

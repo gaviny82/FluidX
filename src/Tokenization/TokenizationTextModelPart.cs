@@ -7,11 +7,13 @@ namespace FluidX.Tokenization;
 public sealed class TokenizationTextModelPart : IDisposable
 {
     private readonly TextModel _textModel;
-    private readonly ILanguageIdCodec _languageIdCodec;
+    private readonly ModelLanguageIdMapper _languageIdMapper;
     private readonly SparseTokensStore _semanticTokens;
     private SyntaxTokenBackendBase _tokens;
 
-    public string LanguageId { get; private set; }
+    public GlobalLanguageId LanguageId { get; private set; }
+
+    public LanguageId LocalLanguageId => _languageIdMapper.Encode(LanguageId);
 
     public event EventHandler<ModelLanguageChangedEventArgs>? LanguageChanged;
     public event EventHandler<ModelLanguageConfigurationChangedEventArgs>? LanguageConfigurationChanged;
@@ -21,26 +23,24 @@ public sealed class TokenizationTextModelPart : IDisposable
 
     public TokenizationTextModelPart(
         TextModel textModel,
-        string languageId,
-        ILanguageIdCodec languageIdCodec)
+        GlobalLanguageId languageId)
     {
         _textModel = textModel;
-        _languageIdCodec = languageIdCodec;
+        _languageIdMapper = new ModelLanguageIdMapper();
         LanguageId = languageId;
-        _textModel.LanguageId = languageId;
 
-        _tokens = CreateSyntaxBackend(languageIdCodec, LanguageId);
+        _tokens = CreateSyntaxBackend(LanguageId, _languageIdMapper);
         _tokens.TokensChanged += OnTokensChanged;
         _tokens.BackgroundTokenizationStateChanged += OnBackgroundTokenizationStateChanged;
 
-        _semanticTokens = new SparseTokensStore(languageIdCodec);
+        _semanticTokens = new SparseTokensStore();
         _textModel.ContentChanged += OnTextModelContentChanged;
 
         _tokens.ResetTokenization(fireTokenChangeEvent: false);
     }
 
-    private SyntaxTokenBackendBase CreateSyntaxBackend(ILanguageIdCodec languageIdCodec, string languageId)
-        => new TokenizerSyntaxTokenBackend(languageIdCodec, _textModel, languageId);
+    private SyntaxTokenBackendBase CreateSyntaxBackend(GlobalLanguageId languageId, ModelLanguageIdMapper languageIdMapper)
+        => new TokenizerSyntaxTokenBackend(_textModel, languageId, languageIdMapper);
 
     public bool HasTokens => _tokens.HasTokens;
 
@@ -132,14 +132,15 @@ public sealed class TokenizationTextModelPart : IDisposable
     public LineTokens[]? TokenizeLinesAt(int lineNumber, ReadOnlySpan<string> lines)
         => _tokens.TokenizeLinesAt(lineNumber, lines);
 
-    public string GetLanguageIdAtPosition(int lineNumber, int column)
+    public GlobalLanguageId GetLanguageIdAtPosition(int lineNumber, int column)
     {
         var position = _textModel.ValidatePosition(new TextPosition(lineNumber, column));
         var lineTokens = GetLineTokens(position.LineNumber);
-        return lineTokens.GetLanguageId(lineTokens.FindTokenIndexAtOffset(position.Column - 1));
+        var localLanguageId = lineTokens.GetLanguageId(lineTokens.FindTokenIndexAtOffset(position.Column - 1));
+        return _languageIdMapper.Decode(localLanguageId);
     }
 
-    public void SetLanguageId(string languageId, string source = "api")
+    public void SetLanguageId(GlobalLanguageId languageId, string source = "api")
     {
         if (LanguageId == languageId)
             return;
@@ -147,20 +148,19 @@ public sealed class TokenizationTextModelPart : IDisposable
         var e = new ModelLanguageChangedEventArgs(LanguageId, languageId, source);
 
         LanguageId = languageId;
-        _textModel.LanguageId = languageId;
 
         ReplaceSyntaxBackend(languageId);
         LanguageChanged?.Invoke(this, e);
         LanguageConfigurationChanged?.Invoke(this, new ModelLanguageConfigurationChangedEventArgs());
     }
 
-    private void ReplaceSyntaxBackend(string languageId)
+    private void ReplaceSyntaxBackend(GlobalLanguageId languageId)
     {
         _tokens.TokensChanged -= OnTokensChanged;
         _tokens.BackgroundTokenizationStateChanged -= OnBackgroundTokenizationStateChanged;
         _tokens.Dispose();
 
-        _tokens = CreateSyntaxBackend(_languageIdCodec, languageId);
+        _tokens = CreateSyntaxBackend(languageId, _languageIdMapper);
         _tokens.TokensChanged += OnTokensChanged;
         _tokens.BackgroundTokenizationStateChanged += OnBackgroundTokenizationStateChanged;
         _tokens.ResetTokenization(fireTokenChangeEvent: true);
@@ -204,8 +204,8 @@ public sealed class TokenizationTextModelPart : IDisposable
 }
 
 public readonly record struct ModelLanguageChangedEventArgs(
-    string OldLanguage,
-    string NewLanguage,
+    GlobalLanguageId OldLanguage,
+    GlobalLanguageId NewLanguage,
     string Source
 );
 

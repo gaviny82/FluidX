@@ -201,7 +201,7 @@ public class ContiguousTokensStore
                 if (hasChange)
                 {
                     SetTokens(
-                        textModel.LanguageId,
+                        textModel.Tokenization.LocalLanguageId,
                         lineNumber - 1,
                         textModel.TextBuffer.GetLineLength(lineNumber),
                         element.GetLineTokens(lineNumber),
@@ -211,7 +211,7 @@ public class ContiguousTokensStore
                 else
                 {
                     bool lineHasChange = SetTokens(
-                        textModel.LanguageId,
+                        textModel.Tokenization.LocalLanguageId,
                         lineNumber - 1,
                         textModel.TextBuffer.GetLineLength(lineNumber),
                         element.GetLineTokens(lineNumber),
