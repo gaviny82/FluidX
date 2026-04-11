@@ -41,6 +41,12 @@ public class TokenizerSyntaxTokenBackend : SyntaxTokenBackendBase
     public override void Dispose()
     {
         LanguageRegistry.Instance.SupportsChanged -= OnTokenizationSupportsChanged;
+        if (_backgroundTokenizer is not null)
+        {
+            _backgroundTokenizer.BackgroundTokenizationStateChanged -= OnBackgroundTokenizationStateChanged;
+            _backgroundTokenizer.Dispose();
+            _backgroundTokenizer = null;
+        }
         GC.SuppressFinalize(this);
     }
 
@@ -81,6 +87,8 @@ public class TokenizerSyntaxTokenBackend : SyntaxTokenBackendBase
                 _tokens
             );
             _backgroundTokenizer.BackgroundTokenizationStateChanged += OnBackgroundTokenizationStateChanged;
+            _backgroundTokenizer.BeginTextBufferEdit();
+            _backgroundTokenizer.EndTextBufferEdit();
         }
         else
         {
@@ -109,12 +117,20 @@ public class TokenizerSyntaxTokenBackend : SyntaxTokenBackendBase
         }
         else if (!e.IsEolChange) // We don't have to do anything on an EOL change
         {
-            foreach (var c in e.Changes)
+            _backgroundTokenizer?.BeginTextBufferEdit();
+            try
             {
-                (int eolCount, int firstLineLength, _, _) = EOLCounter.CountEOL(c.Text);
-                _tokens.AcceptEdit(c.Range, eolCount, firstLineLength);
+                foreach (var c in e.Changes)
+                {
+                    (int eolCount, int firstLineLength, _, _) = EOLCounter.CountEOL(c.Text);
+                    _tokens.AcceptEdit(c.Range, eolCount, firstLineLength);
+                }
+                _tokenizer?.Store.AcceptChanges([..e.Changes]);
             }
-            _tokenizer?.Store.AcceptChanges([..e.Changes]);
+            finally
+            {
+                _backgroundTokenizer?.EndTextBufferEdit();
+            }
         }
     }
 

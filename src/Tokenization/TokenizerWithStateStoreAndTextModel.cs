@@ -100,6 +100,8 @@ public class TokenizerWithStateStoreAndTextModel
                 true,
                 state
             );
+            result.Add(new LineTokens(r.Tokens.Select(t => new LineToken(t.StartIndex, t.Metadata)).ToArray(), line));
+            state = r.EndState;
         }
 
         return result;

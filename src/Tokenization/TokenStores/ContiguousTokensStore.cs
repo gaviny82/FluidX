@@ -68,7 +68,7 @@ public class ContiguousTokensStore
     private void EnsureLine(int lineIndex)
     {
         _lineTokens.Capacity = Math.Max(_lineTokens.Capacity, lineIndex + 1);
-        while (lineIndex > _lineTokens.Count)
+        while (_lineTokens.Count <= lineIndex)
         {
             _lineTokens.Add(null);
         }
@@ -94,6 +94,7 @@ public class ContiguousTokensStore
         }
     }
 
+    // Returns true if the tokens were actually changed (or if checkEquality is false)
     public bool SetTokens(LanguageId topLevelLanguageid, int lineIndex, int lineTextLength, LineToken[]? tokens, bool checkEquality)
     {
         tokens = MassageTokens(
@@ -108,7 +109,7 @@ public class ContiguousTokensStore
 
         if (checkEquality)
         {
-            return Equals(oldTokens, tokens);
+            return !Equals(oldTokens, tokens);
         }
         return false;
     }
@@ -196,7 +197,7 @@ public class ContiguousTokensStore
             int minChangedLineNumber = 0;
             int maxChangedLineNumber = 0;
             bool hasChange = false;
-            for (int lineNumber = element.StartLineNumber; lineNumber < element.EndLineNumber; lineNumber++)
+            for (int lineNumber = element.StartLineNumber; lineNumber <= element.EndLineNumber; lineNumber++)
             {
                 if (hasChange)
                 {

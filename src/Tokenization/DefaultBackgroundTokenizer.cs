@@ -107,10 +107,12 @@ public class DefaultBackgroundTokenizer : IDisposable, IBackgroundTokenizer
 
         while (!cancellationToken.IsCancellationRequested)
         {
+            bool writeLockAcquired = false;
             try
             {
                 await _workAvailable.WaitAsync(cancellationToken).ConfigureAwait(false); // Only continues if the UI thread signals that there is work to do.
                 await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false); // Acquires the write lock to wait for any ongoing edits to complete.
+                writeLockAcquired = true;
 
                 // Tokenize in fixed-time slices to ensure responsiveness
                 while (!_isWriteRequested)
@@ -137,9 +139,14 @@ public class DefaultBackgroundTokenizer : IDisposable, IBackgroundTokenizer
                         _tokenizerWithStateStore.TextModel);
                 }
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
             finally
             {
-                _writeLock.Release(); // Releases the write lock to allow the UI thread to proceed with the edit.
+                if (writeLockAcquired)
+                    _writeLock.Release(); // Releases the write lock to allow the UI thread to proceed with the edit.
             }
         }
     }
@@ -173,7 +180,14 @@ public class DefaultBackgroundTokenizer : IDisposable, IBackgroundTokenizer
     public void Dispose()
     {
         _cts.Cancel();
-        _tokenizationTask?.Wait();
+        try
+        {
+            _tokenizationTask?.Wait();
+        }
+        catch (AggregateException e) when (e.InnerExceptions.All(static ex => ex is OperationCanceledException))
+        {
+            // Expected on cancellation.
+        }
         _writeLock.Dispose();
         _workAvailable.Dispose();
         _cts.Dispose();

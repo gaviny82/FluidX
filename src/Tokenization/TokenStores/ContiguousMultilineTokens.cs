@@ -174,7 +174,7 @@ public class ContiguousMultilineTokens
         foreach (var lineTokens in _tokens)
         {
             BinaryPrimitives.WriteUInt32BigEndian(destination[offset..], (uint)(lineTokens.Length * 8)); offset += 4;
-            MemoryMarshal.AsBytes(lineTokens).CopyTo(destination);
+            MemoryMarshal.AsBytes(lineTokens).CopyTo(destination[offset..]);
             offset += lineTokens.Length * 8;
         }
         return offset;
