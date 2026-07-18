@@ -7,17 +7,15 @@ public class LineTokens : IEnumerable<LineToken>
 {
     private readonly LineToken[] _tokens;
     private readonly string _text;
-    public ILanguageIdCodec LanguageIdCodec { get; init; }
 
     public string LineContent => _text;
     public int TextLength => _text.Length;
     public int Count => _tokens.Length;
 
-    public LineTokens(LineToken[] tokens, string text, ILanguageIdCodec decoder)
+    public LineTokens(LineToken[] tokens, string text)
     {
         _tokens = tokens;
         _text = text;
-        LanguageIdCodec = decoder;
     }
 
     public readonly static LineTokenMetadata DefaultTokenMetadata = new()
@@ -27,13 +25,13 @@ public class LineTokens : IEnumerable<LineToken>
         Background = ColorId.DefaultBackground,
     };
 
-    public static LineTokens CreateEmpty(string lineContent, ILanguageIdCodec decoder)
+    public static LineTokens CreateEmpty(string lineContent)
     {
         LineToken[] tokens = [new LineToken(lineContent.Length, DefaultTokenMetadata)];
-        return new(tokens, lineContent, decoder);
+        return new(tokens, lineContent);
     }
 
-    public static LineTokens CreateFromTextAndMetadata((string text, LineTokenMetadata metadata)[] data, ILanguageIdCodec decoder)
+    public static LineTokens CreateFromTextAndMetadata((string text, LineTokenMetadata metadata)[] data)
     {
         int offset = 0;
         string fullText = "";
@@ -44,7 +42,7 @@ public class LineTokens : IEnumerable<LineToken>
             offset += text.Length;
             fullText += text;
         }
-        return new(tokens.ToArray(), fullText, decoder);
+        return new(tokens.ToArray(), fullText);
     }
 
     #region Equality
@@ -101,11 +99,8 @@ public class LineTokens : IEnumerable<LineToken>
         return _tokens[tokenIndex].Metadata;
     }
 
-    public string GetLanguageId(int tokenIndex)
-    {
-        LanguageId langId = _tokens[tokenIndex].Metadata.LanguageId;
-        return LanguageIdCodec.DecodeLanguageId(langId);
-    }
+    public LanguageId GetLanguageId(int tokenIndex)
+        => _tokens[tokenIndex].Metadata.LanguageId;
 
     /// <summary>
     /// Find the token containing offset `offset`.
@@ -195,7 +190,7 @@ public class LineTokens : IEnumerable<LineToken>
             }
         }
 
-        return new LineTokens(newTokens.ToArray(), text, LanguageIdCodec);
+        return new LineTokens(newTokens.ToArray(), text);
     }
 
     #region IEnumerable Members
@@ -222,8 +217,6 @@ public readonly struct SliceLineTokens
 
     private readonly int _firstTokenIndex;
     private readonly int _tokensCount;
-
-    public ILanguageIdCodec LanguageIdCodec => _source.LanguageIdCodec;
 
     public SliceLineTokens(LineTokens source, int startOffset, int endOffset, int deltaOffset)
     {

@@ -13,38 +13,38 @@ public struct LineTokenMetadata
 
     public LanguageId LanguageId
     {
-        readonly get => (LanguageId)((RawValue & MetadataConsts.LANGUAGEID_MASK) >> MetadataConsts.LANGUAGEID_OFFSET);
-        set => RawValue |= ((uint)value << MetadataConsts.LANGUAGEID_OFFSET) & MetadataConsts.LANGUAGEID_MASK;
+        readonly get => new((RawValue & MetadataConsts.LANGUAGEID_MASK) >> MetadataConsts.LANGUAGEID_OFFSET);
+        set => RawValue = (RawValue & ~MetadataConsts.LANGUAGEID_MASK) | ((value.Value << MetadataConsts.LANGUAGEID_OFFSET) & MetadataConsts.LANGUAGEID_MASK);
     }
 
     public StandardTokenType TokenType
     {
         readonly get => (StandardTokenType)((RawValue & MetadataConsts.TOKEN_TYPE_MASK) >> MetadataConsts.TOKEN_TYPE_OFFSET);
-        set => RawValue |= ((uint)value << MetadataConsts.TOKEN_TYPE_OFFSET) & MetadataConsts.TOKEN_TYPE_MASK;
+        set => RawValue = (RawValue & ~MetadataConsts.TOKEN_TYPE_MASK) | (((uint)value << MetadataConsts.TOKEN_TYPE_OFFSET) & MetadataConsts.TOKEN_TYPE_MASK);
     }
 
     public bool ContainsBalancedBrackets
     {
         readonly get => ((RawValue & MetadataConsts.BALANCED_BRACKETS_MASK) >> MetadataConsts.BALANCED_BRACKETS_OFFSET) != 0;
-        set => RawValue |= (value ? 1u : 0u) << MetadataConsts.BALANCED_BRACKETS_OFFSET;
+        set => RawValue = (RawValue & ~MetadataConsts.BALANCED_BRACKETS_MASK) | ((value ? 1u : 0u) << MetadataConsts.BALANCED_BRACKETS_OFFSET);
     }
 
     public FontStyle FontStyle
     {
         readonly get => (FontStyle)((RawValue & MetadataConsts.FONT_STYLE_MASK) >> MetadataConsts.FONT_STYLE_OFFSET);
-        set => RawValue |= ((uint)value << MetadataConsts.FONT_STYLE_OFFSET) & MetadataConsts.FONT_STYLE_MASK;
+        set => RawValue = (RawValue & ~MetadataConsts.FONT_STYLE_MASK) | (((uint)value << MetadataConsts.FONT_STYLE_OFFSET) & MetadataConsts.FONT_STYLE_MASK);
     }
 
     public ColorId Foreground
     {
         readonly get => (ColorId)((RawValue & MetadataConsts.FOREGROUND_MASK) >> MetadataConsts.FOREGROUND_OFFSET);
-        set => RawValue |= ((uint)value << MetadataConsts.FOREGROUND_OFFSET) & MetadataConsts.FOREGROUND_MASK;
+        set => RawValue = (RawValue & ~MetadataConsts.FOREGROUND_MASK) | (((uint)value << MetadataConsts.FOREGROUND_OFFSET) & MetadataConsts.FOREGROUND_MASK);
     }
 
     public ColorId Background
     {
         readonly get => (ColorId)((RawValue & MetadataConsts.BACKGROUND_MASK) >> MetadataConsts.BACKGROUND_OFFSET);
-        set => RawValue |= ((uint)value << MetadataConsts.BACKGROUND_OFFSET) & MetadataConsts.BACKGROUND_MASK;
+        set => RawValue = (RawValue & ~MetadataConsts.BACKGROUND_MASK) | (((uint)value << MetadataConsts.BACKGROUND_OFFSET) & MetadataConsts.BACKGROUND_MASK);
     }
 
     public readonly string GetClassName()
@@ -164,13 +164,17 @@ internal static class MetadataConsts
     public const int BACKGROUND_OFFSET = 24;
 }
 
-/**
- * Open ended enum at runtime
- */
-public enum LanguageId
+/// <summary>
+/// Model-local language identifier used by token metadata.
+/// This id is constrained to 8 bits because it is packed into <see cref="LineTokenMetadata.RawValue"/>.
+/// Use <see cref="GlobalLanguageId"/> at registry and public model boundaries.
+/// </summary>
+public readonly record struct LanguageId(uint Value)
 {
-    Null = 0,
-    PlainText = 1
+    public static implicit operator uint(LanguageId languageId) => languageId.Value;
+    public static explicit operator LanguageId(uint value) => new(value);
+
+    public override string ToString() => Value.ToString();
 }
 
 /**
@@ -205,10 +209,4 @@ public enum StandardTokenType
     Comment = 1,
     String = 2,
     RegEx = 3
-}
-
-public interface ILanguageIdCodec
-{
-    LanguageId EncodeLanguageId(string languageId);
-    string DecodeLanguageId(LanguageId languageId);
 }

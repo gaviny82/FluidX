@@ -10,7 +10,8 @@ public class TokenizerWithStateStoreAndTextModel
 
     public TrackingTokenizationStateStore Store { get; }
     public TextModel TextModel { get; } // TODO: use ITextModel
-    public ILanguageIdCodec LanguageIdCodec { get; }
+    public GlobalLanguageId LanguageId => TextModel.LanguageId;
+    public ModelLanguageIdMapper LanguageIdMapper { get; }
 
     private const int CheapTokenizationLengthLimit = 2048;
 
@@ -19,14 +20,14 @@ public class TokenizerWithStateStoreAndTextModel
     public TokenizerWithStateStoreAndTextModel(
         int lineCount,
         ITokenizationSupport tokenizationSupport,
-        TextModel textModel, 
-        ILanguageIdCodec languageIdCodec)
+        TextModel textModel,
+        ModelLanguageIdMapper languageIdMapper)
     {
         _tokenizationSupport = tokenizationSupport;
         _initialState = tokenizationSupport.GetInitialState();
         Store = new TrackingTokenizationStateStore(lineCount);
         TextModel = textModel;
-        LanguageIdCodec = languageIdCodec;
+        LanguageIdMapper = languageIdMapper;
     }
 
     public ITokenizerState? GetStartState(int lineNumber)
@@ -37,23 +38,23 @@ public class TokenizerWithStateStoreAndTextModel
 
     public void UpdateTokensUntilLine(ContiguousMultilineTokensBuilder builder, int lineNumber)
     {
-        string languageId = TextModel.LanguageId;
+        var languageId = LanguageId;
         while (true)
         {
             if (GetFirstInvalidLine() is not (int invalidLineNumber, ITokenizerState startState)
                 || invalidLineNumber > lineNumber)
                 return;
             string text = TextModel.TextBuffer.GetLineContent(invalidLineNumber);
-            var r = SafeTokenize(
-                LanguageIdCodec,
-                languageId,
-                _tokenizationSupport,
-                text,
-                true,
-                startState
-            );
-            // TODO: Confirm the definitions of EncodedTokenizerToken and LineToken are compatible
-            builder.Add(invalidLineNumber, r.Tokens.Select(t => new LineToken(t.StartIndex, t.Metadata)).ToArray());
+            var r = SafeTokenize(languageId, _tokenizationSupport, text, true, startState);
+            // Convert EncodedTokenizerToken to LineToken (StartIndex => EndOffset)
+            var lineTokens = new LineToken[r.Tokens.Length];
+            for (int i = 0; i < r.Tokens.Length; i++)
+            {
+                var token = r.Tokens[i];
+                int endOffset = (i + 1 < r.Tokens.Length) ? r.Tokens[i + 1].StartIndex : text.Length;
+                lineTokens[i] = new LineToken(endOffset, token.Metadata);
+            }
+            builder.Add(invalidLineNumber, lineTokens);
             Store.SetEndState(invalidLineNumber, r.EndState);
         }
     }
@@ -65,21 +66,20 @@ public class TokenizerWithStateStoreAndTextModel
         if (lineStartState is null)
             return StandardTokenType.Other;
 
-        var languageId = TextModel.LanguageId;
+        var languageId = LanguageId;
         string lineContent = TextModel.TextBuffer.GetLineContent(position.LineNumber);
 
         // Create the text as if `character` was inserted
         string text = $"{lineContent[0..(position.Column - 1)]}{character}{lineContent[(position.Column - 1)..]}";
-        var r = SafeTokenize(
-            LanguageIdCodec,
-            languageId,
-            _tokenizationSupport,
-            text,
-            true,
-            lineStartState
-        );
+            var r = SafeTokenize(
+                languageId,
+                _tokenizationSupport,
+                text,
+                true,
+                lineStartState
+            );
         // TODO: Confirm the definitions of EncodedTokenizerToken and LineToken are compatible
-        var lineTokens = new LineTokens(r.Tokens.Select(t => new LineToken(t.StartIndex, t.Metadata)).ToArray(), text, LanguageIdCodec);
+        var lineTokens = new LineTokens(r.Tokens.Select(t => new LineToken(t.StartIndex, t.Metadata)).ToArray(), text);
         if (lineTokens.Count == 0)
             return StandardTokenType.Other;
 
@@ -94,20 +94,21 @@ public class TokenizerWithStateStoreAndTextModel
         if (lineStartState is null)
             return null;
 
-        var languageId = TextModel.LanguageId;
+        var languageId = LanguageId;
         List<LineTokens> result = [];
 
         var state = lineStartState;
         foreach (var line in lines)
         {
             var r = SafeTokenize(
-                LanguageIdCodec,
                 languageId,
                 _tokenizationSupport,
                 line,
                 true,
                 state
             );
+            result.Add(new LineTokens(r.Tokens.Select(t => new LineToken(t.StartIndex, t.Metadata)).ToArray(), line));
+            state = r.EndState;
         }
 
         return result;
@@ -146,12 +147,12 @@ public class TokenizerWithStateStoreAndTextModel
         }
 
         var state = GuessStartState(startLineNumber);
-        var languageId = TextModel.LanguageId;
+        var languageId = LanguageId;
 
         for (int lineNumber = startLineNumber; lineNumber <= endLineNumber; lineNumber++)
         {
             string text = TextModel.TextBuffer.GetLineContent(lineNumber);
-            var r = SafeTokenize(LanguageIdCodec, languageId, _tokenizationSupport, text, true, state);
+            var r = SafeTokenize(languageId, _tokenizationSupport, text, true, state);
             // TODO: Confirm the definitions of EncodedTokenizerToken and LineToken are compatible
             builder.Add(lineNumber, r.Tokens.Select(t => new LineToken(t.StartIndex, t.Metadata)).ToArray());
             state = r.EndState;
@@ -167,11 +168,11 @@ public class TokenizerWithStateStoreAndTextModel
         if (initialState is null)
             initialState = _tokenizationSupport.GetInitialState();
 
-        var languageId = TextModel.LanguageId;
+        var languageId = LanguageId;
         var state = initialState;
         foreach (var line in likelyRelevantLines)
         {
-            var r = SafeTokenize(LanguageIdCodec, languageId, _tokenizationSupport, line, false, state);
+            var r = SafeTokenize(languageId, _tokenizationSupport, line, false, state);
             state = r.EndState;
         }
         return state;
@@ -205,8 +206,7 @@ public class TokenizerWithStateStoreAndTextModel
     }
 
     private EncodedTokenizationResult SafeTokenize(
-        ILanguageIdCodec languageIdCodec,
-        string languageId,
+        GlobalLanguageId languageId,
         ITokenizationSupport? tokenizationSupport,
         string text,
         bool hasEOL,
@@ -226,7 +226,7 @@ public class TokenizerWithStateStoreAndTextModel
             }
         }
 
-        return r ?? NullState.NullTokenizeEncoded(languageIdCodec.EncodeLanguageId(languageId), state);
+        return r ?? NullState.NullTokenizeEncoded(LanguageIdMapper.Encode(languageId), state);
     }
 }
 
@@ -236,8 +236,8 @@ public struct NullState : ITokenizerState
 
     public bool Equals(ITokenizerState? other) => other is NullState;
 
-    public static TokenizationResult NullTokenize(string languageId, ITokenizerState state)
-        => new([new TokenizerToken(0, "", languageId)], state);
+    public static TokenizationResult NullTokenize(GlobalLanguageId languageId, ITokenizerState state)
+        => new([new TokenizerToken(0, "", new(languageId.Value))], state);
 
     public static EncodedTokenizationResult NullTokenizeEncoded(LanguageId languageId, ITokenizerState? state)
     {

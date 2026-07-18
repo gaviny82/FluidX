@@ -11,6 +11,7 @@ public class TrackingTokenizationStateStore
 
     public TrackingTokenizationStateStore(int lineCount)
     {
+        _tokenizationStateStore.AddRange(Enumerable.Repeat<ITokenizerState?>(null, lineCount + 1));
         _invalidEndStatesLineNumbers.AddRange(new Range(1, lineCount + 1));
         _lineCount = lineCount;
     }
@@ -23,7 +24,7 @@ public class TrackingTokenizationStateStore
     private bool SetEndStateInternal(int lineNumber, ITokenizerState state)
     {
         var oldState = _tokenizationStateStore[lineNumber];
-        if (oldState != state)
+        if (oldState == state)
             return false;
 
         _tokenizationStateStore[lineNumber] = state;

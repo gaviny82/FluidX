@@ -20,8 +20,6 @@ public interface IBackgroundTokenizer : IDisposable
      * when the change does not even propagate to that viewport.
      */
     void RequestTokens(int startLineNumber, int endLineNumberExclusive);
-
-    void ReportMismatchingTokens(int lineNumber);
 }
 
 public interface IBackgroundTokenizationStore

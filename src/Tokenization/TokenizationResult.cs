@@ -3,7 +3,7 @@
 namespace FluidX.Tokenization;
 
 
-public record struct TokenizerToken(int Offset, string Type, string Language)
+public record struct TokenizerToken(int Offset, string Type, GlobalLanguageId Language)
 {
     public override readonly string ToString() => $"({Offset}, {Type})";
 }

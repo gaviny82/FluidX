@@ -11,13 +11,16 @@ namespace FluidX.Tokenization;
 // 1. implement lock-free reads using per-line atomic replacements or snapshoting
 // so rendering does not require the write lock.
 // 2. Cancellation token + clean task exit
-public class DefaultBackgroundTokenizer
+public class DefaultBackgroundTokenizer : IDisposable, IBackgroundTokenizer
 {
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly SemaphoreSlim _workAvailable = new(0, 1);
 
     private readonly TokenizerWithStateStoreAndTextModel _tokenizerWithStateStore;
     private readonly ContiguousTokensStore _tokenStore;
+
+    public TokenizerWithStateStoreAndTextModel TokenizerWithStateStore
+        => _tokenizerWithStateStore;
 
     public BackgroundTokenizationState BackgroundTokenizationState
     {
@@ -33,9 +36,12 @@ public class DefaultBackgroundTokenizer
 
     public EventHandler? BackgroundTokenizationStateChanged;
 
+    //TODO: TokensChanged event
+
 
     private Task? _tokenizationTask = null;
     private volatile bool _isWriteRequested = false; // Must be volatile to ensure visibility across threads.
+    private CancellationTokenSource _cts = new();
 
     private bool HasLinesToTokenize
         => !_tokenizerWithStateStore.Store.AllStatesValid;
@@ -59,7 +65,7 @@ public class DefaultBackgroundTokenizer
         // TODO: A lock might be needed to guard this, if called from multiple threads.
         // If there is always a single UI thread calling this, then it is fine.
         if (_tokenizationTask is null)
-            _tokenizationTask = TokenizeInBackgroundAsync();
+            _tokenizationTask = TokenizeInBackgroundAsync(_cts.Token);
 
         if (HasLinesToTokenize && _workAvailable.CurrentCount == 0)
         {
@@ -94,17 +100,19 @@ public class DefaultBackgroundTokenizer
         StartBackgroundTokenizationIfNeeded();
     }
 
-    private async Task TokenizeInBackgroundAsync()
+    private async Task TokenizeInBackgroundAsync(CancellationToken cancellationToken)
     {
         var sw = Stopwatch.StartNew();
         TimeSpan maxTimeSlice = TimeSpan.FromMilliseconds(2);
 
-        while (true)
+        while (!cancellationToken.IsCancellationRequested)
         {
+            bool writeLockAcquired = false;
             try
             {
-                await _workAvailable.WaitAsync(); // Only continues if the UI thread signals that there is work to do.
-                await _writeLock.WaitAsync(); // Acquires the write lock to wait for any ongoing edits to complete.
+                await _workAvailable.WaitAsync(cancellationToken).ConfigureAwait(false); // Only continues if the UI thread signals that there is work to do.
+                await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false); // Acquires the write lock to wait for any ongoing edits to complete.
+                writeLockAcquired = true;
 
                 // Tokenize in fixed-time slices to ensure responsiveness
                 while (!_isWriteRequested)
@@ -126,12 +134,19 @@ public class DefaultBackgroundTokenizer
                         TokenizeOneInvalidLine(builder);
                     }
                     // Commit the tokens obtained in this slice
-                    _tokenStore.SetMultilineTokens(builder.Finalize().ToArray(), _tokenizerWithStateStore.TextModel);
+                    _tokenStore.SetMultilineTokens(
+                        builder.Finalize().ToArray(),
+                        _tokenizerWithStateStore.TextModel);
                 }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
             }
             finally
             {
-                _writeLock.Release(); // Releases the write lock to allow the UI thread to proceed with the edit.
+                if (writeLockAcquired)
+                    _writeLock.Release(); // Releases the write lock to allow the UI thread to proceed with the edit.
             }
         }
     }
@@ -160,5 +175,27 @@ public class DefaultBackgroundTokenizer
     public void InvalidateLines(Range range)
     {
         _tokenizerWithStateStore.Store.InvalidateEndStateRange(range);
+    }
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        try
+        {
+            _tokenizationTask?.Wait();
+        }
+        catch (AggregateException e) when (e.InnerExceptions.All(static ex => ex is OperationCanceledException))
+        {
+            // Expected on cancellation.
+        }
+        _writeLock.Dispose();
+        _workAvailable.Dispose();
+        _cts.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
+    public void RequestTokens(int startLineNumber, int endLineNumberExclusive)
+    {
+        _tokenizerWithStateStore.Store.InvalidateEndStateRange(new Range(startLineNumber, endLineNumberExclusive));
     }
 }

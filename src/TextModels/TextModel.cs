@@ -1,5 +1,6 @@
-﻿using FluidX.TextBuffers;
+using FluidX.TextBuffers;
 using FluidX.TextBuffers.PieceTree;
+using FluidX.Tokenization;
 
 namespace FluidX.TextModels;
 
@@ -20,7 +21,9 @@ public class TextModel : IDecorationTreesHost
     /// </summary>
     public long AlternativeVersionId { get; private set; } = 1;
 
-    public string LanguageId { get; set; } = "plaintext"; // TODO: Move to tokenization part
+    public GlobalLanguageId LanguageId => Tokenization.LanguageId;
+
+    public TokenizationTextModelPart Tokenization { get; }
 
     public TextModelOptions Options { get; private set; } = new(
         TabSize: 4,
@@ -29,6 +32,11 @@ public class TextModel : IDecorationTreesHost
         DefaultEOL: DefaultEndOfLine.LF,
         TrimAutoWhitespace: true
     );
+
+    public bool IsTooLargeForTokenization { get; private init; }
+
+    private const int LargeFileSizeThreshold = 20 * 1024 * 1024; // 20 MB;
+    private const int LargeFileLineCountThreshold = 300 * 1000; // 300K lines
 
     public event TextModelModelContentChangedEventHandler? ContentChanged;
 
@@ -47,11 +55,20 @@ public class TextModel : IDecorationTreesHost
     private readonly UndoRedoStack _undoRedoStack = new();
     private int[]? _trimAutoWhitespaceLineNumbers;
 
-    public TextModel(string source, DefaultEndOfLine eol)
+    public TextModel(
+        string source,
+        DefaultEndOfLine eol,
+        GlobalLanguageId languageId)
     {
         var builder = new PieceTreeTextBufferBuilder();
         builder.AcceptChunk(source);
         TextBuffer = builder.Finish().Create(eol);
+
+        int bufferLineCount = TextBuffer.LineCount;
+        int bufferTextLength = TextBuffer.GetValueLengthInRange(new(1, 1, bufferLineCount, TextBuffer.GetLineMaxColumn(bufferLineCount)), EndOfLinePreference.TextDefined);
+        IsTooLargeForTokenization = bufferTextLength > LargeFileSizeThreshold || bufferLineCount > LargeFileLineCountThreshold;
+
+        Tokenization = new TokenizationTextModelPart(this, languageId);
     }
 
     public void Edit(TextEdit edit)
@@ -400,6 +417,34 @@ public class TextModel : IDecorationTreesHost
         int lineCount = TextBuffer.LineCount;
         int endColumn = TextBuffer.GetLineMaxColumn(lineCount);
         return new(1, 1, lineCount, endColumn);
+    }
+
+    public TextPosition ValidatePosition(TextPosition position, bool allowInSurrogatePairs = false)
+    {
+        int lineNumber = position.LineNumber;
+        int column = position.Column;
+        int lineCount = TextBuffer.LineCount;
+
+        if (lineNumber < 1)
+            return new TextPosition(1, 1);
+        if (lineNumber > lineCount)
+            return new TextPosition(lineCount, TextBuffer.GetLineMaxColumn(lineCount));
+        if (column <= 1)
+            return new TextPosition(lineNumber, 1);
+        int maxColumn = TextBuffer.GetLineMaxColumn(lineNumber);
+        if (column > maxColumn)
+            return new TextPosition(lineNumber, maxColumn);
+
+        if (!allowInSurrogatePairs)
+        {
+            // If the position would end up in the middle of a high-low surrogate pair,
+            // we move it to before the pair. At this point, column > 1 is requried.
+            char charCodeBefore = TextBuffer.GetLineCharCode(lineNumber, column - 2);
+            if (char.IsHighSurrogate(charCodeBefore))
+                return new TextPosition(lineNumber, column - 1);
+        }
+
+        return position;
     }
 
     /// <summary>
