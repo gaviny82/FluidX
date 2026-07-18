@@ -1,9 +1,13 @@
-using FluidX.Tokenization;
-using FluidX.TokenizationTextMateDemo;
+using System.Globalization;
 using FluidX.TextBuffers;
 using FluidX.TextModels;
+using FluidX.Tokenization;
+using FluidX.TokenizationTextMateDemo;
+using Spectre.Console;
 using TextMateSharp.Grammars;
 using TextMateSharp.Registry;
+using TextMateSharp.Themes;
+using FontStyle = FluidX.Tokenization.TokenStores.FontStyle;
 
 if (args.Length != 1)
 {
@@ -36,6 +40,7 @@ if (string.IsNullOrWhiteSpace(scopeName))
 }
 
 var registry = new Registry(options);
+var theme = registry.GetTheme();
 var grammar = registry.LoadGrammar(scopeName);
 if (grammar is null)
 {
@@ -54,14 +59,13 @@ var model = new TextModel(source, DefaultEndOfLine.LF, globalLanguageId);
 Console.WriteLine($"File: {filePath}");
 Console.WriteLine($"Language: {languageName}");
 Console.WriteLine($"Scope: {scopeName}");
-Console.WriteLine("Legend: comments=green, strings=yellow, numbers=cyan, keywords=blue");
 Console.WriteLine(new string('=', 80));
 
 for (int lineNumber = 1; lineNumber <= model.TextBuffer.LineCount; lineNumber++)
 {
     model.Tokenization.ForceTokenization(lineNumber);
     var lineTokens = model.Tokenization.GetLineTokens(lineNumber);
-    PrintLine(lineNumber, lineTokens);
+    PrintLine(lineNumber, lineTokens, theme);
 }
 
 model.Tokenization.Dispose();
@@ -100,10 +104,9 @@ static void PrintUsage()
     Console.WriteLine("  dotnet run --project samples/TokenizationTextMateDemo -- <path-to-source-file>");
 }
 
-static void PrintLine(int lineNumber, FluidX.Tokenization.TokenStores.LineTokens lineTokens)
+static void PrintLine(int lineNumber, FluidX.Tokenization.TokenStores.LineTokens lineTokens, Theme theme)
 {
     Console.Write($"{lineNumber,4}: ");
-
     for (int i = 0; i < lineTokens.Count; i++)
     {
         var textSpan = lineTokens.GetTokenText(i);
@@ -111,90 +114,56 @@ static void PrintLine(int lineNumber, FluidX.Tokenization.TokenStores.LineTokens
             continue;
 
         var metadata = lineTokens.GetMetadata(i);
-        var category = Classify(metadata.TokenType, textSpan);
-        var style = GetStyle(category);
-
-        var previousColor = Console.ForegroundColor;
-        Console.ForegroundColor = style.Color;
-
-        if (style.Bold)
-            Console.Write("\u001b[1m");
-        if (style.Italic)
-            Console.Write("\u001b[3m");
-
-        Console.Write(textSpan.ToString());
-
-        if (style.Bold || style.Italic)
-            Console.Write("\u001b[0m");
-        Console.ForegroundColor = previousColor;
+        var markup = new Markup(textSpan.ToString(), new Style
+        {
+            Foreground = GetColor((int)metadata.Foreground, theme),
+            Background = GetColor((int)metadata.Background, theme),
+            Decoration = GetDecoration(metadata.FontStyle),
+        });
+        AnsiConsole.Write(markup);
     }
-
-    Console.WriteLine();
+    Console.WriteLine(); // newline
 }
 
-static TokenCategory Classify(FluidX.Tokenization.TokenStores.StandardTokenType tokenType, ReadOnlySpan<char> tokenText)
+// Utils for decoding token metadata
+static Color GetColor(int colorId, Theme theme)
 {
-    if (tokenType == FluidX.Tokenization.TokenStores.StandardTokenType.Comment)
-        return TokenCategory.Comment;
-    if (tokenType == FluidX.Tokenization.TokenStores.StandardTokenType.String
-        || tokenType == FluidX.Tokenization.TokenStores.StandardTokenType.RegEx)
-        return TokenCategory.StringLike;
+    if (colorId <= 2)
+        return Color.Default;
 
-    if (tokenText.Length > 0)
-    {
-        if (char.IsDigit(tokenText[0]))
-            return TokenCategory.Number;
-        if (IsKeyword(tokenText))
-            return TokenCategory.Keyword;
-    }
-
-    return TokenCategory.Other;
+    return HexToColor(theme.GetColor(colorId));
 }
 
-static bool IsKeyword(ReadOnlySpan<char> text)
+static Color HexToColor(string hexString)
 {
-    return text.SequenceEqual("if")
-        || text.SequenceEqual("else")
-        || text.SequenceEqual("for")
-        || text.SequenceEqual("while")
-        || text.SequenceEqual("switch")
-        || text.SequenceEqual("case")
-        || text.SequenceEqual("return")
-        || text.SequenceEqual("class")
-        || text.SequenceEqual("struct")
-        || text.SequenceEqual("enum")
-        || text.SequenceEqual("namespace")
-        || text.SequenceEqual("using")
-        || text.SequenceEqual("public")
-        || text.SequenceEqual("private")
-        || text.SequenceEqual("protected")
-        || text.SequenceEqual("static")
-        || text.SequenceEqual("const")
-        || text.SequenceEqual("void")
-        || text.SequenceEqual("int")
-        || text.SequenceEqual("float")
-        || text.SequenceEqual("double")
-        || text.SequenceEqual("bool")
-        || text.SequenceEqual("char")
-        || text.SequenceEqual("string");
+    //replace # occurences
+    if (hexString.IndexOf('#') != -1)
+        hexString = hexString.Replace("#", "");
+
+    byte r, g, b = 0;
+
+    r = byte.Parse(hexString.Substring(0, 2), NumberStyles.AllowHexSpecifier);
+    g = byte.Parse(hexString.Substring(2, 2), NumberStyles.AllowHexSpecifier);
+    b = byte.Parse(hexString.Substring(4, 2), NumberStyles.AllowHexSpecifier);
+
+    return new Color(r, g, b);
 }
 
-static TokenStyle GetStyle(TokenCategory category) => category switch
+static Decoration GetDecoration(FontStyle fontStyle)
 {
-    TokenCategory.Comment => new(ConsoleColor.DarkGreen, Italic: true, Bold: false),
-    TokenCategory.StringLike => new(ConsoleColor.DarkYellow, Italic: false, Bold: false),
-    TokenCategory.Number => new(ConsoleColor.Cyan, Italic: false, Bold: false),
-    TokenCategory.Keyword => new(ConsoleColor.Blue, Italic: false, Bold: true),
-    _ => new(ConsoleColor.Gray, Italic: false, Bold: false),
-};
+    Decoration result = Decoration.None;
 
-readonly record struct TokenStyle(ConsoleColor Color, bool Italic, bool Bold);
+    if (fontStyle == FontStyle.NotSet)
+        return result;
 
-enum TokenCategory
-{
-    Other,
-    Comment,
-    StringLike,
-    Number,
-    Keyword,
+    if ((fontStyle & FontStyle.Italic) != 0)
+        result |= Decoration.Italic;
+
+    if ((fontStyle & FontStyle.Underline) != 0)
+        result |= Decoration.Underline;
+
+    if ((fontStyle & FontStyle.Bold) != 0)
+        result |= Decoration.Bold;
+
+    return result;
 }

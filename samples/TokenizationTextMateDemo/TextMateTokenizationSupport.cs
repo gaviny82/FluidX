@@ -33,20 +33,22 @@ internal sealed class TextMateTokenizationSupport : ITokenizationSupport
         var tmState = state as TextMateTokenizerState
             ?? throw new ArgumentException("Unexpected tokenizer state type.", nameof(state));
 
-        var lineText = new LineText(line);
+        var lineText = new LineText(line); // TODO: Probably need to include EOL here. Check states affected by whitespace. // Conclusion: TextMateSharp automatically appends \n if the passed string does not end with it. this causes an allocation of char[] but does not influence the result
         var result = tmState.Stack is null
-            ? _grammar.TokenizeLine(lineText)
-            : _grammar.TokenizeLine(lineText, tmState.Stack, TimeSpan.FromMilliseconds(100));
-
+            ? _grammar.TokenizeLine2(lineText)
+            : _grammar.TokenizeLine2(lineText, tmState.Stack, TimeSpan.FromMilliseconds(100));
+        var tokens = result.Tokens;
+        int tokenCount = tokens.Length / 2;
         int lineLength = line.Length;
-        var encodedTokens = result.Tokens
-            .Select(t =>
-            {
-                int start = Math.Clamp(t.StartIndex, 0, lineLength);
-                var metadata = BuildMetadata(t.Scopes);
-                return new EncodedTokenizerToken(start, metadata);
-            })
-            .ToArray();
+        var encodedTokens = new EncodedTokenizerToken[tokenCount];
+        for (int i = 0; i < tokenCount; i++)
+        {
+            int startIndex = tokens[i * 2];
+            uint metadataValue = unchecked((uint)tokens[i * 2 + 1]);
+            var metadata = new LineTokenMetadata(metadataValue);
+            startIndex = Math.Clamp(startIndex, 0, lineLength);
+            encodedTokens[i] = new EncodedTokenizerToken(startIndex, metadata);
+        }
 
         if (encodedTokens.Length == 0)
         {
@@ -68,36 +70,6 @@ internal sealed class TextMateTokenizationSupport : ITokenizationSupport
 
     public IBackgroundTokenizer CreateBackgroundTokenizer(TextModel textModel, IBackgroundTokenizationStore store)
         => new NoOpBackgroundTokenizer();
-
-    private LineTokenMetadata BuildMetadata(List<string> scopes)
-    {
-        var metadata = new LineTokenMetadata
-        {
-            TokenType = MapTokenType(scopes),
-            FontStyle = FontStyle.None,
-            Foreground = ColorId.DefaultForeground,
-            Background = ColorId.DefaultBackground,
-            ContainsBalancedBrackets = true,
-        };
-
-        return metadata;
-    }
-
-    private static StandardTokenType MapTokenType(List<string> scopes)
-    {
-        foreach (var scope in scopes)
-        {
-            if (scope.Contains("comment", StringComparison.OrdinalIgnoreCase))
-                return StandardTokenType.Comment;
-            if (scope.Contains("string", StringComparison.OrdinalIgnoreCase))
-                return StandardTokenType.String;
-            if (scope.Contains("regex", StringComparison.OrdinalIgnoreCase)
-                || scope.Contains("regexp", StringComparison.OrdinalIgnoreCase))
-                return StandardTokenType.RegEx;
-        }
-
-        return StandardTokenType.Other;
-    }
 
     private sealed class NoOpBackgroundTokenizer : IBackgroundTokenizer
     {
