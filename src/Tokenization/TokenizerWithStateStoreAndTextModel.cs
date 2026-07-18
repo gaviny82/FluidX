@@ -46,8 +46,15 @@ public class TokenizerWithStateStoreAndTextModel
                 return;
             string text = TextModel.TextBuffer.GetLineContent(invalidLineNumber);
             var r = SafeTokenize(languageId, _tokenizationSupport, text, true, startState);
-            // TODO: Confirm the definitions of EncodedTokenizerToken and LineToken are compatible
-            builder.Add(invalidLineNumber, r.Tokens.Select(t => new LineToken(t.StartIndex, t.Metadata)).ToArray());
+            // Convert EncodedTokenizerToken to LineToken (StartIndex => EndOffset)
+            var lineTokens = new LineToken[r.Tokens.Length];
+            for (int i = 0; i < r.Tokens.Length; i++)
+            {
+                var token = r.Tokens[i];
+                int endOffset = (i + 1 < r.Tokens.Length) ? r.Tokens[i + 1].StartIndex : text.Length;
+                lineTokens[i] = new LineToken(endOffset, token.Metadata);
+            }
+            builder.Add(invalidLineNumber, lineTokens);
             Store.SetEndState(invalidLineNumber, r.EndState);
         }
     }
