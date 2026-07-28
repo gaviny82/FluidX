@@ -1,6 +1,6 @@
 ﻿namespace FluidX.TextBuffers;
 
-internal static class CharExtensions
+public static class CharExtensions
 {
     // IsBasicASCII
     public static bool IsBasicASCII(this char ch)

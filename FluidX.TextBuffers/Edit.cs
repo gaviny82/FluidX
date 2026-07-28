@@ -12,7 +12,7 @@ public class EditOperation
     public required bool IsTracked { get; init; }
 }
 
-internal class ValidatedEditOperation
+public class ValidatedEditOperation
 {
     public required int SortIndex { get; init; }
     public required TextRange Range { get; init; }

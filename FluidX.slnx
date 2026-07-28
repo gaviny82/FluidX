@@ -3,6 +3,8 @@
     <Project Path="samples/CreatePieceTree/PieceTreeDemo.csproj" />
     <Project Path="samples/TokenizationTextMateDemo/TokenizationTextMateDemo.csproj" />
   </Folder>
+  <Project Path="FluidX.TextBuffers.LineArrays/FluidX.TextBuffers.LineArrays.csproj" Id="7fcfa0a7-15de-445a-9d7a-9cae09be6a1b" />
+  <Project Path="FluidX.TextBuffers.PieceTree/FluidX.TextBuffers.PieceTree.csproj" Id="f8a280ca-77ce-4c60-a86c-f328b7115fb7" />
   <Project Path="FluidX.TextBuffers/FluidX.TextBuffers.csproj" Id="9480a24f-e934-4a9e-92cd-b6a1c4b2a29b" />
   <Project Path="src/FluidX.csproj" />
 </Solution>

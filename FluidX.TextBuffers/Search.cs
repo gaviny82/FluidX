@@ -106,7 +106,7 @@ public class FindMatch
     }
 }
 
-internal static class SearchUtils
+public static class SearchUtils
 {
     public static bool IsValidMatch(WordCharacterClassifier wordSeparators, string text, int textLength, int matchStartIndex, int matchLength)
     {
@@ -177,7 +177,7 @@ internal static class SearchUtils
 /// </summary>
 public class Searcher
 {
-    internal readonly WordCharacterClassifier? _wordSeparators;
+    public readonly WordCharacterClassifier? _wordSeparators;
     private readonly Regex _searchRegex;
     private int _prevMatchStartIndex;
     private int _prevMatchLength;

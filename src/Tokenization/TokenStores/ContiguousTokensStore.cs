@@ -1,4 +1,6 @@
-﻿using FluidX.TextModels;
+﻿using FluidX.TextBuffers;
+
+using FluidX.TextModels;
 using System.Diagnostics.CodeAnalysis;
 
 namespace FluidX.Tokenization.TokenStores;

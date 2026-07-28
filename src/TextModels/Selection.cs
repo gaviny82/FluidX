@@ -1,4 +1,6 @@
-﻿namespace FluidX.TextModels;
+﻿using FluidX.TextBuffers;
+
+namespace FluidX.TextModels;
 
 /// <summary>
 /// A selection in the editor. The selection is a <see cref="FluidX.TextRange"/> that has an orientation.

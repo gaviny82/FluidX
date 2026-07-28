@@ -1,4 +1,5 @@
-﻿using FluidX.Decorations;
+﻿using FluidX.TextBuffers;
+using FluidX.Decorations;
 
 namespace FluidX.TextModels;
 

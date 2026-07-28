@@ -8,7 +8,7 @@ public enum StringEndOfLine
     CRLF = 2,
 }
 
-internal static class EOLCounter
+public static class EOLCounter
 {
     public static (int eolCount, int firstLineLength, int lastLineLength, StringEndOfLine eol) CountEOL(string text)
     {

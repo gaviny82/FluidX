@@ -1,4 +1,6 @@
-﻿namespace FluidX.Decorations;
+﻿using FluidX.TextBuffers;
+
+namespace FluidX.Decorations;
 
 /// <summary>
 /// A decoration in the model.

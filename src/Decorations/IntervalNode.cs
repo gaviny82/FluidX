@@ -1,4 +1,6 @@
-﻿namespace FluidX.Decorations;
+﻿using FluidX.TextBuffers;
+
+namespace FluidX.Decorations;
 
 public class IntervalNode : IModelDecoration
 {

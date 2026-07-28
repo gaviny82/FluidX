@@ -1,4 +1,6 @@
-﻿namespace FluidX.TextModels;
+﻿using FluidX.TextBuffers;
+
+namespace FluidX.TextModels;
 
 public enum RawContentChangedType
 {

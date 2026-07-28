@@ -2,7 +2,7 @@ using System.Text.RegularExpressions;
 
 namespace FluidX.TextBuffers;
 
-internal static partial class StringExtensions
+public static partial class StringExtensions
 {
     [GeneratedRegex(@"^[\t\n\r\x20-\x7E]*$")]
     private static partial Regex IsBasicASCIIRegex { get; }
