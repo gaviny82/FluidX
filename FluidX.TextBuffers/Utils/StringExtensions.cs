@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace FluidX;
+namespace FluidX.TextBuffers;
 
 internal static partial class StringExtensions
 {
