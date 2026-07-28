@@ -1,0 +1,16 @@
+﻿<Project Sdk="MSTest.Sdk/4.0.2">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\TextBuffers\FluidX.TextBuffers.LineArrays\FluidX.TextBuffers.LineArrays.csproj" />
+    <ProjectReference Include="..\..\src\TextBuffers\FluidX.TextBuffers.PieceTree\FluidX.TextBuffers.PieceTree.csproj" />
+    <ProjectReference Include="..\..\src\TextBuffers\FluidX.TextBuffers\FluidX.TextBuffers.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -8,8 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\FluidX.TextBuffers.PieceTree\FluidX.TextBuffers.PieceTree.csproj" />
-    <ProjectReference Include="..\FluidX.TextBuffers\FluidX.TextBuffers.csproj" />
+    <ProjectReference Include="..\TextBuffers\FluidX.TextBuffers.PieceTree\FluidX.TextBuffers.PieceTree.csproj" />
+    <ProjectReference Include="..\TextBuffers\FluidX.TextBuffers\FluidX.TextBuffers.csproj" />
   </ItemGroup>
 
 </Project>

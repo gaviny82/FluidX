@@ -9,4 +9,10 @@
     <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
     <PackageReference Include="Microsoft.VisualStudio.DiagnosticsHub.BenchmarkDotNetDiagnosers" Version="18.7.37220.1" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\TextBuffers\FluidX.TextBuffers.LineArrays\FluidX.TextBuffers.LineArrays.csproj" />
+    <ProjectReference Include="..\..\src\TextBuffers\FluidX.TextBuffers.PieceTree\FluidX.TextBuffers.PieceTree.csproj" />
+    <ProjectReference Include="..\..\src\TextBuffers\FluidX.TextBuffers\FluidX.TextBuffers.csproj" />
+  </ItemGroup>
 </Project>
