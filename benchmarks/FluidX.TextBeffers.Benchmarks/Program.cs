@@ -13,7 +13,7 @@ using FluidX.TextBeffers.Benchmarks.Utils;
 EnsureTestFiles(Environment.CurrentDirectory);
 // Set for benchmark subprocesses to find the test files
 Environment.SetEnvironmentVariable("FLUIDX_BENCHMARK_DATA_DIR", Environment.CurrentDirectory);
-BenchmarkRunner.Run(typeof(Program).Assembly);
+BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
 
 static void EnsureTestFiles(string baseDir)
 {
