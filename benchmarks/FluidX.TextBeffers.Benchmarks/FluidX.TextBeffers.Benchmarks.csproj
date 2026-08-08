@@ -15,4 +15,25 @@
     <ProjectReference Include="..\..\src\TextBuffers\FluidX.TextBuffers.PieceTree\FluidX.TextBuffers.PieceTree.csproj" />
     <ProjectReference Include="..\..\src\TextBuffers\FluidX.TextBuffers\FluidX.TextBuffers.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="TestFiles\**" CopyToOutputDirectory="PreserveNewest" LinkBase="TestFiles\" />
+  </ItemGroup>
+
+  <!-- Downlaod test files -->
+  <Target Name="DownloadTestFiles" BeforeTargets="Build"
+          Condition="!Exists('$(MSBuildProjectDirectory)\TestFiles\checker.ts') Or
+                     !Exists('$(MSBuildProjectDirectory)\TestFiles\sqlite3.c') Or
+                     !Exists('$(MSBuildProjectDirectory)\TestFiles\Russian-English Bilingual.dic')">
+    <DownloadFile SourceUrl="https://raw.githubusercontent.com/microsoft/TypeScript/main/src/compiler/checker.ts"
+                  DestinationFolder="$(MSBuildProjectDirectory)\TestFiles"
+                  SkipUnchangedFiles="true" />
+    <DownloadFile SourceUrl="https://raw.githubusercontent.com/clibs/sqlite/refs/heads/master/sqlite3.c"
+                  DestinationFolder="$(MSBuildProjectDirectory)\TestFiles"
+                  SkipUnchangedFiles="true" />
+    <DownloadFile SourceUrl="https://raw.githubusercontent.com/titoBouzout/Dictionaries/master/Russian-English%20Bilingual.dic"
+                  DestinationFolder="$(MSBuildProjectDirectory)\TestFiles"
+                  SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 
 namespace FluidX.TextBeffers.Benchmarks.Utils;
 
@@ -14,29 +13,18 @@ public enum TestFileType
 
 public static class TestFileHelper
 {
-    public static string BaseDir =>
-        Environment.GetEnvironmentVariable("FLUIDX_BENCHMARK_DATA_DIR")
-        ?? Environment.CurrentDirectory;
+    private static readonly string BaseDir = Path.Combine(AppContext.BaseDirectory, "TestFiles");
 
-    private static readonly Dictionary<TestFileType, (string url, string filename)> FileMap = new()
+    private static readonly Dictionary<TestFileType, string> FileNames = new()
     {
-        [TestFileType.CheckerTs] = (
-            "https://raw.githubusercontent.com/microsoft/TypeScript/main/src/compiler/checker.ts",
-            "checker.ts"),
-        [TestFileType.SqliteC] = (
-            "https://raw.githubusercontent.com/clibs/sqlite/refs/heads/master/sqlite3.c",
-            "sqlite3.c"),
-        [TestFileType.BilingualDictionary] = (
-            "https://raw.githubusercontent.com/titoBouzout/Dictionaries/master/Russian-English%20Bilingual.dic",
-            "Russian-English Bilingual.dic")
+        [TestFileType.CheckerTs] = "checker.ts",
+        [TestFileType.SqliteC] = "sqlite3.c",
+        [TestFileType.BilingualDictionary] = "Russian-English Bilingual.dic"
     };
-
-    public static IEnumerable<(TestFileType Type, string Url, string Filename)> GetFileMap() => FileMap.Select(kv => (kv.Key, kv.Value.url, kv.Value.filename));
 
     public static string GetFilePath(TestFileType fileType)
     {
-        var (_, filename) = FileMap[fileType];
-        return Path.Combine(BaseDir, filename);
+        return Path.Combine(BaseDir, FileNames[fileType]);
     }
 
     public static byte[] LoadFileBytes(TestFileType fileType)
