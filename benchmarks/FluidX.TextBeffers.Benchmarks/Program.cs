@@ -11,12 +11,12 @@ using FluidX.TextBeffers.Benchmarks.Utils;
 // List benchmarks: dotnet run -c Release --list flat
 
 EnsureTestFiles(Environment.CurrentDirectory);
-var _ = BenchmarkRunner.Run(typeof(Program).Assembly);
+// Set for benchmark subprocesses to find the test files
+Environment.SetEnvironmentVariable("FLUIDX_BENCHMARK_DATA_DIR", Environment.CurrentDirectory);
+BenchmarkRunner.Run(typeof(Program).Assembly);
 
 static void EnsureTestFiles(string baseDir)
 {
-    TestFileHelper.BaseDir = baseDir;
-
     using var httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
 
     foreach (var (_, url, filename) in TestFileHelper.GetFileMap())
@@ -36,4 +36,5 @@ static void EnsureTestFiles(string baseDir)
 
         Console.WriteLine($"Downloaded {filename} ({new FileInfo(filePath).Length} bytes) in {sw.Elapsed.TotalSeconds:F1}s");
     }
+    Console.WriteLine("All test files downloaded.");
 }

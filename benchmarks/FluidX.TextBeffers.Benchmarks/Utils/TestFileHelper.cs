@@ -14,7 +14,9 @@ public enum TestFileType
 
 public static class TestFileHelper
 {
-    public static string BaseDir { get; set; } = Environment.CurrentDirectory;
+    public static string BaseDir =>
+        Environment.GetEnvironmentVariable("FLUIDX_BENCHMARK_DATA_DIR")
+        ?? Environment.CurrentDirectory;
 
     private static readonly Dictionary<TestFileType, (string url, string filename)> FileMap = new()
     {
