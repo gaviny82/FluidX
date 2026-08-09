@@ -324,6 +324,7 @@ public class LineArrayTextBuffer : ITextBuffer
 
     public ApplyEditsResult ApplyEdits(EditOperation[] rawOperations, bool recordTrimAutoWhitespace, bool computeUndoEdits)
     {
+        // no-op
         if (rawOperations.Length == 0)
             return new ApplyEditsResult
             {
@@ -334,33 +335,8 @@ public class LineArrayTextBuffer : ITextBuffer
 
         var contentChanges = new List<InternalModelContentChange>(rawOperations.Length);
 
-        var sortedOps = rawOperations
-            .Select(op => (op, rangeOffset: GetOffsetAt(op.Range.StartLineNumber, op.Range.StartColumn)))
-            .OrderByDescending(x => x.rangeOffset)
-            .ToList();
-
-        var sb = new StringBuilder(_getFullText());
-
-        foreach (var (op, rangeOffset) in sortedOps)
-        {
-            int rangeLength = GetValueLengthInRange(op.Range, EndOfLinePreference.TextDefined);
-            string insertText = op.Text ?? string.Empty;
-
-            sb.Remove(rangeOffset, rangeLength);
-            if (insertText.Length > 0)
-                sb.Insert(rangeOffset, insertText);
-
-            contentChanges.Add(new InternalModelContentChange
-            {
-                Range = op.Range,
-                RangeOffset = rangeOffset,
-                RangeLength = rangeLength,
-                Text = insertText,
-                ForceMoveMarkers = op.ForceMoveMarkers
-            });
-        }
-
-        SetText(sb.ToString());
+        foreach (var op in rawOperations)
+            contentChanges.Add(ApplySingleEdit(op));
 
         OnDidChangeContent?.Invoke(this, EventArgs.Empty);
 
@@ -370,6 +346,102 @@ public class LineArrayTextBuffer : ITextBuffer
             Changes = contentChanges,
             TrimAutoWhitespaceLineNumbers = null
         };
+    }
+
+    private InternalModelContentChange ApplySingleEdit(EditOperation op)
+    {
+        var range = op.Range;
+        string insertText = op.Text ?? string.Empty;
+
+        int startLineIndex = range.StartLineNumber - 1;
+        int endLineIndex = range.EndLineNumber - 1;
+        int startCol0 = range.StartColumn - 1;
+        int endCol0 = range.EndColumn - 1;
+
+        // Compute range offset/length before modification
+        int rangeOffset = 0;
+        for (int i = 0; i < startLineIndex; i++)
+            rangeOffset += _lines[i].Count + _eol.Length;
+        rangeOffset += startCol0;
+
+        int rangeLength;
+        if (startLineIndex == endLineIndex)
+        {
+            rangeLength = endCol0 - startCol0;
+        }
+        else
+        {
+            rangeLength = _lines[startLineIndex].Count - startCol0 + _eol.Length;
+            for (int i = startLineIndex + 1; i < endLineIndex; i++)
+                rangeLength += _lines[i].Count + _eol.Length;
+            rangeLength += endCol0;
+        }
+
+        // Get prefix of start line and suffix of end line
+        var startLine = _lines[startLineIndex];
+        var endLine = _lines[endLineIndex];
+        ReadOnlySpan<char> startSpan = CollectionsMarshal.AsSpan(startLine);
+        ReadOnlySpan<char> endSpan = CollectionsMarshal.AsSpan(endLine);
+
+        // Split insert text into lines
+        var insertLines = SplitTextIntoLines(insertText);
+
+        // Build replacement lines and splice into _lines
+        int deleteCount = endLineIndex - startLineIndex + 1;
+
+        if (insertLines.Count == 1)
+        {
+            // Single line insert (or empty): prefix + insert + suffix on one line
+            _lines[startLineIndex] = [.. startSpan[..startCol0], .. CollectionsMarshal.AsSpan(insertLines[0]), .. endSpan[endCol0..]];
+            if (deleteCount > 1)
+                _lines.RemoveRange(startLineIndex + 1, deleteCount - 1);
+        }
+        else
+        {
+            // Multi-line insert
+            var replacementLines = new List<List<char>>(insertLines.Count);
+
+            // First line: prefix + first insert line
+            replacementLines.Add([.. startSpan[..startCol0], .. CollectionsMarshal.AsSpan(insertLines[0])]);
+
+            // Middle lines (moved directly, no copy needed)
+            for (int i = 1; i < insertLines.Count - 1; i++)
+                replacementLines.Add(insertLines[i]);
+
+            // Last line: last insert line + suffix
+            replacementLines.Add([.. CollectionsMarshal.AsSpan(insertLines[^1]), .. endSpan[endCol0..]]);
+
+            // Replace the affected lines
+            _lines.RemoveRange(startLineIndex, deleteCount);
+            _lines.InsertRange(startLineIndex, replacementLines);
+        }
+
+        return new InternalModelContentChange
+        {
+            Range = range,
+            RangeOffset = rangeOffset,
+            RangeLength = rangeLength,
+            Text = insertText,
+            ForceMoveMarkers = op.ForceMoveMarkers
+        };
+    }
+
+    private static List<List<char>> SplitTextIntoLines(string text)
+    {
+        var lines = new List<List<char>>();
+        int lineStart = 0;
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (text[i] == '\n')
+            {
+                int lineEnd = (i > 0 && text[i - 1] == '\r') ? i - 1 : i;
+                lines.Add([.. text.AsSpan(lineStart, lineEnd - lineStart)]);
+                lineStart = i + 1;
+            }
+        }
+        if (lineStart <= text.Length)
+            lines.Add([.. text.AsSpan(lineStart)]);
+        return lines;
     }
 
     public IReadOnlyList<FindMatch> FindMatchesLineByLine(TextRange searchRange, SearchData searchData, bool captureMatches, int limitResultCount)
