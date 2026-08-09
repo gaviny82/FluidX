@@ -18,7 +18,7 @@ public class LineArrayTextBuffer : ITextBuffer
         SetText(text);
     }
 
-    private LineArrayTextBuffer(LineArrayTextBuffer source)
+    public LineArrayTextBuffer(LineArrayTextBuffer source)
     {
         _eol = source._eol;
         _bom = source._bom;
@@ -214,7 +214,7 @@ public class LineArrayTextBuffer : ITextBuffer
     public int GetOffsetAt(int lineNumber, int column)
     {
         int offset = 0;
-        for (int i = 0; i < lineNumber; i++)
+        for (int i = 0; i < lineNumber - 1; i++)
         {
             offset += _lines[i].Count;
             if (i < _lines.Count - 1)
