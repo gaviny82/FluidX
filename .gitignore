@@ -365,3 +365,6 @@ FodyWeavers.xsd
 # docfx generated
 docs/_site
 docs/api
+
+# Benchmark downloaded test files
+benchmarks/FluidX.TextBeffers.Benchmarks/TestFiles/
