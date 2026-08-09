@@ -23,9 +23,9 @@ public class ReadLineBenchmark
     // The LineArray impl is not benchmarked as it is too slow to apply the edits.
     public static IEnumerable<BufferImplementation> Impls => BenchmarkParams.BufferImpls;
 
-    private string _fileText = null!;
-    private PreGeneratedEdit[] _randomEdits = null!;
-    private PreGeneratedEdit[] _sequentialEdits = null!;
+    private readonly string _fileText;
+    private readonly PreGeneratedEdit[] _randomEdits;
+    private readonly PreGeneratedEdit[] _sequentialEdits;
     private ITextBuffer _buffer = null!;
     private int _lineNumber;
 

@@ -10,7 +10,7 @@ namespace FluidX.TextBeffers.Benchmarks;
 [MemoryDiagnoser]
 public class SnapshotBenchmark
 {
-    [Params(0, 1000, 5000)]
+    [Params(0, 1000, 2000)]
     public int EditCount { get; set; }
 
     [ParamsSource(nameof(FileTypes))]
@@ -19,24 +19,22 @@ public class SnapshotBenchmark
 
     [ParamsSource(nameof(Impls))]
     public BufferImplementation Implementation { get; set; }
-    // LineArray impl is too slow for large files, so we only benchmark PieceTree here.
-    public static IEnumerable<BufferImplementation> Impls => [BufferImplementation.PieceTree];
+    public static IEnumerable<BufferImplementation> Impls => BenchmarkParams.BufferImpls;
 
-    private string _fileText = null!;
+    private readonly string _fileText;
+    private readonly PreGeneratedEdit[] _edits;
     private ITextBuffer _buffer = null!;
 
-    [GlobalSetup]
-    public void Setup()
+    public SnapshotBenchmark()
     {
         _fileText = TestFileHelper.LoadFileText(FileType);
-        _buffer = BufferFactory.CreateBuffer(Implementation, _fileText);
+        var random = new Random(42);
+        _edits = EditHelper.PreGenerateRandomEdits(_fileText, random, EditCount);
 
+        var buffer = BufferFactory.CreateBuffer(Implementation, _fileText);
         if (EditCount > 0)
-        {
-            var random = new Random(42);
-            var edits = EditHelper.PreGenerateRandomEdits(_fileText, random, EditCount);
-            EditHelper.ApplyEdits(_buffer, edits);
-        }
+            EditHelper.ApplyEdits(_buffer, _edits);
+        _buffer = buffer;
     }
 
     [Benchmark]
