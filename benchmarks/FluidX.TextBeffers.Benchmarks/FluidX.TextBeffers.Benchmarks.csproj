@@ -28,7 +28,7 @@
     <DownloadFile SourceUrl="https://raw.githubusercontent.com/microsoft/TypeScript/main/src/compiler/checker.ts"
                   DestinationFolder="$(MSBuildProjectDirectory)\TestFiles"
                   SkipUnchangedFiles="true" />
-    <DownloadFile SourceUrl="https://raw.githubusercontent.com/clibs/sqlite/refs/heads/master/sqlite3.c"
+    <DownloadFile SourceUrl="https://raw.githubusercontent.com/clibs/sqlite/master/sqlite3.c"
                   DestinationFolder="$(MSBuildProjectDirectory)\TestFiles"
                   SkipUnchangedFiles="true" />
     <DownloadFile SourceUrl="https://raw.githubusercontent.com/titoBouzout/Dictionaries/master/Russian-English%20Bilingual.dic"
