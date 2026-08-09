@@ -1,23 +1,19 @@
-using System;
-using System.Collections.Generic;
 using System.IO;
 using BenchmarkDotNet.Attributes;
 using FluidX.TextBuffers;
 using FluidX.TextBeffers.Benchmarks.Utils;
 
-namespace FluidX.TextBeffers.Benchmarks;
+namespace FluidX.TextBeffers.Benchmarks.Load;
 
 [ShortRunJob]
 [MemoryDiagnoser]
 public class LoadFileBenchmark
 {
-    [ParamsSource(nameof(FileTypes))]
+    [ParamsAllValues]
     public TestFileType FileType { get; set; }
-    public static IEnumerable<TestFileType> FileTypes => BenchmarkParams.FileTypes;
 
-    [ParamsSource(nameof(Impls))]
+    [ParamsAllValues]
     public BufferImplementation Implementation { get; set; }
-    public static IEnumerable<BufferImplementation> Impls => BenchmarkParams.BufferImpls;
 
     private byte[] _fileData = null!;
 

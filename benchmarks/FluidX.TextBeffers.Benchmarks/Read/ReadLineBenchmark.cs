@@ -1,11 +1,10 @@
 using System;
-using System.Collections.Generic;
 using BenchmarkDotNet.Attributes;
 using FluidX.TextBuffers;
 using FluidX.TextBeffers.Benchmarks.Utils;
 using FluidX.TextBuffers.LineArray;
 
-namespace FluidX.TextBeffers.Benchmarks;
+namespace FluidX.TextBeffers.Benchmarks.Read;
 
 [ShortRunJob]
 [MemoryDiagnoser]
@@ -14,18 +13,15 @@ public class ReadLineBenchmark
     private const int EditCount = 1000;
     private const int EditLength = 10;
 
-    [ParamsSource(nameof(FileTypes))]
+    [ParamsAllValues]
     public TestFileType FileType { get; set; }
-    public static IEnumerable<TestFileType> FileTypes => BenchmarkParams.FileTypes;
 
-    [ParamsSource(nameof(Impls))]
+    [ParamsAllValues]
     public BufferImplementation Implementation { get; set; }
-    // The LineArray impl is not benchmarked as it is too slow to apply the edits.
-    public static IEnumerable<BufferImplementation> Impls => BenchmarkParams.BufferImpls;
 
-    private readonly string _fileText;
-    private readonly PreGeneratedEdit[] _randomEdits;
-    private readonly PreGeneratedEdit[] _sequentialEdits;
+    private string _fileText = null!;
+    private PreGeneratedEdit[] _randomEdits = null!;
+    private PreGeneratedEdit[] _sequentialEdits = null!;
     private ITextBuffer _buffer = null!;
     private int _lineNumber;
 
@@ -34,8 +30,8 @@ public class ReadLineBenchmark
     private static LineArrayTextBuffer s_lineArrayBufferCache1000RandomEdits = null!;
     private static LineArrayTextBuffer s_lineArrayBufferCache1000SequentialEdits = null!;
 
-    // Setup for all benchmarks
-    public ReadLineBenchmark()
+    [GlobalSetup]
+    public void Setup()
     {
         _fileText = TestFileHelper.LoadFileText(FileType);
 
@@ -45,8 +41,6 @@ public class ReadLineBenchmark
         random = new Random(42);
         _sequentialEdits = EditHelper.PreGenerateSequentialEdits(_fileText, random, EditCount);
     }
-
-    // Setup for each benchmark
 
     [GlobalSetup(Target = nameof(ReadLineAfterSingleEdit))]
     public void SetupForSingleEdit()
@@ -77,8 +71,6 @@ public class ReadLineBenchmark
         s_lineArrayBufferCache1000SequentialEdits = (LineArrayTextBuffer)BufferFactory.CreateBuffer(BufferImplementation.LineArray, _fileText);
         EditHelper.ApplyEdits(s_lineArrayBufferCache1000SequentialEdits, _sequentialEdits);
     }
-
-    // Iteration setup: resets the text buffer to clear any cache that affects the benchmark results.
 
     [IterationSetup(Target = nameof(ReadLine))]
     public void IterationSetupRead()
@@ -125,8 +117,6 @@ public class ReadLineBenchmark
         EditHelper.ApplyEdits(_buffer, _sequentialEdits);
         _lineNumber = _buffer.LineCount / 2;
     }
-
-    // Benchmarks
 
     [Benchmark]
     public string ReadLine()

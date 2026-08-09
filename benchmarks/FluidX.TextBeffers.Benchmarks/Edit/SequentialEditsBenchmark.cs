@@ -1,25 +1,22 @@
 using System;
-using System.Collections.Generic;
 using BenchmarkDotNet.Attributes;
 using FluidX.TextBuffers;
 using FluidX.TextBeffers.Benchmarks.Utils;
 
-namespace FluidX.TextBeffers.Benchmarks;
+namespace FluidX.TextBeffers.Benchmarks.Edit;
 
 [ShortRunJob]
 [MemoryDiagnoser]
-public class RandomEditBenchmark
+public class SequentialEditsBenchmark
 {
-    private const int EditCount = 1000;
-    private const int EditLength = 10;
+    [Params(100, 1000)]
+    public int EditCount { get; set; }
 
-    [ParamsSource(nameof(FileTypes))]
+    [ParamsAllValues]
     public TestFileType FileType { get; set; }
-    public static IEnumerable<TestFileType> FileTypes => BenchmarkParams.FileTypes;
 
-    [ParamsSource(nameof(Impls))]
+    [ParamsAllValues]
     public BufferImplementation Implementation { get; set; }
-    public static IEnumerable<BufferImplementation> Impls => BenchmarkParams.BufferImpls;
 
     private string _fileText = null!;
     private PreGeneratedEdit[] _edits = null!;
@@ -31,7 +28,7 @@ public class RandomEditBenchmark
         _fileText = TestFileHelper.LoadFileText(FileType);
 
         var random = new Random(42);
-        _edits = EditHelper.PreGenerateRandomEdits(_fileText, random, EditCount, EditLength);
+        _edits = EditHelper.PreGenerateSequentialEdits(_fileText, random, EditCount);
     }
 
     [IterationSetup]
@@ -41,7 +38,7 @@ public class RandomEditBenchmark
     }
 
     [Benchmark]
-    public void ApplyRandomEdits()
+    public void ApplySequentialEdits()
     {
         EditHelper.ApplyEdits(_buffer, _edits);
     }

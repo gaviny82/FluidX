@@ -1,26 +1,23 @@
 using System;
-using System.Collections.Generic;
 using BenchmarkDotNet.Attributes;
 using FluidX.TextBuffers;
 using FluidX.TextBeffers.Benchmarks.Utils;
 
-namespace FluidX.TextBeffers.Benchmarks;
+namespace FluidX.TextBeffers.Benchmarks.Edit;
 
 [ShortRunJob]
 [MemoryDiagnoser]
-public class RandomEditAfterEditsBenchmark
+public class RandomEditsAfterRandomEditsBenchmark
 {
     private const int PreEditCount = 1000;
     private const int EditCount = 1000;
     private const int EditLength = 10;
 
-    [ParamsSource(nameof(FileTypes))]
+    [ParamsAllValues]
     public TestFileType FileType { get; set; }
-    public static IEnumerable<TestFileType> FileTypes => BenchmarkParams.FileTypes;
 
-    [ParamsSource(nameof(Impls))]
+    [ParamsAllValues]
     public BufferImplementation Implementation { get; set; }
-    public static IEnumerable<BufferImplementation> Impls => BenchmarkParams.BufferImpls;
 
     private string _fileText = null!;
     private PreGeneratedEdit[] _preEdits = null!;
