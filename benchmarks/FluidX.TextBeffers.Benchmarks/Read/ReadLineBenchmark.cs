@@ -104,6 +104,7 @@ public class ReadLineBenchmark
         if (Implementation == BufferImplementation.LineArray)
         {
             _buffer = s_lineArrayBufferCache1000RandomEdits;
+            _lineNumber = Math.Max(1, _buffer.LineCount / 2);
             return;
         }
         _buffer = BufferFactory.CreateBuffer(Implementation, _fileText);
@@ -117,6 +118,7 @@ public class ReadLineBenchmark
         if (Implementation == BufferImplementation.LineArray)
         {
             _buffer = s_lineArrayBufferCache1000SequentialEdits;
+            _lineNumber = Math.Max(1, _buffer.LineCount / 2);
             return;
         }
         _buffer = BufferFactory.CreateBuffer(Implementation, _fileText);

@@ -160,12 +160,12 @@ public class LineArrayTextBuffer : ITextBuffer
 
     public string GetLineContent(int lineNumber)
     {
-        return new string(CollectionsMarshal.AsSpan(_lines[lineNumber]));
+        return new string(CollectionsMarshal.AsSpan(_lines[lineNumber - 1]));
     }
 
     public int GetLineFirstNonWhitespaceColumn(int lineNumber)
     {
-        var line = CollectionsMarshal.AsSpan(_lines[lineNumber]);
+        var line = CollectionsMarshal.AsSpan(_lines[lineNumber - 1]);
         for (int i = 0; i < line.Length; i++)
         {
             if (!char.IsWhiteSpace(line[i]))
@@ -176,7 +176,7 @@ public class LineArrayTextBuffer : ITextBuffer
 
     public int GetLineLastNonWhitespaceColumn(int lineNumber)
     {
-        var line = CollectionsMarshal.AsSpan(_lines[lineNumber]);
+        var line = CollectionsMarshal.AsSpan(_lines[lineNumber - 1]);
         for (int i = line.Length - 1; i >= 0; i--)
         {
             if (!char.IsWhiteSpace(line[i]))
@@ -187,7 +187,7 @@ public class LineArrayTextBuffer : ITextBuffer
 
     public int GetLineLength(int lineNumber)
     {
-        return _lines[lineNumber].Count;
+        return _lines[lineNumber - 1].Count;
     }
 
     public int GetLineMaxColumn(int lineNumber)
@@ -205,7 +205,7 @@ public class LineArrayTextBuffer : ITextBuffer
         List<string> lines = [];
         for (int i = 0; i < _lines.Count; i++)
         {
-            string line = GetLineContent(i);
+            string line = GetLineContent(i + 1);
             lines.Add(line);
         }
         return lines;
