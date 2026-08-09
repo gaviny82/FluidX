@@ -45,13 +45,16 @@ public class ReadLineBenchmark
         random = new Random(42);
         _sequentialEdits = EditHelper.PreGenerateSequentialEdits(_fileText, random, EditCount);
 
-        // Create edited buffers for LineArray implementation
-        s_lineArrayBufferCacheSingleEdit = (LineArrayTextBuffer)BufferFactory.CreateBuffer(BufferImplementation.LineArray, _fileText);
-        EditHelper.ApplyEdits(s_lineArrayBufferCacheSingleEdit, [_randomEdits[0]]);
-        s_lineArrayBufferCache1000RandomEdits = (LineArrayTextBuffer)BufferFactory.CreateBuffer(BufferImplementation.LineArray, _fileText);
-        EditHelper.ApplyEdits(s_lineArrayBufferCache1000RandomEdits, _randomEdits);
-        s_lineArrayBufferCache1000SequentialEdits = (LineArrayTextBuffer)BufferFactory.CreateBuffer(BufferImplementation.LineArray, _fileText);
-        EditHelper.ApplyEdits(s_lineArrayBufferCache1000SequentialEdits, _sequentialEdits);
+        // This takes a long time, only do it for the LineArray implementation
+        if (Implementation == BufferImplementation.LineArray)
+        {
+            s_lineArrayBufferCacheSingleEdit = (LineArrayTextBuffer)BufferFactory.CreateBuffer(BufferImplementation.LineArray, _fileText);
+            EditHelper.ApplyEdits(s_lineArrayBufferCacheSingleEdit, [_randomEdits[0]]);
+            s_lineArrayBufferCache1000RandomEdits = (LineArrayTextBuffer)BufferFactory.CreateBuffer(BufferImplementation.LineArray, _fileText);
+            EditHelper.ApplyEdits(s_lineArrayBufferCache1000RandomEdits, _randomEdits);
+            s_lineArrayBufferCache1000SequentialEdits = (LineArrayTextBuffer)BufferFactory.CreateBuffer(BufferImplementation.LineArray, _fileText);
+            EditHelper.ApplyEdits(s_lineArrayBufferCache1000SequentialEdits, _sequentialEdits);
+        }
 
     }
 
