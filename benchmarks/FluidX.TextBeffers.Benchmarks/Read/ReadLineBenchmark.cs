@@ -81,7 +81,7 @@ public class ReadLineBenchmark
     public void IterationSetupRead()
     {
         _buffer = BufferFactory.CreateBuffer(Implementation, _fileText);
-        _lineNumber = _buffer.LineCount / 2;
+        _lineNumber = Math.Max(1, _buffer.LineCount / 2);
     }
 
     [IterationSetup(Target = nameof(ReadLineAfterSingleEdit))]
