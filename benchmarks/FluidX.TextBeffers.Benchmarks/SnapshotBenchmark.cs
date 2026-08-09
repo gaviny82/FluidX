@@ -13,27 +13,27 @@ public class SnapshotBenchmark
     [Params(0, 1000, 2000)]
     public int EditCount { get; set; }
 
-    [ParamsSource(nameof(FileTypes))]
+    [ParamsAllValues]
     public TestFileType FileType { get; set; }
-    public static IEnumerable<TestFileType> FileTypes => BenchmarkParams.FileTypes;
 
-    [ParamsSource(nameof(Impls))]
+    [ParamsAllValues]
     public BufferImplementation Implementation { get; set; }
-    public static IEnumerable<BufferImplementation> Impls => BenchmarkParams.BufferImpls;
 
-    private readonly string _fileText;
-    private readonly PreGeneratedEdit[] _edits;
+    private string _fileText = null!;
+    private PreGeneratedEdit[] _edits = null!;
     private ITextBuffer _buffer = null!;
 
-    public SnapshotBenchmark()
+    [GlobalSetup]
+    public void GlobalSetup()
     {
         _fileText = TestFileHelper.LoadFileText(FileType);
         var random = new Random(42);
         _edits = EditHelper.PreGenerateRandomEdits(_fileText, random, EditCount);
 
+        // Create buffer and apply edits
         var buffer = BufferFactory.CreateBuffer(Implementation, _fileText);
         if (EditCount > 0)
-            EditHelper.ApplyEdits(_buffer, _edits);
+            EditHelper.ApplyEdits(buffer, _edits);
         _buffer = buffer;
     }
 
