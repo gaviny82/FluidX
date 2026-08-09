@@ -34,8 +34,8 @@ public class ReadLineBenchmark
     private static LineArrayTextBuffer s_lineArrayBufferCache1000RandomEdits = null!;
     private static LineArrayTextBuffer s_lineArrayBufferCache1000SequentialEdits = null!;
 
-    [GlobalSetup]
-    public void Setup()
+    // Setup for all benchmarks
+    public ReadLineBenchmark()
     {
         _fileText = TestFileHelper.LoadFileText(FileType);
 
@@ -44,19 +44,41 @@ public class ReadLineBenchmark
 
         random = new Random(42);
         _sequentialEdits = EditHelper.PreGenerateSequentialEdits(_fileText, random, EditCount);
-
-        // This takes a long time, only do it for the LineArray implementation
-        if (Implementation == BufferImplementation.LineArray)
-        {
-            s_lineArrayBufferCacheSingleEdit = (LineArrayTextBuffer)BufferFactory.CreateBuffer(BufferImplementation.LineArray, _fileText);
-            EditHelper.ApplyEdits(s_lineArrayBufferCacheSingleEdit, [_randomEdits[0]]);
-            s_lineArrayBufferCache1000RandomEdits = (LineArrayTextBuffer)BufferFactory.CreateBuffer(BufferImplementation.LineArray, _fileText);
-            EditHelper.ApplyEdits(s_lineArrayBufferCache1000RandomEdits, _randomEdits);
-            s_lineArrayBufferCache1000SequentialEdits = (LineArrayTextBuffer)BufferFactory.CreateBuffer(BufferImplementation.LineArray, _fileText);
-            EditHelper.ApplyEdits(s_lineArrayBufferCache1000SequentialEdits, _sequentialEdits);
-        }
-
     }
+
+    // Setup for each benchmark
+
+    [GlobalSetup(Target = nameof(ReadLineAfterSingleEdit))]
+    public void SetupForSingleEdit()
+    {
+        if (Implementation != BufferImplementation.LineArray)
+            return;
+        Console.WriteLine("Setup for single edit only");
+        s_lineArrayBufferCacheSingleEdit = (LineArrayTextBuffer)BufferFactory.CreateBuffer(BufferImplementation.LineArray, _fileText);
+        EditHelper.ApplyEdits(s_lineArrayBufferCacheSingleEdit, [_randomEdits[0]]);
+    }
+
+    [GlobalSetup(Target = nameof(ReadLineAfter1000RandomEdits))]
+    public void SetupFor1000RandomEdits()
+    {
+        if (Implementation != BufferImplementation.LineArray)
+            return;
+        Console.WriteLine("Setup for 1000 random edits only");
+        s_lineArrayBufferCache1000RandomEdits = (LineArrayTextBuffer)BufferFactory.CreateBuffer(BufferImplementation.LineArray, _fileText);
+        EditHelper.ApplyEdits(s_lineArrayBufferCache1000RandomEdits, _randomEdits);
+    }
+
+    [GlobalSetup(Target = nameof(ReadLineAfter1000SequentialEdits))]
+    public void SetupFor1000SequentialEdits()
+    {
+        if (Implementation != BufferImplementation.LineArray)
+            return;
+        Console.WriteLine("Setup for 1000 sequential edits only");
+        s_lineArrayBufferCache1000SequentialEdits = (LineArrayTextBuffer)BufferFactory.CreateBuffer(BufferImplementation.LineArray, _fileText);
+        EditHelper.ApplyEdits(s_lineArrayBufferCache1000SequentialEdits, _sequentialEdits);
+    }
+
+    // Iteration setup: resets the text buffer to clear any cache that affects the benchmark results.
 
     [IterationSetup(Target = nameof(ReadLine))]
     public void IterationSetupRead()
@@ -103,6 +125,8 @@ public class ReadLineBenchmark
         EditHelper.ApplyEdits(_buffer, _sequentialEdits);
         _lineNumber = _buffer.LineCount / 2;
     }
+
+    // Benchmarks
 
     [Benchmark]
     public string ReadLine()
