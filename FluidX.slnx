@@ -1,4 +1,8 @@
 <Solution>
+  <Folder Name="/Common/">
+    <Project Path="src/FluidX.Common/FluidX.Common.csproj" />
+    <Project Path="tests/FluidX.Common.Tests/FluidX.Common.Tests.csproj" />
+  </Folder>
   <Folder Name="/Samples/">
     <Project Path="samples/CreatePieceTree/PieceTreeDemo.csproj" />
     <Project Path="samples/TokenizationTextMateDemo/TokenizationTextMateDemo.csproj" />
