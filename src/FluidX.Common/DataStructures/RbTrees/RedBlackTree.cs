@@ -5,10 +5,10 @@ public class RedBlackTree<TData>
     public sealed class TreeNode
     {
         public TData Data { get; set; }
-        public TreeNode Parent { get; set; }
-        public TreeNode Left { get; set; }
-        public TreeNode Right { get; set; }
-        public NodeColor Color { get; set; }
+        public TreeNode Parent { get; internal set; }
+        public TreeNode Left { get; internal set; }
+        public TreeNode Right { get; internal set; }
+        public NodeColor Color { get; internal set; }
         public bool IsSentinel => this == Parent;
 
         internal TreeNode(TData data, TreeNode sentinel)
@@ -19,7 +19,7 @@ public class RedBlackTree<TData>
             Right = sentinel;
         }
 
-        public void Detach()
+        internal void Detach()
         {
             Parent = null!;
             Left = null!;
@@ -28,7 +28,7 @@ public class RedBlackTree<TData>
     }
 
     /// <summary>
-    /// A shared sentinel node representing all NIL leaves and the parent of the root.
+    /// A shared sentinel node representing all leaves and the parent of the root.
     /// Always colored black. Its Parent/Left/Right point to itself.
     /// </summary>
     public TreeNode Sentinel { get; }
