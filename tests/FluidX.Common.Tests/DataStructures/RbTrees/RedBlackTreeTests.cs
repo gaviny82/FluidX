@@ -38,7 +38,6 @@ public class RedBlackTreeTests
         var (removed, replacement, removedWasRed) = tree.BstRemove(node);
         if (!removedWasRed)
             tree.DeleteFixup(replacement);
-        tree.ResetSentinel();
     }
 
     private static RedBlackTree<int>.TreeNode? Find(RedBlackTree<int> tree, int value)

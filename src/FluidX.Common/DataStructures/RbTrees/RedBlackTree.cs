@@ -29,7 +29,8 @@ public class RedBlackTree<TData>
 
     /// <summary>
     /// A shared sentinel node representing all leaves and the parent of the root.
-    /// Always colored black. Its Parent/Left/Right point to itself.
+    /// Always colored black. Its <seealso cref="TreeNode.Parent"/>,
+    /// <seealso cref="TreeNode.Left"/>, and <seealso cref="TreeNode.Right"/> point to itself.
     /// </summary>
     public TreeNode Sentinel { get; }
     private TreeNode _root;
@@ -48,12 +49,6 @@ public class RedBlackTree<TData>
 
     protected virtual void OnAfterLeftRotate(TreeNode oldParent, TreeNode newParent) { }
     protected virtual void OnAfterRightRotate(TreeNode oldParent, TreeNode newParent) { }
-
-    public void ResetSentinel()
-    {
-        Sentinel.Parent = Sentinel;
-        Sentinel.Color = NodeColor.Black;
-    }
 
     #region Traversal
 
