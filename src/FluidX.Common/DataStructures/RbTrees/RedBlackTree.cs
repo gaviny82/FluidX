@@ -100,7 +100,7 @@ public class RedBlackTree<TData>
 
     #region Insertion
 
-    public TreeNode InsertRight(TreeNode? node, TData data)
+    public TreeNode InsertRight(TreeNode node, TData data)
     {
         var z = new TreeNode(data, Sentinel);
         z.Color = NodeColor.Red;
@@ -112,7 +112,7 @@ public class RedBlackTree<TData>
             return z;
         }
 
-        if (node!.Right == Sentinel)
+        if (node.Right == Sentinel)
         {
             node.Right = z;
             z.Parent = node;
@@ -128,7 +128,7 @@ public class RedBlackTree<TData>
         return z;
     }
 
-    public TreeNode InsertLeft(TreeNode? node, TData data)
+    public TreeNode InsertLeft(TreeNode node, TData data)
     {
         var z = new TreeNode(data, Sentinel);
         z.Color = NodeColor.Red;
@@ -140,7 +140,7 @@ public class RedBlackTree<TData>
             return z;
         }
 
-        if (node!.Left == Sentinel)
+        if (node.Left == Sentinel)
         {
             node.Left = z;
             z.Parent = node;
