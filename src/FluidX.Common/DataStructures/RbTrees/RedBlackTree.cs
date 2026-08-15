@@ -1,21 +1,55 @@
 namespace FluidX.Common.DataStructures.RbTrees;
 
-public abstract class RedBlackTreeBase<TNode> where TNode : class, IRbTreeNode<TNode>
+public class RedBlackTree<TData>
 {
-    protected readonly TNode Sentinel;
-
-    protected RedBlackTreeBase()
+    public sealed class TreeNode
     {
-        Sentinel = CreateSentinel();
+        public TData Data { get; set; }
+        public TreeNode Parent { get; set; }
+        public TreeNode Left { get; set; }
+        public TreeNode Right { get; set; }
+        public NodeColor Color { get; set; }
+        public bool IsSentinel => this == Parent;
+
+        internal TreeNode(TData data, TreeNode sentinel)
+        {
+            Data = data;
+            Parent = sentinel;
+            Left = sentinel;
+            Right = sentinel;
+        }
+
+        public void Detach()
+        {
+            Parent = null!;
+            Left = null!;
+            Right = null!;
+        }
     }
 
-    protected abstract TNode CreateSentinel();
-    protected abstract TNode Root { get; set; }
+    /// <summary>
+    /// A shared sentinel node representing all NIL leaves and the parent of the root.
+    /// Always colored black. Its Parent/Left/Right point to itself.
+    /// </summary>
+    public TreeNode Sentinel { get; }
+    private TreeNode _root;
 
-    protected abstract void OnAfterLeftRotate(TNode oldParent, TNode newParent);
-    protected abstract void OnAfterRightRotate(TNode oldParent, TNode newParent);
+    public RedBlackTree()
+    {
+        Sentinel = new TreeNode(default!, null!);
+        Sentinel.Parent = Sentinel;
+        Sentinel.Left = Sentinel;
+        Sentinel.Right = Sentinel;
+        Sentinel.Color = NodeColor.Black;
+        _root = Sentinel;
+    }
 
-    protected void ResetSentinel()
+    public TreeNode Root => _root;
+
+    protected virtual void OnAfterLeftRotate(TreeNode oldParent, TreeNode newParent) { }
+    protected virtual void OnAfterRightRotate(TreeNode oldParent, TreeNode newParent) { }
+
+    public void ResetSentinel()
     {
         Sentinel.Parent = Sentinel;
         Sentinel.Color = NodeColor.Black;
@@ -23,21 +57,21 @@ public abstract class RedBlackTreeBase<TNode> where TNode : class, IRbTreeNode<T
 
     #region Traversal
 
-    protected TNode Leftest(TNode node)
+    public TreeNode Leftest(TreeNode node)
     {
         while (node.Left != Sentinel)
             node = node.Left;
         return node;
     }
 
-    protected TNode Rightest(TNode node)
+    public TreeNode Rightest(TreeNode node)
     {
         while (node.Right != Sentinel)
             node = node.Right;
         return node;
     }
 
-    protected TNode Next(TNode node)
+    public TreeNode? Next(TreeNode node)
     {
         if (node.Right != Sentinel)
             return Leftest(node.Right);
@@ -49,10 +83,10 @@ public abstract class RedBlackTreeBase<TNode> where TNode : class, IRbTreeNode<T
             node = node.Parent;
         }
 
-        return Sentinel;
+        return null;
     }
 
-    protected TNode Prev(TNode node)
+    public TreeNode? Prev(TreeNode node)
     {
         if (node.Left != Sentinel)
             return Rightest(node.Left);
@@ -64,30 +98,21 @@ public abstract class RedBlackTreeBase<TNode> where TNode : class, IRbTreeNode<T
             node = node.Parent;
         }
 
-        return Sentinel;
+        return null;
     }
 
     #endregion
 
     #region Insertion
 
-    /// <summary>
-    /// Inserts <paramref name="z"/> as the in-order successor of <paramref name="node"/>.
-    /// If the tree is empty, <paramref name="z"/> becomes the root (pass null or Sentinel).
-    /// <para/>
-    /// <paramref name="z"/> must be initialized by the caller: set domain data fields.
-    /// Color, Left, Right, Parent will be set by this method.
-    /// </summary>
-    protected TNode InsertRight(TNode? node, TNode z)
+    public TreeNode InsertRight(TreeNode? node, TData data)
     {
+        var z = new TreeNode(data, Sentinel);
         z.Color = NodeColor.Red;
-        z.Left = Sentinel;
-        z.Right = Sentinel;
-        z.Parent = Sentinel;
 
-        if (Root == Sentinel)
+        if (_root == Sentinel)
         {
-            Root = z;
+            _root = z;
             z.Color = NodeColor.Black;
             return z;
         }
@@ -108,23 +133,14 @@ public abstract class RedBlackTreeBase<TNode> where TNode : class, IRbTreeNode<T
         return z;
     }
 
-    /// <summary>
-    /// Inserts <paramref name="z"/> as the in-order predecessor of <paramref name="node"/>.
-    /// If the tree is empty, <paramref name="z"/> becomes the root (pass null or Sentinel).
-    /// <para/>
-    /// <paramref name="z"/> must be initialized by the caller: set domain data fields.
-    /// Color, Left, Right, Parent will be set by this method.
-    /// </summary>
-    protected TNode InsertLeft(TNode? node, TNode z)
+    public TreeNode InsertLeft(TreeNode? node, TData data)
     {
+        var z = new TreeNode(data, Sentinel);
         z.Color = NodeColor.Red;
-        z.Left = Sentinel;
-        z.Right = Sentinel;
-        z.Parent = Sentinel;
 
-        if (Root == Sentinel)
+        if (_root == Sentinel)
         {
-            Root = z;
+            _root = z;
             z.Color = NodeColor.Black;
             return z;
         }
@@ -145,9 +161,9 @@ public abstract class RedBlackTreeBase<TNode> where TNode : class, IRbTreeNode<T
         return z;
     }
 
-    protected void InsertFixup(TNode z)
+    private void InsertFixup(TreeNode z)
     {
-        while (z != Root && z.Parent.Color == NodeColor.Red)
+        while (z != _root && z.Parent.Color == NodeColor.Red)
         {
             if (z.Parent == z.Parent.Parent.Left)
             {
@@ -199,23 +215,16 @@ public abstract class RedBlackTreeBase<TNode> where TNode : class, IRbTreeNode<T
             }
         }
 
-        Root.Color = NodeColor.Black;
+        _root.Color = NodeColor.Black;
     }
 
     #endregion
 
     #region Deletion
 
-    /// <summary>
-    /// Performs the standard BST removal of node <paramref name="z"/>.
-    /// Returns the removed node, its replacement, and whether the physically removed node was red.
-    /// <para/>
-    /// Caller is responsible for metadata fixup on the replacement node
-    /// before calling <see cref="DeleteFixup"/> (if RemovedWasRed is false).
-    /// </summary>
-    protected (TNode Removed, TNode Replacement, bool RemovedWasRed) BstRemove(TNode z)
+    public (TreeNode Removed, TreeNode Replacement, bool RemovedWasRed) BstRemove(TreeNode z)
     {
-        TNode x, y;
+        TreeNode x, y;
 
         if (z.Left == Sentinel)
         {
@@ -233,15 +242,14 @@ public abstract class RedBlackTreeBase<TNode> where TNode : class, IRbTreeNode<T
             x = y.Right;
         }
 
-        // Save y's original color before any modifications
         bool yWasRed = y.Color == NodeColor.Red;
 
-        if (y == Root)
+        if (y == _root)
         {
-            Root = x;
+            _root = x;
             x.Color = NodeColor.Black;
             z.Detach();
-            Root.Parent = Sentinel;
+            _root.Parent = Sentinel;
             return (z, x, yWasRed);
         }
 
@@ -266,8 +274,8 @@ public abstract class RedBlackTreeBase<TNode> where TNode : class, IRbTreeNode<T
             y.Parent = z.Parent;
             y.Color = z.Color;
 
-            if (z == Root)
-                Root = y;
+            if (z == _root)
+                _root = y;
             else if (z == z.Parent.Left)
                 z.Parent.Left = y;
             else
@@ -284,9 +292,9 @@ public abstract class RedBlackTreeBase<TNode> where TNode : class, IRbTreeNode<T
         return (z, x, yWasRed);
     }
 
-    protected void DeleteFixup(TNode x)
+    public void DeleteFixup(TreeNode x)
     {
-        while (x != Root && x.Color == NodeColor.Black)
+        while (x != _root && x.Color == NodeColor.Black)
         {
             if (x == x.Parent.Left)
             {
@@ -319,7 +327,7 @@ public abstract class RedBlackTreeBase<TNode> where TNode : class, IRbTreeNode<T
                     x.Parent.Color = NodeColor.Black;
                     w.Right.Color = NodeColor.Black;
                     LeftRotate(x.Parent);
-                    x = Root;
+                    x = _root;
                 }
             }
             else
@@ -353,7 +361,7 @@ public abstract class RedBlackTreeBase<TNode> where TNode : class, IRbTreeNode<T
                     x.Parent.Color = NodeColor.Black;
                     w.Left.Color = NodeColor.Black;
                     RightRotate(x.Parent);
-                    x = Root;
+                    x = _root;
                 }
             }
         }
@@ -365,7 +373,7 @@ public abstract class RedBlackTreeBase<TNode> where TNode : class, IRbTreeNode<T
 
     #region Rotations
 
-    protected void LeftRotate(TNode x)
+    private void LeftRotate(TreeNode x)
     {
         var y = x.Right;
 
@@ -376,7 +384,7 @@ public abstract class RedBlackTreeBase<TNode> where TNode : class, IRbTreeNode<T
         y.Parent = x.Parent;
 
         if (x.Parent == Sentinel)
-            Root = y;
+            _root = y;
         else if (x == x.Parent.Left)
             x.Parent.Left = y;
         else
@@ -388,7 +396,7 @@ public abstract class RedBlackTreeBase<TNode> where TNode : class, IRbTreeNode<T
         OnAfterLeftRotate(x, y);
     }
 
-    protected void RightRotate(TNode y)
+    private void RightRotate(TreeNode y)
     {
         var x = y.Left;
 
@@ -399,7 +407,7 @@ public abstract class RedBlackTreeBase<TNode> where TNode : class, IRbTreeNode<T
         x.Parent = y.Parent;
 
         if (y.Parent == Sentinel)
-            Root = x;
+            _root = x;
         else if (y == y.Parent.Right)
             y.Parent.Right = x;
         else
