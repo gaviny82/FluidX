@@ -535,13 +535,13 @@ public partial class PieceTreeTextBuffer : ITextBuffer
             if (!string.IsNullOrEmpty(op.Text))
             {
                 // replacement
-                _pieceTree.Delete(op.RangeOffset, op.RangeLength);
-                _pieceTree.Insert(op.RangeOffset, op.Text, true);
+                Delete(op.RangeOffset, op.RangeLength);
+                Insert(op.RangeOffset, op.Text, true);
             }
             else
             {
                 // deletion
-                _pieceTree.Delete(op.RangeOffset, op.RangeLength);
+                Delete(op.RangeOffset, op.RangeLength);
             }
 
             contentChanges.Add(new InternalModelContentChange
