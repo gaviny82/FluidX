@@ -51,7 +51,7 @@ internal static class RedBlackTreeHelper
         TreeNode.Sentinel.Parent = TreeNode.Sentinel;
     }
 
-    public static void LeftRotate(PieceTreeBase tree, TreeNode x)
+    public static void LeftRotate(PieceTreeTextBuffer tree, TreeNode x)
     {
         TreeNode y = x.Right;
 
@@ -76,7 +76,7 @@ internal static class RedBlackTreeHelper
         x.Parent = y;
     }
 
-    public static void RightRotate(PieceTreeBase tree, TreeNode y)
+    public static void RightRotate(PieceTreeTextBuffer tree, TreeNode y)
     {
         TreeNode x = y.Left;
         y.Left = x.Right;
@@ -101,7 +101,7 @@ internal static class RedBlackTreeHelper
         y.Parent = x;
     }
 
-    public static void RbDelete(PieceTreeBase tree, TreeNode z)
+    public static void RbDelete(PieceTreeTextBuffer tree, TreeNode z)
     {
         TreeNode x, y;
 
@@ -281,7 +281,7 @@ internal static class RedBlackTreeHelper
         ResetSentinel();
     }
 
-    public static void FixInsert(PieceTreeBase tree, TreeNode x)
+    public static void FixInsert(PieceTreeTextBuffer tree, TreeNode x)
     {
         RecomputeTreeMetadata(tree, x);
 
@@ -339,7 +339,7 @@ internal static class RedBlackTreeHelper
         tree.Root.Color = NodeColor.Black;
     }
 
-    public static void UpdateTreeMetadata(PieceTreeBase tree, TreeNode x, int delta, int lineFeedCntDelta)
+    public static void UpdateTreeMetadata(PieceTreeTextBuffer tree, TreeNode x, int delta, int lineFeedCntDelta)
     {
         // node length change or line feed count change
         while (x != tree.Root && x != TreeNode.Sentinel)
@@ -354,7 +354,7 @@ internal static class RedBlackTreeHelper
         }
     }
 
-    public static void RecomputeTreeMetadata(PieceTreeBase tree, TreeNode x)
+    public static void RecomputeTreeMetadata(PieceTreeTextBuffer tree, TreeNode x)
     {
         if (x == tree.Root)
             return;
