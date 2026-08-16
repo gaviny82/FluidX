@@ -9,7 +9,7 @@ public class RedBlackTree<TData>
         public TreeNode Left { get; internal set; }
         public TreeNode Right { get; internal set; }
         public NodeColor Color { get; internal set; }
-        public bool IsSentinel => this == Parent;
+        public bool IsSentinel => this == Left;
 
         internal TreeNode(TData data, TreeNode sentinel)
         {
@@ -50,54 +50,6 @@ public class RedBlackTree<TData>
     protected virtual void OnAfterLeftRotate(TreeNode oldParent, TreeNode newParent) { }
     protected virtual void OnAfterRightRotate(TreeNode oldParent, TreeNode newParent) { }
 
-    #region Traversal
-
-    public TreeNode Leftest(TreeNode node)
-    {
-        while (node.Left != Sentinel)
-            node = node.Left;
-        return node;
-    }
-
-    public TreeNode Rightest(TreeNode node)
-    {
-        while (node.Right != Sentinel)
-            node = node.Right;
-        return node;
-    }
-
-    public TreeNode? Next(TreeNode node)
-    {
-        if (node.Right != Sentinel)
-            return Leftest(node.Right);
-
-        while (node.Parent != Sentinel)
-        {
-            if (node.Parent.Left == node)
-                return node.Parent;
-            node = node.Parent;
-        }
-
-        return null;
-    }
-
-    public TreeNode? Prev(TreeNode node)
-    {
-        if (node.Left != Sentinel)
-            return Rightest(node.Left);
-
-        while (node.Parent != Sentinel)
-        {
-            if (node.Parent.Right == node)
-                return node.Parent;
-            node = node.Parent;
-        }
-
-        return null;
-    }
-
-    #endregion
-
     #region Insertion
 
     public TreeNode InsertRight(TreeNode node, TData data)
@@ -119,7 +71,7 @@ public class RedBlackTree<TData>
         }
         else
         {
-            var nextNode = Leftest(node.Right);
+            var nextNode = node.Right.Leftest();
             nextNode.Left = z;
             z.Parent = nextNode;
         }
@@ -147,7 +99,7 @@ public class RedBlackTree<TData>
         }
         else
         {
-            var prevNode = Rightest(node.Left);
+            var prevNode = node.Left.Rightest();
             prevNode.Right = z;
             z.Parent = prevNode;
         }
@@ -233,7 +185,7 @@ public class RedBlackTree<TData>
         }
         else
         {
-            y = Leftest(z.Right);
+            y = z.Right.Leftest();
             x = y.Right;
         }
 
@@ -415,4 +367,58 @@ public class RedBlackTree<TData>
     }
 
     #endregion
+}
+
+public static class RedBlackTreeNodeTraversalExtensions
+{
+    extension<TData>(RedBlackTree<TData>.TreeNode node)
+    {
+        public RedBlackTree<TData>.TreeNode Leftest()
+        {
+            var current = node;
+            while (!current.Left.IsSentinel)
+                current = current.Left;
+            return current;
+        }
+
+        public RedBlackTree<TData>.TreeNode Rightest()
+        {
+            var current = node;
+            while (!current.Right.IsSentinel)
+                current = current.Right;
+            return current;
+        }
+
+        public RedBlackTree<TData>.TreeNode? Next()
+        {
+            if (!node.Right.IsSentinel)
+                return node.Right.Leftest();
+
+            var current = node;
+            while (!current.Parent.IsSentinel)
+            {
+                if (current.Parent.Left == current)
+                    return current.Parent;
+                current = current.Parent;
+            }
+
+            return null;
+        }
+
+        public RedBlackTree<TData>.TreeNode? Prev()
+        {
+            if (!node.Left.IsSentinel)
+                return node.Left.Rightest();
+
+            var current = node;
+            while (!current.Parent.IsSentinel)
+            {
+                if (current.Parent.Right == current)
+                    return current.Parent;
+                current = current.Parent;
+            }
+
+            return null;
+        }
+    }
 }

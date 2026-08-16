@@ -61,11 +61,11 @@ public class RedBlackTreeTests
         if (tree.Root == tree.Sentinel)
             return result;
 
-        var node = tree.Leftest(tree.Root);
+        var node = tree.Root.Leftest();
         while (node != null)
         {
             result.Add(node.Data);
-            node = tree.Next(node);
+            node = node.Next();
         }
         return result;
     }
