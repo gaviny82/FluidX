@@ -286,6 +286,64 @@ public class RedBlackTreeTests
     }
 
     [TestMethod]
+    public void Delete_LeafNode_SentinelParentReset()
+    {
+        var tree = CreateTree();
+        Insert(tree, 10);
+        Insert(tree, 5);
+        Insert(tree, 15);
+        Insert(tree, 3);
+
+        var node3 = Find(tree, 3)!;
+        tree.Delete(node3);
+
+        Assert.AreEqual(tree.Sentinel, tree.Sentinel.Parent,
+            "Sentinel.Parent must always point back to Sentinel");
+    }
+
+    [TestMethod]
+    public void Delete_MultipleLeaves_SentinelParentReset()
+    {
+        var tree = CreateTree();
+        Insert(tree, 10);
+        Insert(tree, 5);
+        Insert(tree, 15);
+        Insert(tree, 3);
+        Insert(tree, 7);
+
+        tree.Delete(Find(tree, 3)!);
+        Assert.AreEqual(tree.Sentinel, tree.Sentinel.Parent,
+            "Sentinel.Parent corrupted after first delete");
+
+        tree.Delete(Find(tree, 7)!);
+        Assert.AreEqual(tree.Sentinel, tree.Sentinel.Parent,
+            "Sentinel.Parent corrupted after second delete");
+
+        tree.Delete(Find(tree, 5)!);
+        Assert.AreEqual(tree.Sentinel, tree.Sentinel.Parent,
+            "Sentinel.Parent corrupted after third delete");
+    }
+
+    [TestMethod]
+    public void Delete_SuccessorWithNoRightChild_SentinelParentReset()
+    {
+        var tree = CreateTree();
+        Insert(tree, 10);
+        Insert(tree, 5);
+        Insert(tree, 15);
+        Insert(tree, 3);
+        Insert(tree, 7);
+        Insert(tree, 6);
+
+        var node5 = Find(tree, 5)!;
+        tree.Delete(node5);
+
+        Assert.AreEqual(tree.Sentinel, tree.Sentinel.Parent,
+            "Sentinel.Parent must be reset after successor-swap delete");
+        AssertTreeInvariants(tree);
+    }
+
+    [TestMethod]
     public void Delete_NodeWithOneChild_MaintainsInvariants()
     {
         var tree = CreateTree();

@@ -194,8 +194,11 @@ public class RedBlackTree<TData>
             OnBeforeRemoval(z, x, y);
 
             _root = x;
+
+            // If x is null, we are removing the only node
             x.Color = NodeColor.Black;
             z.Detach();
+            Sentinel.Parent = Sentinel;
             _root.Parent = Sentinel;
 
             OnAfterRemoval(z, x, y);
@@ -209,6 +212,8 @@ public class RedBlackTree<TData>
 
         if (!yWasRed)
             DeleteFixup(x);
+
+        Sentinel.Parent = Sentinel;
     }
 
     /// <summary>
