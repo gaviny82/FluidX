@@ -41,7 +41,7 @@ internal class PieceNodeData(Piece piece)
     public int LfLeft { get; set; } = 0;
 }
 
-internal class PieceTree : RedBlackTree<PieceNodeData>
+internal sealed class PieceTree : RedBlackTree<PieceNodeData>
 {
     protected override void OnAfterLeftRotate(TreeNode oldParent, TreeNode newParent)
     {
