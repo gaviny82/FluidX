@@ -11,9 +11,8 @@ public class RedBlackTreeTests
 
     private static RedBlackTree<int>.TreeNode Insert(RedBlackTree<int> tree, int value)
     {
-        var z = tree.Sentinel;
         if (tree.Root == tree.Sentinel)
-            return tree.InsertRight(null, value);
+            return tree.InsertRight(tree.Sentinel, value);
 
         var x = tree.Root;
         while (true)
