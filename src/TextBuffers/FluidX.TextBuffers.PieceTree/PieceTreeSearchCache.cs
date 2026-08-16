@@ -19,7 +19,7 @@ internal class PieceTreeSearchCache
         for (int i = _cache.Count - 1; i >= 0; i--)
         {
             CacheEntry nodePos = _cache[i];
-            if (nodePos.NodeStartOffset <= offset && nodePos.NodeStartOffset + nodePos.Node.Data.Piece.Length >= offset)
+            if (nodePos.NodeStartOffset <= offset && nodePos.NodeStartOffset + nodePos.Node.Piece.Length >= offset)
             {
                 return nodePos;
             }
@@ -34,7 +34,7 @@ internal class PieceTreeSearchCache
             CacheEntry nodePos = _cache[i];
             if (nodePos.NodeStartLineNumber.HasValue &&
                 nodePos.NodeStartLineNumber.Value < lineNumber &&
-                nodePos.NodeStartLineNumber.Value + nodePos.Node.Data.Piece.LineFeedCount >= lineNumber)
+                nodePos.NodeStartLineNumber.Value + nodePos.Node.Piece.LineFeedCount >= lineNumber)
             {
                 return (nodePos.Node, nodePos.NodeStartOffset, nodePos.NodeStartLineNumber.Value);
             }

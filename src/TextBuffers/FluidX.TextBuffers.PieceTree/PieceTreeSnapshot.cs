@@ -33,7 +33,7 @@ public class PieceTreeSnapshot : ITextSnapshot
         {
             PieceTree.Iterate(tree.Tree.Root, node =>
             {
-                _pieces.Add(node.Data.Piece);
+                _pieces.Add(node.Piece);
                 return true;
             });
         }

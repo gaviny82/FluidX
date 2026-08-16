@@ -46,15 +46,15 @@ internal class PieceTree : RedBlackTree<PieceNodeData>
     protected override void OnAfterLeftRotate(TreeNode oldParent, TreeNode newParent)
     {
         // FUTURE: the null check might be redundant
-        newParent.Data.SizeLeft += oldParent.Data.SizeLeft + (oldParent.Data.Piece?.Length ?? 0);
-        newParent.Data.LfLeft += oldParent.Data.LfLeft + (oldParent.Data.Piece?.LineFeedCount ?? 0);
+        newParent.SizeLeft += oldParent.SizeLeft + (oldParent.Piece?.Length ?? 0);
+        newParent.LfLeft += oldParent.LfLeft + (oldParent.Piece?.LineFeedCount ?? 0);
     }
 
     protected override void OnAfterRightRotate(TreeNode oldParent, TreeNode newParent)
     {
         // FUTURE: the null check might be redundant
-        oldParent.Data.SizeLeft -= newParent.Data.SizeLeft + (newParent.Data.Piece?.Length ?? 0);
-        oldParent.Data.LfLeft -= newParent.Data.LfLeft + (newParent.Data.Piece?.LineFeedCount ?? 0);
+        oldParent.SizeLeft -= newParent.SizeLeft + (newParent.Piece?.Length ?? 0);
+        oldParent.LfLeft -= newParent.LfLeft + (newParent.Piece?.LineFeedCount ?? 0);
     }
 
     protected override void OnAfterInsert(TreeNode z)
@@ -66,8 +66,8 @@ internal class PieceTree : RedBlackTree<PieceNodeData>
     {
         if (y != z)
         {
-            y.Data.SizeLeft = z.Data.SizeLeft;
-            y.Data.LfLeft = z.Data.LfLeft;
+            y.SizeLeft = z.SizeLeft;
+            y.LfLeft = z.LfLeft;
         }
     }
 
@@ -85,14 +85,14 @@ internal class PieceTree : RedBlackTree<PieceNodeData>
     {
         if (node.IsSentinel)
             return 0;
-        return node.Data.SizeLeft + node.Data.Piece.Length + CalculateSize(node.Right);
+        return node.SizeLeft + node.Piece.Length + CalculateSize(node.Right);
     }
 
     private static int CalculateLF(TreeNode node)
     {
         if (node.IsSentinel)
             return 0;
-        return node.Data.LfLeft + node.Data.Piece.LineFeedCount + CalculateLF(node.Right);
+        return node.LfLeft + node.Piece.LineFeedCount + CalculateLF(node.Right);
     }
 
     internal void UpdateTreeMetadata(TreeNode x, int delta, int lineFeedCntDelta)
@@ -102,8 +102,8 @@ internal class PieceTree : RedBlackTree<PieceNodeData>
         {
             if (x.Parent.Left == x)
             {
-                x.Parent.Data.SizeLeft += delta;
-                x.Parent.Data.LfLeft += lineFeedCntDelta;
+                x.Parent.SizeLeft += delta;
+                x.Parent.LfLeft += lineFeedCntDelta;
             }
             x = x.Parent;
         }
@@ -138,20 +138,44 @@ internal class PieceTree : RedBlackTree<PieceNodeData>
         // x is the node whose right subtree is changed.
         x = x.Parent;
 
-        int delta = CalculateSize(x.Left) - x.Data.SizeLeft;
-        int lfDelta = CalculateLF(x.Left) - x.Data.LfLeft;
-        x.Data.SizeLeft += delta;
-        x.Data.LfLeft += lfDelta;
+        int delta = CalculateSize(x.Left) - x.SizeLeft;
+        int lfDelta = CalculateLF(x.Left) - x.LfLeft;
+        x.SizeLeft += delta;
+        x.LfLeft += lfDelta;
 
         // Go upwards till root. O(logN)
         while (x != Root && (delta != 0 || lfDelta != 0))
         {
             if (x.Parent.Left == x)
             {
-                x.Parent.Data.SizeLeft += delta;
-                x.Parent.Data.LfLeft += lfDelta;
+                x.Parent.SizeLeft += delta;
+                x.Parent.LfLeft += lfDelta;
             }
             x = x.Parent;
+        }
+    }
+}
+
+internal static class PieceTreeNodeDataExtensions
+{
+    extension(RedBlackTree<PieceNodeData>.TreeNode node)
+    {
+        public Piece Piece
+        {
+            get => node.Data.Piece;
+            set => node.Data.Piece = value;
+        }
+
+        public int SizeLeft
+        {
+            get => node.Data.SizeLeft;
+            set => node.Data.SizeLeft = value;
+        }
+
+        public int LfLeft
+        {
+            get => node.Data.LfLeft;
+            set => node.Data.LfLeft = value;
         }
     }
 }
