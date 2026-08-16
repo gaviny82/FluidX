@@ -33,13 +33,6 @@ public class RedBlackTreeTests
         }
     }
 
-    private static void Delete(RedBlackTree<int> tree, RedBlackTree<int>.TreeNode node)
-    {
-        var (removed, replacement, removedWasRed) = tree.BstRemove(node);
-        if (!removedWasRed)
-            tree.DeleteFixup(replacement);
-    }
-
     private static RedBlackTree<int>.TreeNode? Find(RedBlackTree<int> tree, int value)
     {
         var x = tree.Root;
@@ -271,7 +264,7 @@ public class RedBlackTreeTests
     {
         var tree = CreateTree();
         var node = Insert(tree, 42);
-        Delete(tree, node);
+        tree.Delete(node);
 
         Assert.IsTrue(IsEmpty(tree));
     }
@@ -286,7 +279,7 @@ public class RedBlackTreeTests
         Insert(tree, 3);
 
         var node3 = Find(tree, 3)!;
-        Delete(tree, node3);
+        tree.Delete(node3);
 
         AssertTreeInvariants(tree);
         Assert.IsNull(Find(tree, 3));
@@ -304,7 +297,7 @@ public class RedBlackTreeTests
         Insert(tree, 4);
 
         var node3 = Find(tree, 3)!;
-        Delete(tree, node3);
+        tree.Delete(node3);
 
         AssertTreeInvariants(tree);
         Assert.IsNull(Find(tree, 3));
@@ -324,7 +317,7 @@ public class RedBlackTreeTests
         Insert(tree, 18);
 
         var node5 = Find(tree, 5)!;
-        Delete(tree, node5);
+        tree.Delete(node5);
 
         AssertTreeInvariants(tree);
         Assert.IsNull(Find(tree, 5));
@@ -340,7 +333,7 @@ public class RedBlackTreeTests
         Insert(tree, 15);
 
         var node10 = Find(tree, 10)!;
-        Delete(tree, node10);
+        tree.Delete(node10);
 
         AssertTreeInvariants(tree);
         Assert.IsNull(Find(tree, 10));
@@ -357,7 +350,7 @@ public class RedBlackTreeTests
 
         for (int i = 9; i >= 0; i--)
         {
-            Delete(tree, nodes[i]);
+            tree.Delete(nodes[i]);
             try
             {
                 AssertTreeInvariants(tree);
@@ -392,7 +385,7 @@ public class RedBlackTreeTests
         {
             var node = Find(tree, val);
             Assert.IsNotNull(node, $"Node {val} should exist before deletion");
-            Delete(tree, node!);
+            tree.Delete(node!);
             AssertTreeInvariants(tree);
         }
 
@@ -408,7 +401,7 @@ public class RedBlackTreeTests
         Insert(tree, 15);
 
         var node5 = Find(tree, 5)!;
-        Delete(tree, node5);
+        tree.Delete(node5);
 
         AssertTreeInvariants(tree);
 
@@ -442,7 +435,7 @@ public class RedBlackTreeTests
                 {
                     var node = Find(tree, val);
                     Assert.IsNotNull(node, $"Node {val} should exist");
-                    Delete(tree, node!);
+                    tree.Delete(node!);
                 }
             }
 
@@ -471,7 +464,7 @@ public class RedBlackTreeTests
         {
             var node = Find(tree, val);
             Assert.IsNotNull(node);
-            Delete(tree, node!);
+            tree.Delete(node!);
             AssertTreeInvariants(tree);
         }
 
@@ -575,7 +568,7 @@ public class RedBlackTreeTests
     {
         var tree = CreateTree();
         var node = Insert(tree, 42);
-        Delete(tree, node);
+        tree.Delete(node);
         Assert.IsTrue(IsEmpty(tree));
 
         Insert(tree, 42);

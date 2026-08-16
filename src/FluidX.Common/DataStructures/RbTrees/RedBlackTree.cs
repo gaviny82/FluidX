@@ -169,10 +169,62 @@ public class RedBlackTree<TData>
 
     #region Deletion
 
-    public (TreeNode Removed, TreeNode Replacement, bool RemovedWasRed) BstRemove(TreeNode z)
+    /// <summary>
+    /// Deletes <paramref name="z"/> from the tree, maintaining red-black invariants.
+    /// Subclasses override <see cref="OnBeforeRemoval"/> and <see cref="OnAfterRemoval"/>
+    /// to handle augmented metadata.
+    /// </summary>
+    public void Delete(TreeNode z)
     {
-        TreeNode x, y;
+        FindRemovalTargets(z, out var x, out var y);
+        bool yWasRed = y.Color == NodeColor.Red;
 
+        if (y == _root)
+        {
+            _root = x;
+            x.Color = NodeColor.Black;
+            z.Detach();
+            _root.Parent = Sentinel;
+            return;
+        }
+
+        OnBeforeRemoval(z, x, y);
+        RelinkForRemoval(z, x, y);
+        z.Detach();
+        OnAfterRemoval(z, x, y);
+
+        if (!yWasRed)
+            DeleteFixup(x);
+
+        Sentinel.Parent = Sentinel;
+        Sentinel.Color = NodeColor.Black;
+    }
+
+    /// <summary>
+    /// Called before the structural relink. Override to transfer augmented data
+    /// from the removed node to its replacement (e.g., IntervalTree delta transfer).
+    /// <para/>
+    /// <paramref name="z"/> is the node the caller wants removed.
+    /// <paramref name="y"/> is the node physically removed from its position
+    /// (same as <paramref name="z"/> unless a successor swap occurs).
+    /// <paramref name="x"/> is the replacement node that takes <paramref name="y"/>'s place.
+    /// </summary>
+    protected virtual void OnBeforeRemoval(TreeNode z, TreeNode x, TreeNode y) { }
+
+    /// <summary>
+    /// Called after the structural relink and detach. Override to recompute
+    /// augmented metadata (e.g., PieceTree SizeLeft/LfLeft, IntervalTree MaxEnd).
+    /// <para/>
+    /// <paramref name="z"/> is the node the caller wanted removed (already detached).
+    /// <paramref name="y"/> is the node that was physically removed from its position
+    /// (same as <paramref name="z"/> unless a successor swap occurred — in which case
+    /// <paramref name="y"/> took <paramref name="z"/>'s position before <paramref name="z"/> was detached).
+    /// <paramref name="x"/> is the replacement node that took <paramref name="y"/>'s original position.
+    /// </summary>
+    protected virtual void OnAfterRemoval(TreeNode z, TreeNode x, TreeNode y) { }
+
+    private void FindRemovalTargets(TreeNode z, out TreeNode x, out TreeNode y)
+    {
         if (z.Left == Sentinel)
         {
             y = z;
@@ -188,18 +240,10 @@ public class RedBlackTree<TData>
             y = z.Right.Leftest();
             x = y.Right;
         }
+    }
 
-        bool yWasRed = y.Color == NodeColor.Red;
-
-        if (y == _root)
-        {
-            _root = x;
-            x.Color = NodeColor.Black;
-            z.Detach();
-            _root.Parent = Sentinel;
-            return (z, x, yWasRed);
-        }
-
+    private void RelinkForRemoval(TreeNode z, TreeNode x, TreeNode y)
+    {
         if (y == y.Parent.Left)
             y.Parent.Left = x;
         else
@@ -233,13 +277,9 @@ public class RedBlackTree<TData>
             if (y.Right != Sentinel)
                 y.Right.Parent = y;
         }
-
-        z.Detach();
-
-        return (z, x, yWasRed);
     }
 
-    public void DeleteFixup(TreeNode x)
+    private void DeleteFixup(TreeNode x)
     {
         while (x != _root && x.Color == NodeColor.Black)
         {
