@@ -29,9 +29,9 @@ public class PieceTreeSnapshot : ITextSnapshot
         _tree = tree;
         _BOM = BOM;
         _index = 0;
-        if (!tree.Tree.Root.IsSentinel)
+        if (!tree._pieceTree.Root.IsSentinel)
         {
-            PieceTree.Iterate(tree.Tree.Root, node =>
+            PieceTree.Iterate(tree._pieceTree.Root, node =>
             {
                 _pieces.Add(node.Piece);
                 return true;

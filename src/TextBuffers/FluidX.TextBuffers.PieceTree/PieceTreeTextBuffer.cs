@@ -1,12 +1,16 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.Text;
+using System.Text.RegularExpressions;
+using FluidX.Common.DataStructures.RbTrees;
 
 namespace FluidX.TextBuffers.PieceTree;
 
-public partial class PieceTreeTextBuffer : ITextBuffer
+using TreeNode = RedBlackTree<PieceNodeData>.TreeNode;
+
+public class PieceTreeTextBuffer : ITextBuffer
 {
     private const int AverageBufferSize = 65535; // 64 * 1024
 
-    internal TreeNode Root { get; set; } = null!;
+    internal readonly PieceTree _pieceTree = new();
 
     protected List<StringBuffer> _buffers = null!; // 0 is change buffer, others are readonly original buffer.
     protected int _lineCount;
@@ -45,7 +49,6 @@ public partial class PieceTreeTextBuffer : ITextBuffer
             new StringBuffer("", [0])
         ];
         _lastChangeBufferPos = new BufferCursor { Line = 0, Column = 0 };
-        Root = TreeNode.Sentinel;
         _lineCount = 1;
         _length = 0;
         _EOL = eol;
@@ -75,7 +78,7 @@ public partial class PieceTreeTextBuffer : ITextBuffer
                     chunks[i].Buffer.Length
                 );
                 _buffers.Add(chunks[i]);
-                lastNode = RbInsertRight(lastNode, piece);
+                lastNode = _pieceTree.InsertRight(lastNode, new PieceNodeData(piece));
             }
         }
 
@@ -94,15 +97,15 @@ public partial class PieceTreeTextBuffer : ITextBuffer
         int tempChunkLen = 0;
         List<StringBuffer> chunks = [];
 
-        Iterate(Root, node =>
+        for (var iterNode = _pieceTree.Root.Leftest(); iterNode is not null; iterNode = iterNode.Next())
         {
-            string str = GetNodeContent(node);
+            string str = GetNodeContent(iterNode);
             int len = str.Length;
             if (tempChunkLen <= min || tempChunkLen + len < max)
             {
                 tempChunk += str;
                 tempChunkLen += len;
-                return true;
+                continue;
             }
 
             // Flush anyways
@@ -110,8 +113,7 @@ public partial class PieceTreeTextBuffer : ITextBuffer
             chunks.Add(new StringBuffer(text, LineStarts.CreateFast(text)));
             tempChunk = str;
             tempChunkLen = len;
-            return true;
-        });
+        }
 
         if (tempChunkLen > 0)
         {
@@ -588,11 +590,8 @@ public partial class PieceTreeTextBuffer : ITextBuffer
             return false;
 
         int offset = 0;
-        return Iterate(Root, node =>
+        return PieceTree.Iterate(_pieceTree.Root, node =>
         {
-            if (node == TreeNode.Sentinel)
-                return true;
-
             string str = GetNodeContent(node);
             int len = str.Length;
             NodePosition startPosition = other.NodeAt(offset);
@@ -607,11 +606,11 @@ public partial class PieceTreeTextBuffer : ITextBuffer
     public int GetOffsetAt(int lineNumber, int column)
     {
         int leftLen = 0; // inorder
-        TreeNode x = Root;
+        TreeNode x = _pieceTree.Root;
 
-        while (x != TreeNode.Sentinel)
+        while (!x.IsSentinel)
         {
-            if (x.Left != TreeNode.Sentinel && x.LfLeft + 1 >= lineNumber)
+            if (!x.Left.IsSentinel && x.LfLeft + 1 >= lineNumber)
             {
                 x = x.Left;
             }
@@ -637,11 +636,11 @@ public partial class PieceTreeTextBuffer : ITextBuffer
     {
         offset = Math.Max(0, offset);
 
-        TreeNode x = Root;
+        TreeNode x = _pieceTree.Root;
         int lfCnt = 0;
         int originalOffset = offset;
 
-        while (x != TreeNode.Sentinel)
+        while (!x.IsSentinel)
         {
             if (x.SizeLeft != 0 && x.SizeLeft >= offset)
             {
@@ -665,7 +664,7 @@ public partial class PieceTreeTextBuffer : ITextBuffer
                 offset -= x.SizeLeft + x.Piece.Length;
                 lfCnt += x.LfLeft + x.Piece.LineFeedCount;
 
-                if (x.Right == TreeNode.Sentinel)
+                if (x.Right.IsSentinel)
                 {
                     // last node
                     int lineStartOffset = GetOffsetAt(lfCnt + 1, 1);
@@ -746,11 +745,8 @@ public partial class PieceTreeTextBuffer : ITextBuffer
         string currentLine = "";
         bool danglingCR = false;
 
-        Iterate(Root, node =>
+        PieceTree.Iterate(_pieceTree.Root, node =>
         {
-            if (node == TreeNode.Sentinel)
-                return true;
-
             Piece piece = node.Piece;
             int pieceLength = piece.Length;
             if (pieceLength == 0)
@@ -908,7 +904,7 @@ public partial class PieceTreeTextBuffer : ITextBuffer
         {
             // the offset is at the head of next node.
             var matchingNode = nodePos.Node.Next();
-            if (matchingNode is null || matchingNode == TreeNode.Sentinel)
+            if (matchingNode.IsSentinel)
                 return "";
 
             var buffer = _buffers[matchingNode.Piece.BufferIndex];
@@ -1110,7 +1106,7 @@ public partial class PieceTreeTextBuffer : ITextBuffer
         _lastVisitedLine.LineNumber = 0;
         _lastVisitedLine.Value = "";
 
-        if (Root != TreeNode.Sentinel)
+        if (!_pieceTree.Root.IsSentinel)
         {
             var nodePosition = NodeAt(offset);
             var node = nodePosition.Node;
@@ -1201,13 +1197,13 @@ public partial class PieceTreeTextBuffer : ITextBuffer
                 var newPieces = CreateNewPieces(value);
                 if (newRightPiece.Length > 0)
                 {
-                    RbInsertRight(node, newRightPiece);
+                    _pieceTree.InsertRight(node, new PieceNodeData(newRightPiece));
                 }
 
                 var tmpNode = node;
                 for (int k = 0; k < newPieces.Count; k++)
                 {
-                    tmpNode = RbInsertRight(tmpNode, newPieces[k]);
+                    tmpNode = _pieceTree.InsertRight(tmpNode, new PieceNodeData(newPieces[k]));
                 }
                 DeleteNodes(nodesToDel);
             }
@@ -1220,11 +1216,11 @@ public partial class PieceTreeTextBuffer : ITextBuffer
         {
             // insert new node
             var pieces = CreateNewPieces(value);
-            var node = RbInsertLeft(null, pieces[0]);
+            var node = _pieceTree.InsertLeft(null, new PieceNodeData(pieces[0]));
 
             for (int k = 1; k < pieces.Count; k++)
             {
-                node = RbInsertRight(node, pieces[k]);
+                node = _pieceTree.InsertRight(node, new PieceNodeData(pieces[k]));
             }
         }
 
@@ -1237,7 +1233,7 @@ public partial class PieceTreeTextBuffer : ITextBuffer
         _lastVisitedLine.LineNumber = 0;
         _lastVisitedLine.Value = "";
 
-        if (cnt <= 0 || Root == TreeNode.Sentinel)
+        if (cnt <= 0 || _pieceTree.Root.IsSentinel)
             return;
 
         var startPosition = NodeAt(offset);
@@ -1256,7 +1252,7 @@ public partial class PieceTreeTextBuffer : ITextBuffer
                 {
                     // delete node
                     var next = startNode.Next();
-                    RedBlackTreeHelper.RbDelete(this, startNode);
+                    _pieceTree.Delete(startNode);
                     ValidateCRLFWithPrevNode(next);
                     ComputeBufferMetadata();
                     return;
@@ -1338,17 +1334,17 @@ public partial class PieceTreeTextBuffer : ITextBuffer
             node.Piece = nPiece;
 
             value += '\n';
-            RedBlackTreeHelper.UpdateTreeMetadata(this, node, -1, -1);
+            _pieceTree.UpdateTreeMetadata(node, -1, -1);
 
             if (node.Piece.Length == 0)
                 nodesToDel.Add(node);
         }
 
         var newPieces = CreateNewPieces(value);
-        var newNode = RbInsertLeft(node, newPieces[newPieces.Count - 1]);
+        var newNode = _pieceTree.InsertLeft(node, new PieceNodeData(newPieces[newPieces.Count - 1]));
         for (int k = newPieces.Count - 2; k >= 0; k--)
         {
-            newNode = RbInsertLeft(newNode, newPieces[k]);
+            newNode = _pieceTree.InsertLeft(newNode, new PieceNodeData(newPieces[k]));
         }
         ValidateCRLFWithPrevNode(newNode);
         DeleteNodes(nodesToDel);
@@ -1364,12 +1360,12 @@ public partial class PieceTreeTextBuffer : ITextBuffer
         }
 
         var newPieces = CreateNewPieces(value);
-        var newNode = RbInsertRight(node, newPieces[0]);
+        var newNode = _pieceTree.InsertRight(node, new PieceNodeData(newPieces[0]));
         var tmpNode = newNode;
 
         for (int k = 1; k < newPieces.Count; k++)
         {
-            tmpNode = RbInsertRight(tmpNode, newPieces[k]);
+            tmpNode = _pieceTree.InsertRight(tmpNode, new PieceNodeData(newPieces[k]));
         }
 
         ValidateCRLFWithPrevNode(newNode);
@@ -1472,7 +1468,7 @@ public partial class PieceTreeTextBuffer : ITextBuffer
     private void DeleteNodes(IReadOnlyList<TreeNode> nodes)
     {
         for (int i = 0; i < nodes.Count; i++)
-            RedBlackTreeHelper.RbDelete(this, nodes[i]);
+            _pieceTree.Delete(nodes[i]);
     }
 
     private IReadOnlyList<Piece> CreateNewPieces(string text)
@@ -1593,11 +1589,11 @@ public partial class PieceTreeTextBuffer : ITextBuffer
         return [newPiece];
     }
 
-    public string GetLinesRawContent() => GetContentOfSubTree(Root);
+    public string GetLinesRawContent() => GetContentOfSubTree(_pieceTree.Root);
 
     public string GetLineRawContent(int lineNumber, int endOffset = 0)
     {
-        var x = Root;
+        var x = _pieceTree.Root;
 
         string ret = "";
         var cacheRet = _searchCache.Get2(lineNumber);
@@ -1621,9 +1617,9 @@ public partial class PieceTreeTextBuffer : ITextBuffer
         {
             int nodeStartOffset = 0;
             int originalLineNumber = lineNumber;
-            while (x != TreeNode.Sentinel)
+            while (!x.IsSentinel)
             {
-                if (x.Left != TreeNode.Sentinel && x.LfLeft >= lineNumber - 1)
+                if (!x.Left.IsSentinel && x.LfLeft >= lineNumber - 1)
                 {
                     x = x.Left;
                 }
@@ -1689,12 +1685,12 @@ public partial class PieceTreeTextBuffer : ITextBuffer
 
     private void ComputeBufferMetadata()
     {
-        TreeNode x = Root;
+        TreeNode x = _pieceTree.Root;
 
         int lfCount = 1;
         int len = 0;
 
-        while (x != TreeNode.Sentinel)
+        while (!x.IsSentinel)
         {
             lfCount += x.LfLeft +x.Piece.LineFeedCount;
             len += x.SizeLeft + x.Piece.Length;
@@ -1766,7 +1762,7 @@ public partial class PieceTreeTextBuffer : ITextBuffer
             newLength
         );
 
-        RedBlackTreeHelper.UpdateTreeMetadata(this, node, size_delta, lf_delta);
+        _pieceTree.UpdateTreeMetadata(node, size_delta, lf_delta);
     }
 
     private void DeleteNodeHead(TreeNode node, BufferCursor pos)
@@ -1789,7 +1785,7 @@ public partial class PieceTreeTextBuffer : ITextBuffer
             newLength
         );
 
-        RedBlackTreeHelper.UpdateTreeMetadata(this, node, size_delta, lf_delta);
+        _pieceTree.UpdateTreeMetadata(node, size_delta, lf_delta);
     }
 
     private void ShrinkNode(TreeNode node, BufferCursor start, BufferCursor end)
@@ -1813,7 +1809,7 @@ public partial class PieceTreeTextBuffer : ITextBuffer
             newLength
         );
 
-        RedBlackTreeHelper.UpdateTreeMetadata(this, node, newLength - oldLength, newLineFeedCnt - oldLFCnt);
+        _pieceTree.UpdateTreeMetadata(node, newLength - oldLength, newLineFeedCnt - oldLFCnt);
 
         // new right piece, end, originalEndPos
         var newPiece = new Piece(
@@ -1824,7 +1820,7 @@ public partial class PieceTreeTextBuffer : ITextBuffer
             OffsetInBuffer(piece.BufferIndex, originalEndPos) - OffsetInBuffer(piece.BufferIndex, end)
         );
 
-        var newNode = RbInsertRight(node, newPiece);
+        var newNode = _pieceTree.InsertRight(node, new PieceNodeData(newPiece));
         ValidateCRLFWithPrevNode(newNode);
     }
 
@@ -1878,12 +1874,12 @@ public partial class PieceTreeTextBuffer : ITextBuffer
         );
 
         _lastChangeBufferPos = newEnd;
-        RedBlackTreeHelper.UpdateTreeMetadata(this, node, value.Length, lf_delta);
+        _pieceTree.UpdateTreeMetadata(node, value.Length, lf_delta);
     }
 
     private NodePosition NodeAt(int offset)
     {
-        TreeNode x = Root;
+        TreeNode x = _pieceTree.Root;
         CacheEntry? cache = _searchCache.Get(offset);
         if (cache is not null)
         {
@@ -1897,7 +1893,7 @@ public partial class PieceTreeTextBuffer : ITextBuffer
 
         int nodeStartOffset = 0;
 
-        while (x != TreeNode.Sentinel)
+        while (!x.IsSentinel)
         {
             if (x.SizeLeft > offset)
             {
@@ -1934,12 +1930,12 @@ public partial class PieceTreeTextBuffer : ITextBuffer
 
     private NodePosition NodeAt2(int lineNumber, int column)
     {
-        var x = Root;
+        var x = _pieceTree.Root;
         int nodeStartOffset = 0;
 
-        while (x != TreeNode.Sentinel)
+        while (!x.IsSentinel)
         {
-            if (x.Left != TreeNode.Sentinel && x.LfLeft >= lineNumber - 1)
+            if (!x.Left.IsSentinel && x.LfLeft >= lineNumber - 1)
             {
                 x = x.Left;
             }
@@ -2036,7 +2032,7 @@ public partial class PieceTreeTextBuffer : ITextBuffer
             return 0;
 
         int pos = node.SizeLeft;
-        while (node != Root)
+        while (node != _pieceTree.Root)
         {
             if (node.Parent.Right == node)
             {
@@ -2150,7 +2146,7 @@ public partial class PieceTreeTextBuffer : ITextBuffer
             prevNewLength
         );
 
-        RedBlackTreeHelper.UpdateTreeMetadata(this, prev, -1, -1);
+        _pieceTree.UpdateTreeMetadata(prev, -1, -1);
         if (prev.Piece.Length == 0)
         {
             nodesToDel.Add(prev);
@@ -2172,7 +2168,7 @@ public partial class PieceTreeTextBuffer : ITextBuffer
             newLength
         );
 
-        RedBlackTreeHelper.UpdateTreeMetadata(this, next, -1, -1);
+        _pieceTree.UpdateTreeMetadata(next, -1, -1);
         if (next.Piece.Length == 0)
         {
             nodesToDel.Add(next);
@@ -2180,12 +2176,12 @@ public partial class PieceTreeTextBuffer : ITextBuffer
 
         // create new piece which contains \r\n
         var pieces = CreateNewPieces("\r\n");
-        RbInsertRight(prev, pieces[0]);
+        _pieceTree.InsertRight(prev, new PieceNodeData(pieces[0]));
         // delete empty nodes
 
         for (int i = 0; i < nodesToDel.Count; i++)
         {
-            RedBlackTreeHelper.RbDelete(this, nodesToDel[i]);
+            _pieceTree.Delete(nodesToDel[i]);
         }
     }
 
@@ -2201,7 +2197,7 @@ public partial class PieceTreeTextBuffer : ITextBuffer
 
                 if (nextNode.Piece.Length == 1)
                 {
-                    RedBlackTreeHelper.RbDelete(this, nextNode);
+                    _pieceTree.Delete(nextNode);
                 }
                 else
                 {
@@ -2221,7 +2217,7 @@ public partial class PieceTreeTextBuffer : ITextBuffer
                         newLength
                     );
 
-                    RedBlackTreeHelper.UpdateTreeMetadata(this, nextNode, -1, -1);
+                    _pieceTree.UpdateTreeMetadata(nextNode, -1, -1);
                 }
                 return true;
             }
@@ -2234,20 +2230,9 @@ public partial class PieceTreeTextBuffer : ITextBuffer
 
     #region Tree Operations
 
-    internal static bool Iterate(TreeNode node, Func<TreeNode, bool> callback)
-    {
-        if (node == TreeNode.Sentinel)
-            return callback(TreeNode.Sentinel);
-
-        if (!Iterate(node.Left, callback))
-            return false;
-
-        return callback(node) && Iterate(node.Right, callback);
-    }
-
     private string GetNodeContent(TreeNode node)
     {
-        if (node == TreeNode.Sentinel)
+        if (node.IsSentinel)
             return "";
 
         StringBuffer buffer = _buffers[node.Piece.BufferIndex];
@@ -2267,95 +2252,14 @@ public partial class PieceTreeTextBuffer : ITextBuffer
         return currentContent;
     }
 
-    /**
-     *      node              node
-     *     /  \              /  \
-     *    a   b    <----   a    b
-     *                         /
-     *                        z
-     */
-    private TreeNode RbInsertRight(TreeNode? node, Piece p)
-    {
-        var z = new TreeNode(p, NodeColor.Red)
-        {
-            Left = TreeNode.Sentinel,
-            Right = TreeNode.Sentinel,
-            Parent = TreeNode.Sentinel,
-            SizeLeft = 0,
-            LfLeft = 0
-        };
-
-        var x = Root;
-        if (x == TreeNode.Sentinel)
-        {
-            Root = z;
-            z.Color = NodeColor.Black;
-        }
-        else if (node!.Right == TreeNode.Sentinel)
-        {
-            node!.Right = z;
-            z.Parent = node!;
-        }
-        else
-        {
-            var nextNode = RedBlackTreeHelper.Leftest(node!.Right);
-            nextNode.Left = z;
-            z.Parent = nextNode;
-        }
-
-        RedBlackTreeHelper.FixInsert(this, z);
-        return z;
-    }
-
-    /**
-     *      node              node
-     *     /  \              /  \
-     *    a   b     ---->   a    b
-     *                       \
-     *                        z
-     */
-    private TreeNode RbInsertLeft(TreeNode? node, Piece p)
-    {
-        var z = new TreeNode(p, NodeColor.Red)
-        {
-            Left = TreeNode.Sentinel,
-            Right = TreeNode.Sentinel,
-            Parent = TreeNode.Sentinel,
-            SizeLeft = 0,
-            LfLeft = 0
-        };
-
-        if (Root == TreeNode.Sentinel)
-        {
-            Root = z;
-            z.Color = NodeColor.Black;
-        }
-        else if (node!.Left == TreeNode.Sentinel)
-        {
-            node!.Left = z;
-            z.Parent = node!;
-        }
-        else
-        {
-            var prevNode = RedBlackTreeHelper.Rightest(node!.Left); // a
-            prevNode.Right = z;
-            z.Parent = prevNode;
-        }
-
-        RedBlackTreeHelper.FixInsert(this, z);
-        return z;
-    }
-
     private string GetContentOfSubTree(TreeNode node)
     {
-        string str = "";
-
-        Iterate(node, node => {
-            str += GetNodeContent(node);
+        StringBuilder sb = new();
+        PieceTree.Iterate(node, node => {
+            sb.Append(GetNodeContent(node));
             return true;
         });
-
-        return str;
+        return sb.ToString();
     }
 
     #endregion
@@ -2458,31 +2362,25 @@ internal class NodePosition
     public required int NodeStartOffset { get; init; }
 }
 
-public class StringBuffer
-{
-    public string Buffer { get; set; }
-    public IReadOnlyList<int> LineStarts { get; set; }
-
-    public StringBuffer(string buffer, IReadOnlyList<int> lineStarts)
-    {
-        Buffer = buffer;
-        LineStarts = lineStarts;
-    }
-}
-
-// TODO: Confirm 0-based or 1-based indexing
-/// <summary>
-/// A position in a text buffer
-/// </summary>
-/// <param name="Line">Line number in current buffer</param>
-/// <param name="Column">Column number in current buffer</param>
-internal readonly record struct BufferCursor(int Line, int Column);
-
-internal record class Piece(int BufferIndex, BufferCursor Start, BufferCursor End, int LineFeedCount, int Length);
-
 internal class CacheEntry
 {
     public required TreeNode Node { get; init; }
     public required int NodeStartOffset { get; init; }
     public required int? NodeStartLineNumber { get; init; }
+}
+
+/// <summary>
+/// Represents an append-only text buffer with cached line start positions.
+/// </summary>
+public class StringBuffer(string buffer, IReadOnlyList<int> lineStarts)
+{
+    /// <summary>
+    /// Append-only <see cref="char"/> buffer.
+    /// </summary>
+    public string Buffer { get; set; } = buffer;
+
+    /// <summary>
+    /// Append-only list of indices of line start positions in <see cref="Buffer"/>.
+    /// </summary>
+    public IReadOnlyList<int> LineStarts { get; set; } = lineStarts;
 }

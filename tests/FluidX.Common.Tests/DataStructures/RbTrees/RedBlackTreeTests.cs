@@ -11,21 +11,21 @@ public class RedBlackTreeTests
 
     private static RedBlackTree<int>.TreeNode Insert(RedBlackTree<int> tree, int value)
     {
-        if (tree.Root == tree.Sentinel)
-            return tree.InsertRight(tree.Sentinel, value);
+        if (tree.Root == RedBlackTree<int>.TreeNode.Sentinel)
+            return tree.InsertRight(RedBlackTree<int>.TreeNode.Sentinel, value);
 
         var x = tree.Root;
         while (true)
         {
             if (value <= x.Data)
             {
-                if (x.Left == tree.Sentinel)
+                if (x.Left == RedBlackTree<int>.TreeNode.Sentinel)
                     return tree.InsertLeft(x, value);
                 x = x.Left;
             }
             else
             {
-                if (x.Right == tree.Sentinel)
+                if (x.Right == RedBlackTree<int>.TreeNode.Sentinel)
                     return tree.InsertRight(x, value);
                 x = x.Right;
             }
@@ -35,7 +35,7 @@ public class RedBlackTreeTests
     private static RedBlackTree<int>.TreeNode? Find(RedBlackTree<int> tree, int value)
     {
         var x = tree.Root;
-        while (x != tree.Sentinel)
+        while (x != RedBlackTree<int>.TreeNode.Sentinel)
         {
             if (value < x.Data)
                 x = x.Left;
@@ -50,11 +50,11 @@ public class RedBlackTreeTests
     private static List<int> GetInOrderTraversal(RedBlackTree<int> tree)
     {
         var result = new List<int>();
-        if (tree.Root == tree.Sentinel)
+        if (tree.Root == RedBlackTree<int>.TreeNode.Sentinel)
             return result;
 
         var node = tree.Root.Leftest();
-        while (node != null)
+        while (!node.IsSentinel)
         {
             result.Add(node.Data);
             node = node.Next();
@@ -62,18 +62,18 @@ public class RedBlackTreeTests
         return result;
     }
 
-    private static bool IsEmpty(RedBlackTree<int> tree) => tree.Root == tree.Sentinel;
+    private static bool IsEmpty(RedBlackTree<int> tree) => tree.Root == RedBlackTree<int>.TreeNode.Sentinel;
 
     private static string DumpTree(RedBlackTree<int> tree)
     {
-        if (tree.Root == tree.Sentinel)
+        if (tree.Root == RedBlackTree<int>.TreeNode.Sentinel)
             return "(empty)";
         return DumpNode(tree, tree.Root, "", true);
     }
 
     private static string DumpNode(RedBlackTree<int> tree, RedBlackTree<int>.TreeNode node, string indent, bool isLast)
     {
-        if (node == tree.Sentinel)
+        if (node == RedBlackTree<int>.TreeNode.Sentinel)
             return indent + (isLast ? "└── " : "├── ") + "S(B)\n";
 
         var color = node.Color == NodeColor.Red ? "R" : "B";
@@ -91,7 +91,7 @@ public class RedBlackTreeTests
 
     private static void AssertNoRedRedViolationRecursive(RedBlackTree<int> tree, RedBlackTree<int>.TreeNode node)
     {
-        if (node == tree.Sentinel)
+        if (node == RedBlackTree<int>.TreeNode.Sentinel)
             return;
 
         if (node.Color == NodeColor.Red)
@@ -111,7 +111,7 @@ public class RedBlackTreeTests
 
     private static int AssertBalancedBlackHeightRecursive(RedBlackTree<int> tree, RedBlackTree<int>.TreeNode node)
     {
-        if (node == tree.Sentinel)
+        if (node == RedBlackTree<int>.TreeNode.Sentinel)
             return 1;
 
         int leftBlack = AssertBalancedBlackHeightRecursive(tree, node.Left);
@@ -297,7 +297,7 @@ public class RedBlackTreeTests
         var node3 = Find(tree, 3)!;
         tree.Delete(node3);
 
-        Assert.AreEqual(tree.Sentinel, tree.Sentinel.Parent,
+        Assert.AreEqual(RedBlackTree<int>.TreeNode.Sentinel, RedBlackTree<int>.TreeNode.Sentinel.Parent,
             "Sentinel.Parent must always point back to Sentinel");
     }
 
@@ -312,15 +312,15 @@ public class RedBlackTreeTests
         Insert(tree, 7);
 
         tree.Delete(Find(tree, 3)!);
-        Assert.AreEqual(tree.Sentinel, tree.Sentinel.Parent,
+        Assert.AreEqual(RedBlackTree<int>.TreeNode.Sentinel, RedBlackTree<int>.TreeNode.Sentinel.Parent,
             "Sentinel.Parent corrupted after first delete");
 
         tree.Delete(Find(tree, 7)!);
-        Assert.AreEqual(tree.Sentinel, tree.Sentinel.Parent,
+        Assert.AreEqual(RedBlackTree<int>.TreeNode.Sentinel, RedBlackTree<int>.TreeNode.Sentinel.Parent,
             "Sentinel.Parent corrupted after second delete");
 
         tree.Delete(Find(tree, 5)!);
-        Assert.AreEqual(tree.Sentinel, tree.Sentinel.Parent,
+        Assert.AreEqual(RedBlackTree<int>.TreeNode.Sentinel, RedBlackTree<int>.TreeNode.Sentinel.Parent,
             "Sentinel.Parent corrupted after third delete");
     }
 
@@ -338,7 +338,7 @@ public class RedBlackTreeTests
         var node5 = Find(tree, 5)!;
         tree.Delete(node5);
 
-        Assert.AreEqual(tree.Sentinel, tree.Sentinel.Parent,
+        Assert.AreEqual(RedBlackTree<int>.TreeNode.Sentinel, RedBlackTree<int>.TreeNode.Sentinel.Parent,
             "Sentinel.Parent must be reset after successor-swap delete");
         AssertTreeInvariants(tree);
     }
@@ -653,7 +653,7 @@ public class RedBlackTreeTests
 
     private static int GetHeight(RedBlackTree<int> tree, RedBlackTree<int>.TreeNode node)
     {
-        if (node == tree.Sentinel)
+        if (node == RedBlackTree<int>.TreeNode.Sentinel)
             return 0;
         return 1 + Math.Max(GetHeight(tree, node.Left), GetHeight(tree, node.Right));
     }
