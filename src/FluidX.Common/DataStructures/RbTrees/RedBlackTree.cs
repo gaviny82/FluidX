@@ -1,3 +1,4 @@
+
 namespace FluidX.Common.DataStructures.RbTrees;
 
 public class RedBlackTree<TData>
@@ -54,6 +55,9 @@ public class RedBlackTree<TData>
 
     public TreeNode InsertRight(TreeNode node, TData data)
     {
+        if (_root != Sentinel && node.IsSentinel)
+            throw new ArgumentException("Cannot insert relative to Sentinel when the tree is non-empty.", nameof(node));
+
         var z = new TreeNode(data, Sentinel);
         z.Color = NodeColor.Red;
 
@@ -82,6 +86,9 @@ public class RedBlackTree<TData>
 
     public TreeNode InsertLeft(TreeNode node, TData data)
     {
+        if (_root != Sentinel && node.IsSentinel)
+            throw new ArgumentException("Cannot insert relative to Sentinel when the tree is non-empty.", nameof(node));
+
         var z = new TreeNode(data, Sentinel);
         z.Color = NodeColor.Red;
 
@@ -176,15 +183,22 @@ public class RedBlackTree<TData>
     /// </summary>
     public void Delete(TreeNode z)
     {
+        if (z.IsSentinel)
+            throw new ArgumentException("Cannot delete the Sentinel.", nameof(z));
+
         FindRemovalTargets(z, out var x, out var y);
         bool yWasRed = y.Color == NodeColor.Red;
 
         if (y == _root)
         {
+            OnBeforeRemoval(z, x, y);
+
             _root = x;
             x.Color = NodeColor.Black;
             z.Detach();
             _root.Parent = Sentinel;
+
+            OnAfterRemoval(z, x, y);
             return;
         }
 
