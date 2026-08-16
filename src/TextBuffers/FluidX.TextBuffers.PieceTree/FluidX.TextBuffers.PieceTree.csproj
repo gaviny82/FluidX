@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\FluidX.TextBuffers\FluidX.TextBuffers.csproj" />
+    <ProjectReference Include="..\..\FluidX.Common\FluidX.Common.csproj" />
   </ItemGroup>
 
 </Project>

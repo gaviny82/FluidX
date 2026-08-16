@@ -50,6 +50,7 @@ public class RedBlackTree<TData>
 
     protected virtual void OnAfterLeftRotate(TreeNode oldParent, TreeNode newParent) { }
     protected virtual void OnAfterRightRotate(TreeNode oldParent, TreeNode newParent) { }
+    protected virtual void OnAfterInsert(TreeNode z) { }
 
     #region Insertion
 
@@ -81,6 +82,7 @@ public class RedBlackTree<TData>
         }
 
         InsertFixup(z);
+        OnAfterInsert(z);
         return z;
     }
 
@@ -112,6 +114,7 @@ public class RedBlackTree<TData>
         }
 
         InsertFixup(z);
+        OnAfterInsert(z);
         return z;
     }
 
