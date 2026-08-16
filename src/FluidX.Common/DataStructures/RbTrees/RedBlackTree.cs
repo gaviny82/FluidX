@@ -209,9 +209,6 @@ public class RedBlackTree<TData>
 
         if (!yWasRed)
             DeleteFixup(x);
-
-        Sentinel.Parent = Sentinel;
-        Sentinel.Color = NodeColor.Black;
     }
 
     /// <summary>
