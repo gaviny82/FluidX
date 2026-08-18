@@ -96,8 +96,8 @@ public class RedBlackTreeTests
 
         if (node.Color == NodeColor.Red)
         {
-            Assert.IsTrue(node.Left.Color == NodeColor.Black, $"Red node {node.Data} has red left child");
-            Assert.IsTrue(node.Right.Color == NodeColor.Black, $"Red node {node.Data} has red right child");
+            Assert.AreEqual(NodeColor.Black, node.Left.Color, $"Red node {node.Data} has red left child");
+            Assert.AreEqual(NodeColor.Black, node.Right.Color, $"Red node {node.Data} has red right child");
         }
 
         AssertNoRedRedViolationRecursive(tree, node.Left);
@@ -134,7 +134,7 @@ public class RedBlackTreeTests
         var values = GetInOrderTraversal(tree);
         for (int i = 1; i < values.Count; i++)
         {
-            Assert.IsTrue(values[i - 1] <= values[i],
+            Assert.IsLessThanOrEqualTo(values[i], values[i - 1],
                 $"BST order violated: {values[i - 1]} > {values[i]}");
         }
     }
@@ -185,7 +185,7 @@ public class RedBlackTreeTests
         Insert(tree, 15);
 
         AssertTreeInvariants(tree);
-        Assert.AreEqual(3, GetInOrderTraversal(tree).Count);
+        Assert.HasCount(3, GetInOrderTraversal(tree));
     }
 
     [TestMethod]
@@ -199,7 +199,7 @@ public class RedBlackTreeTests
         }
 
         var values = GetInOrderTraversal(tree);
-        Assert.AreEqual(20, values.Count);
+        Assert.HasCount(20, values);
         Assert.AreEqual(1, values[0]);
         Assert.AreEqual(20, values[^1]);
     }
@@ -215,7 +215,7 @@ public class RedBlackTreeTests
         }
 
         var values = GetInOrderTraversal(tree);
-        Assert.AreEqual(20, values.Count);
+        Assert.HasCount(20, values);
         Assert.AreEqual(1, values[0]);
         Assert.AreEqual(20, values[^1]);
     }
@@ -282,7 +282,7 @@ public class RedBlackTreeTests
 
         AssertTreeInvariants(tree);
         Assert.IsNull(Find(tree, 3));
-        Assert.AreEqual(3, GetInOrderTraversal(tree).Count);
+        Assert.HasCount(3, GetInOrderTraversal(tree));
     }
 
     [TestMethod]
@@ -378,7 +378,7 @@ public class RedBlackTreeTests
 
         AssertTreeInvariants(tree);
         Assert.IsNull(Find(tree, 5));
-        Assert.AreEqual(6, GetInOrderTraversal(tree).Count);
+        Assert.HasCount(6, GetInOrderTraversal(tree));
     }
 
     [TestMethod]
@@ -394,7 +394,7 @@ public class RedBlackTreeTests
 
         AssertTreeInvariants(tree);
         Assert.IsNull(Find(tree, 10));
-        Assert.AreEqual(2, GetInOrderTraversal(tree).Count);
+        Assert.HasCount(2, GetInOrderTraversal(tree));
     }
 
     [TestMethod]
@@ -446,7 +446,7 @@ public class RedBlackTreeTests
             AssertTreeInvariants(tree);
         }
 
-        Assert.AreEqual(25, GetInOrderTraversal(tree).Count);
+        Assert.HasCount(25, GetInOrderTraversal(tree));
     }
 
     [TestMethod]
@@ -500,7 +500,7 @@ public class RedBlackTreeTests
         }
 
         var traversal = GetInOrderTraversal(tree);
-        Assert.AreEqual(present.Count, traversal.Count);
+        Assert.HasCount(present.Count, traversal);
     }
 
     [TestMethod]
@@ -514,7 +514,7 @@ public class RedBlackTreeTests
             Insert(tree, val);
 
         AssertTreeInvariants(tree);
-        Assert.AreEqual(200, GetInOrderTraversal(tree).Count);
+        Assert.HasCount(200, GetInOrderTraversal(tree));
 
         var deleteOrder = values.OrderBy(_ => rng.Next()).ToList();
         foreach (var val in deleteOrder)
@@ -542,10 +542,10 @@ public class RedBlackTreeTests
             Insert(tree, val);
 
         var result = GetInOrderTraversal(tree);
-        Assert.AreEqual(50, result.Count);
+        Assert.HasCount(50, result);
 
         for (int i = 1; i < result.Count; i++)
-            Assert.IsTrue(result[i - 1] < result[i]);
+            Assert.IsLessThan(result[i], result[i - 1]);
     }
 
     [TestMethod]
@@ -558,7 +558,7 @@ public class RedBlackTreeTests
             Insert(tree, val);
 
         var forward = GetInOrderTraversal(tree);
-        Assert.AreEqual(50, forward.Count);
+        Assert.HasCount(50, forward);
         Assert.AreEqual(0, forward[0]);
         Assert.AreEqual(49, forward[^1]);
     }
@@ -606,7 +606,7 @@ public class RedBlackTreeTests
     public void EmptyTree_GetInOrderTraversal_ReturnsEmpty()
     {
         var tree = CreateTree();
-        Assert.AreEqual(0, GetInOrderTraversal(tree).Count);
+        Assert.IsEmpty(GetInOrderTraversal(tree));
     }
 
     [TestMethod]
@@ -616,7 +616,7 @@ public class RedBlackTreeTests
         Insert(tree, 10);
         Insert(tree, 10);
 
-        Assert.AreEqual(2, GetInOrderTraversal(tree).Count);
+        Assert.HasCount(2, GetInOrderTraversal(tree));
         AssertTreeInvariants(tree);
     }
 
@@ -643,11 +643,11 @@ public class RedBlackTreeTests
             Insert(tree, i);
 
         AssertTreeInvariants(tree);
-        Assert.AreEqual(count, GetInOrderTraversal(tree).Count);
+        Assert.HasCount(count, GetInOrderTraversal(tree));
 
         int height = GetHeight(tree, tree.Root);
         int maxHeight = (int)(2 * Math.Log2(count + 1)) + 1;
-        Assert.IsTrue(height <= maxHeight,
+        Assert.IsLessThanOrEqualTo(maxHeight, height,
             $"Tree height {height} exceeds maximum expected {maxHeight}");
     }
 
