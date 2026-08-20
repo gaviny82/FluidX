@@ -59,9 +59,19 @@ public class RedBlackTree<TData>
 
     #region Insertion
 
-    public TreeNode InsertRight(TreeNode node, TData data)
+    // FUTURE: Consider exposing a single Insert method for the RB-tree, without explicilty
+    // specifying the parent node. This would require a comparison function to be provided.
+
+    /// <summary>
+    /// Inserts a new node with <paramref name="data"/> as the right child of <paramref name="node"/>.
+    /// </summary>
+    /// <param name="node">The node to insert the new node as the right child of. <see langword="null"/> is allowed only if the root is the sentinel.</param>
+    /// <param name="data">Data for the new node.</param>
+    /// <returns>The new node created.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="node"/> is the sentinel and the tree is non-empty.</exception>
+    public TreeNode InsertRight(TreeNode? node, TData data)
     {
-        if (_root != TreeNode.Sentinel && node.IsSentinel)
+        if (_root != TreeNode.Sentinel && node!.IsSentinel)
             throw new ArgumentException("Cannot insert relative to Sentinel when the tree is non-empty.", nameof(node));
 
         var z = new TreeNode(data);
@@ -74,7 +84,7 @@ public class RedBlackTree<TData>
             return z;
         }
 
-        if (node.Right == TreeNode.Sentinel)
+        if (node!.Right == TreeNode.Sentinel)
         {
             node.Right = z;
             z.Parent = node;
@@ -91,9 +101,16 @@ public class RedBlackTree<TData>
         return z;
     }
 
-    public TreeNode InsertLeft(TreeNode node, TData data)
+    /// <summary>
+    /// Inserts a new node with <paramref name="data"/> as the left child of <paramref name="node"/>.
+    /// </summary>
+    /// <param name="node">The node to insert the new node as the leftchild of. <see langword="null"/> is allowed only if the root is the sentinel.</param>
+    /// <param name="data">Data for the new node.</param>
+    /// <returns>The new node created.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="node"/> is the sentinel and the tree is non-empty.</exception>
+    public TreeNode InsertLeft(TreeNode? node, TData data)
     {
-        if (_root != TreeNode.Sentinel && node.IsSentinel)
+        if (_root != TreeNode.Sentinel && node!.IsSentinel)
             throw new ArgumentException("Cannot insert relative to Sentinel when the tree is non-empty.", nameof(node));
 
         var z = new TreeNode(data);
@@ -106,7 +123,7 @@ public class RedBlackTree<TData>
             return z;
         }
 
-        if (node.Left == TreeNode.Sentinel)
+        if (node!.Left == TreeNode.Sentinel)
         {
             node.Left = z;
             z.Parent = node;
