@@ -97,7 +97,7 @@ public class PieceTreeTextBuffer : ITextBuffer
         int tempChunkLen = 0;
         List<StringBuffer> chunks = [];
 
-        for (var iterNode = _pieceTree.Root.Leftest(); iterNode is not null; iterNode = iterNode.Next())
+        for (var iterNode = _pieceTree.Root.LeftMost(); iterNode is not null; iterNode = iterNode.Next())
         {
             string str = GetNodeContent(iterNode);
             int len = str.Length;
@@ -590,7 +590,7 @@ public class PieceTreeTextBuffer : ITextBuffer
             return false;
 
         int offset = 0;
-        return PieceTree.Iterate(_pieceTree.Root, node =>
+        return PieceTree.IterateInOrder(_pieceTree.Root, node =>
         {
             string str = GetNodeContent(node);
             int len = str.Length;
@@ -745,7 +745,7 @@ public class PieceTreeTextBuffer : ITextBuffer
         string currentLine = "";
         bool danglingCR = false;
 
-        PieceTree.Iterate(_pieceTree.Root, node =>
+        PieceTree.IterateInOrder(_pieceTree.Root, node =>
         {
             Piece piece = node.Piece;
             int pieceLength = piece.Length;
@@ -2255,7 +2255,7 @@ public class PieceTreeTextBuffer : ITextBuffer
     private string GetContentOfSubTree(TreeNode node)
     {
         StringBuilder sb = new();
-        PieceTree.Iterate(node, node => {
+        PieceTree.IterateInOrder(node, node => {
             sb.Append(GetNodeContent(node));
             return true;
         });

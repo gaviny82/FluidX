@@ -109,16 +109,25 @@ internal sealed class PieceTree : RedBlackTree<PieceNodeData>
         }
     }
 
-    internal static bool Iterate(TreeNode node, Func<TreeNode, bool> callback)
+    /// <summary>
+    /// Performs an in-order traversal of a sub-tree, invoking the provided callback for each node. The traversal stops if the callback returns false.
+    /// </summary>
+    /// <param name="node">Root of the sub-tree.</param>
+    /// <param name="callback">Callback invoked for each node.</param>
+    /// <returns><see langword="false"/> if the <paramref name="callback"/> returns <see langword="false"/> at any node.</returns>
+    internal static bool IterateInOrder(TreeNode node, Func<TreeNode, bool> callback)
     {
-        // FUTURE: the recursive implementation might be replaced with an iterative impl.
         if (node.IsSentinel)
-            return callback(node);
+            return true;
 
-        if (!Iterate(node.Left, callback))
-            return false;
-
-        return callback(node) && Iterate(node.Right, callback);
+        var current = node.LeftMost();
+        while (!current.IsSentinel)
+        {
+            if (!callback(current))
+                return false;
+            current = current.Next();
+        }
+        return true;
     }
 
     private void RecomputeTreeMetadata(TreeNode x)

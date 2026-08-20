@@ -53,7 +53,7 @@ public class RedBlackTreeTests
         if (tree.Root == RedBlackTree<int>.TreeNode.Sentinel)
             return result;
 
-        var node = tree.Root.Leftest();
+        var node = tree.Root.LeftMost();
         while (!node.IsSentinel)
         {
             result.Add(node.Data);

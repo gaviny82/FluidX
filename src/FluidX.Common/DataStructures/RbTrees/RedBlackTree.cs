@@ -91,7 +91,7 @@ public class RedBlackTree<TData>
         }
         else
         {
-            var nextNode = node.Right.Leftest();
+            var nextNode = node.Right.LeftMost();
             nextNode.Left = z;
             z.Parent = nextNode;
         }
@@ -130,7 +130,7 @@ public class RedBlackTree<TData>
         }
         else
         {
-            var prevNode = node.Left.Rightest();
+            var prevNode = node.Left.RighMost();
             prevNode.Right = z;
             z.Parent = prevNode;
         }
@@ -278,7 +278,7 @@ public class RedBlackTree<TData>
         }
         else
         {
-            y = z.Right.Leftest();
+            y = z.Right.LeftMost();
             x = y.Right;
         }
     }
@@ -454,7 +454,11 @@ public static class RedBlackTreeNodeTraversalExtensions
 {
     extension<TData>(RedBlackTree<TData>.TreeNode node)
     {
-        public RedBlackTree<TData>.TreeNode Leftest()
+        /// <summary>
+        /// Returns the left-most node in the sub-tree rooted at this <paramref name="node"/>.
+        /// </summary>
+        /// <returns>The left-most node.</returns>
+        public RedBlackTree<TData>.TreeNode LeftMost()
         {
             var current = node;
             while (!current.Left.IsSentinel)
@@ -462,7 +466,11 @@ public static class RedBlackTreeNodeTraversalExtensions
             return current;
         }
 
-        public RedBlackTree<TData>.TreeNode Rightest()
+        /// <summary>
+        /// Returns the right-most node in the sub-tree rooted at this <paramref name="node"/>.
+        /// </summary>
+        /// <returns>The right-most node.</returns>
+        public RedBlackTree<TData>.TreeNode RighMost()
         {
             var current = node;
             while (!current.Right.IsSentinel)
@@ -470,10 +478,14 @@ public static class RedBlackTreeNodeTraversalExtensions
             return current;
         }
 
+        /// <summary>
+        /// Returns the next node in an in-order traversal of the tree.
+        /// </summary>
+        /// <returns>The next node in an in-order traversal of the tree.</returns>
         public RedBlackTree<TData>.TreeNode Next()
         {
             if (!node.Right.IsSentinel)
-                return node.Right.Leftest();
+                return node.Right.LeftMost();
 
             var current = node;
             while (!current.Parent.IsSentinel)
@@ -486,10 +498,14 @@ public static class RedBlackTreeNodeTraversalExtensions
             return RedBlackTree<TData>.TreeNode.Sentinel;
         }
 
+        /// <summary>
+        /// Returns the previous node in an in-order traversal of the tree.
+        /// </summary>
+        /// <returns>The previous node in an in-order traversal of the tree.</returns>
         public RedBlackTree<TData>.TreeNode Prev()
         {
             if (!node.Left.IsSentinel)
-                return node.Left.Rightest();
+                return node.Left.RighMost();
 
             var current = node;
             while (!current.Parent.IsSentinel)
