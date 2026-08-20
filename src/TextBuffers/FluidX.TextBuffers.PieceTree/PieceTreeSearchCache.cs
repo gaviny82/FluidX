@@ -1,5 +1,7 @@
 ﻿namespace FluidX.TextBuffers.PieceTree;
 
+using TreeNode = FluidX.Common.DataStructures.RbTrees.RedBlackTree<PieceNodeData>.TreeNode;
+
 // TODO: Needs check
 internal class PieceTreeSearchCache
 {

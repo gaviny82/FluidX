@@ -5,6 +5,13 @@ public class RedBlackTree<TData>
 {
     public sealed class TreeNode
     {
+        /// <summary>
+        /// A shared sentinel node representing all leaves and the parent of the root.
+        /// Always colored black. Its <seealso cref="TreeNode.Parent"/>,
+        /// <seealso cref="TreeNode.Left"/>, and <seealso cref="TreeNode.Right"/> point to itself.
+        /// </summary>
+        public static TreeNode Sentinel { get; }
+
         public TData Data { get; set; }
         public TreeNode Parent { get; internal set; }
         public TreeNode Left { get; internal set; }
@@ -12,12 +19,21 @@ public class RedBlackTree<TData>
         public NodeColor Color { get; internal set; }
         public bool IsSentinel => this == Left;
 
-        internal TreeNode(TData data, TreeNode sentinel)
+        static TreeNode()
+        {
+            Sentinel = new TreeNode(default!);
+            Sentinel.Parent = Sentinel;
+            Sentinel.Left = Sentinel;
+            Sentinel.Right = Sentinel;
+            Sentinel.Color = NodeColor.Black;
+        }
+
+        internal TreeNode(TData data)
         {
             Data = data;
-            Parent = sentinel;
-            Left = sentinel;
-            Right = sentinel;
+            Parent = Sentinel;
+            Left = Sentinel;
+            Right = Sentinel;
         }
 
         internal void Detach()
@@ -28,90 +44,99 @@ public class RedBlackTree<TData>
         }
     }
 
-    /// <summary>
-    /// A shared sentinel node representing all leaves and the parent of the root.
-    /// Always colored black. Its <seealso cref="TreeNode.Parent"/>,
-    /// <seealso cref="TreeNode.Left"/>, and <seealso cref="TreeNode.Right"/> point to itself.
-    /// </summary>
-    public TreeNode Sentinel { get; }
     private TreeNode _root;
 
     public RedBlackTree()
     {
-        Sentinel = new TreeNode(default!, null!);
-        Sentinel.Parent = Sentinel;
-        Sentinel.Left = Sentinel;
-        Sentinel.Right = Sentinel;
-        Sentinel.Color = NodeColor.Black;
-        _root = Sentinel;
+        _root = TreeNode.Sentinel;
     }
 
     public TreeNode Root => _root;
 
     protected virtual void OnAfterLeftRotate(TreeNode oldParent, TreeNode newParent) { }
     protected virtual void OnAfterRightRotate(TreeNode oldParent, TreeNode newParent) { }
+    protected virtual void OnAfterInsert(TreeNode z) { }
 
     #region Insertion
 
-    public TreeNode InsertRight(TreeNode node, TData data)
+    // FUTURE: Consider exposing a single Insert method for the RB-tree, without explicilty
+    // specifying the parent node. This would require a comparison function to be provided.
+
+    /// <summary>
+    /// Inserts a new node with <paramref name="data"/> as the right child of <paramref name="node"/>.
+    /// </summary>
+    /// <param name="node">The node to insert the new node as the right child of. <see langword="null"/> is allowed only if the root is the sentinel.</param>
+    /// <param name="data">Data for the new node.</param>
+    /// <returns>The new node created.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="node"/> is the sentinel and the tree is non-empty.</exception>
+    public TreeNode InsertRight(TreeNode? node, TData data)
     {
-        if (_root != Sentinel && node.IsSentinel)
+        if (_root != TreeNode.Sentinel && node!.IsSentinel)
             throw new ArgumentException("Cannot insert relative to Sentinel when the tree is non-empty.", nameof(node));
 
-        var z = new TreeNode(data, Sentinel);
+        var z = new TreeNode(data);
         z.Color = NodeColor.Red;
 
-        if (_root == Sentinel)
+        if (_root == TreeNode.Sentinel)
         {
             _root = z;
             z.Color = NodeColor.Black;
             return z;
         }
 
-        if (node.Right == Sentinel)
+        if (node!.Right == TreeNode.Sentinel)
         {
             node.Right = z;
             z.Parent = node;
         }
         else
         {
-            var nextNode = node.Right.Leftest();
+            var nextNode = node.Right.LeftMost();
             nextNode.Left = z;
             z.Parent = nextNode;
         }
 
         InsertFixup(z);
+        OnAfterInsert(z);
         return z;
     }
 
-    public TreeNode InsertLeft(TreeNode node, TData data)
+    /// <summary>
+    /// Inserts a new node with <paramref name="data"/> as the left child of <paramref name="node"/>.
+    /// </summary>
+    /// <param name="node">The node to insert the new node as the leftchild of. <see langword="null"/> is allowed only if the root is the sentinel.</param>
+    /// <param name="data">Data for the new node.</param>
+    /// <returns>The new node created.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="node"/> is the sentinel and the tree is non-empty.</exception>
+    public TreeNode InsertLeft(TreeNode? node, TData data)
     {
-        if (_root != Sentinel && node.IsSentinel)
+        if (_root != TreeNode.Sentinel && node!.IsSentinel)
             throw new ArgumentException("Cannot insert relative to Sentinel when the tree is non-empty.", nameof(node));
 
-        var z = new TreeNode(data, Sentinel);
+        var z = new TreeNode(data);
         z.Color = NodeColor.Red;
 
-        if (_root == Sentinel)
+        if (_root == TreeNode.Sentinel)
         {
             _root = z;
             z.Color = NodeColor.Black;
             return z;
         }
 
-        if (node.Left == Sentinel)
+        if (node!.Left == TreeNode.Sentinel)
         {
             node.Left = z;
             z.Parent = node;
         }
         else
         {
-            var prevNode = node.Left.Rightest();
+            var prevNode = node.Left.RighMost();
             prevNode.Right = z;
             z.Parent = prevNode;
         }
 
         InsertFixup(z);
+        OnAfterInsert(z);
         return z;
     }
 
@@ -198,8 +223,8 @@ public class RedBlackTree<TData>
             // If x is null, we are removing the only node
             x.Color = NodeColor.Black;
             z.Detach();
-            Sentinel.Parent = Sentinel;
-            _root.Parent = Sentinel;
+            TreeNode.Sentinel.Parent = TreeNode.Sentinel;
+            _root.Parent = TreeNode.Sentinel;
 
             OnAfterRemoval(z, x, y);
             return;
@@ -213,7 +238,7 @@ public class RedBlackTree<TData>
         if (!yWasRed)
             DeleteFixup(x);
 
-        Sentinel.Parent = Sentinel;
+        TreeNode.Sentinel.Parent = TreeNode.Sentinel;
     }
 
     /// <summary>
@@ -241,19 +266,19 @@ public class RedBlackTree<TData>
 
     private void FindRemovalTargets(TreeNode z, out TreeNode x, out TreeNode y)
     {
-        if (z.Left == Sentinel)
+        if (z.Left == TreeNode.Sentinel)
         {
             y = z;
             x = y.Right;
         }
-        else if (z.Right == Sentinel)
+        else if (z.Right == TreeNode.Sentinel)
         {
             y = z;
             x = y.Left;
         }
         else
         {
-            y = z.Right.Leftest();
+            y = z.Right.LeftMost();
             x = y.Right;
         }
     }
@@ -288,9 +313,9 @@ public class RedBlackTree<TData>
             else
                 z.Parent.Right = y;
 
-            if (y.Left != Sentinel)
+            if (y.Left != TreeNode.Sentinel)
                 y.Left.Parent = y;
-            if (y.Right != Sentinel)
+            if (y.Right != TreeNode.Sentinel)
                 y.Right.Parent = y;
         }
     }
@@ -381,12 +406,12 @@ public class RedBlackTree<TData>
         var y = x.Right;
 
         x.Right = y.Left;
-        if (y.Left != Sentinel)
+        if (y.Left != TreeNode.Sentinel)
             y.Left.Parent = x;
 
         y.Parent = x.Parent;
 
-        if (x.Parent == Sentinel)
+        if (x.Parent == TreeNode.Sentinel)
             _root = y;
         else if (x == x.Parent.Left)
             x.Parent.Left = y;
@@ -404,12 +429,12 @@ public class RedBlackTree<TData>
         var x = y.Left;
 
         y.Left = x.Right;
-        if (x.Right != Sentinel)
+        if (x.Right != TreeNode.Sentinel)
             x.Right.Parent = y;
 
         x.Parent = y.Parent;
 
-        if (y.Parent == Sentinel)
+        if (y.Parent == TreeNode.Sentinel)
             _root = x;
         else if (y == y.Parent.Right)
             y.Parent.Right = x;
@@ -429,7 +454,11 @@ public static class RedBlackTreeNodeTraversalExtensions
 {
     extension<TData>(RedBlackTree<TData>.TreeNode node)
     {
-        public RedBlackTree<TData>.TreeNode Leftest()
+        /// <summary>
+        /// Returns the left-most node in the sub-tree rooted at this <paramref name="node"/>.
+        /// </summary>
+        /// <returns>The left-most node.</returns>
+        public RedBlackTree<TData>.TreeNode LeftMost()
         {
             var current = node;
             while (!current.Left.IsSentinel)
@@ -437,7 +466,11 @@ public static class RedBlackTreeNodeTraversalExtensions
             return current;
         }
 
-        public RedBlackTree<TData>.TreeNode Rightest()
+        /// <summary>
+        /// Returns the right-most node in the sub-tree rooted at this <paramref name="node"/>.
+        /// </summary>
+        /// <returns>The right-most node.</returns>
+        public RedBlackTree<TData>.TreeNode RighMost()
         {
             var current = node;
             while (!current.Right.IsSentinel)
@@ -445,10 +478,14 @@ public static class RedBlackTreeNodeTraversalExtensions
             return current;
         }
 
-        public RedBlackTree<TData>.TreeNode? Next()
+        /// <summary>
+        /// Returns the next node in an in-order traversal of the tree.
+        /// </summary>
+        /// <returns>The next node in an in-order traversal of the tree.</returns>
+        public RedBlackTree<TData>.TreeNode Next()
         {
             if (!node.Right.IsSentinel)
-                return node.Right.Leftest();
+                return node.Right.LeftMost();
 
             var current = node;
             while (!current.Parent.IsSentinel)
@@ -458,13 +495,17 @@ public static class RedBlackTreeNodeTraversalExtensions
                 current = current.Parent;
             }
 
-            return null;
+            return RedBlackTree<TData>.TreeNode.Sentinel;
         }
 
-        public RedBlackTree<TData>.TreeNode? Prev()
+        /// <summary>
+        /// Returns the previous node in an in-order traversal of the tree.
+        /// </summary>
+        /// <returns>The previous node in an in-order traversal of the tree.</returns>
+        public RedBlackTree<TData>.TreeNode Prev()
         {
             if (!node.Left.IsSentinel)
-                return node.Left.Rightest();
+                return node.Left.RighMost();
 
             var current = node;
             while (!current.Parent.IsSentinel)
@@ -474,7 +515,7 @@ public static class RedBlackTreeNodeTraversalExtensions
                 current = current.Parent;
             }
 
-            return null;
+            return RedBlackTree<TData>.TreeNode.Sentinel;
         }
     }
 }

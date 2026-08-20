@@ -1,15 +1,19 @@
-﻿namespace FluidX.TextBuffers.PieceTree;
+﻿using FluidX.Common.DataStructures.RbTrees;
+
+namespace FluidX.TextBuffers.PieceTree;
+
+using TreeNode = FluidX.Common.DataStructures.RbTrees.RedBlackTree<PieceNodeData>.TreeNode;
 
 /// <summary>
 /// Readonly snapshot for <see cref="PieceTreeTextBuffer"/>.
 /// In a real multiple thread environment, to make snapshot reading always work correctly, we need to <br/>
-/// 1. Make <see cref="TreeNode.Piece"/> immutable, then reading and writing can run in parallel. <br/>
+/// 1. Make <see cref="PieceNodeData.Piece"/> immutable, then reading and writing can run in parallel. <br/>
 /// 2. TreeNode/Buffers normalization should not happen during snapshot reading.
 /// </summary>
 public class PieceTreeSnapshot : ITextSnapshot
 {
     private readonly List<Piece> _pieces;
-    private readonly PieceTreeBase _tree;
+    private readonly PieceTreeTextBuffer _tree;
     private readonly string _BOM;
 
     private int _index;
@@ -19,18 +23,17 @@ public class PieceTreeSnapshot : ITextSnapshot
     /// </summary>
     /// <param name="tree">Piece tree to snapshot</param>
     /// <param name="BOM">Byte order mark added to the start of this snapshot</param>
-    public PieceTreeSnapshot(PieceTreeBase tree, string BOM)
+    public PieceTreeSnapshot(PieceTreeTextBuffer tree, string BOM)
     {
         _pieces = [];
         _tree = tree;
         _BOM = BOM;
         _index = 0;
-        if (tree.Root != TreeNode.Sentinel)
+        if (!tree._pieceTree.Root.IsSentinel)
         {
-            PieceTreeBase.Iterate(tree.Root, node =>
+            PieceTree.IterateInOrder(tree._pieceTree.Root, node =>
             {
-                if (node != TreeNode.Sentinel)
-                    _pieces.Add(node.Piece);
+                _pieces.Add(node.Piece);
                 return true;
             });
         }
