@@ -8,35 +8,31 @@ internal class LineStarts
     public required int CRLF { get; init; }
     public required bool IsBasicAscii { get; init; }
 
-    public static List<int> CreateFast(string str)
+    public static List<int> CreateFast(string str) => CreateFast(str.AsSpan());
+
+    public static List<int> CreateFast(ReadOnlySpan<char> span)
     {
         List<int> r = [0];
-        int rLength = 1;
 
-        for (int i = 0, len = str.Length; i < len; i++)
+        for (int i = 0, len = span.Length; i < len; i++)
         {
-            char chr = str[i];
+            char chr = span[i];
 
             if (chr == '\r')
             {
-                if (i + 1 < len && str[i + 1] == '\n')
+                if (i + 1 < len && span[i + 1] == '\n')
                 {
-                    // \r\n case
                     r.Add(i + 2);
-                    rLength++;
                     i++; // skip \n
                 }
                 else
                 {
-                    // \r case
                     r.Add(i + 1);
-                    rLength++;
                 }
             }
             else if (chr == '\n')
             {
                 r.Add(i + 1);
-                rLength++;
             }
         }
 
