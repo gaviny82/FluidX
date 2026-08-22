@@ -1,5 +1,4 @@
-﻿using System.Runtime.InteropServices;
-using System.Text;
+﻿using System.Text;
 using System.Text.RegularExpressions;
 using FluidX.Common.DataStructures.RbTrees;
 using FluidX.TextBuffers.PieceTree.Buffers;
@@ -14,7 +13,7 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     internal readonly PieceTree _pieceTree = new();
 
-    protected List<InlineStringBuffer> _buffers = null!; // 0 is change buffer, others are readonly original buffer.
+    protected StringBufferCollection _buffers; // 0 is change buffer, others are readonly original buffer.
     protected int _lineCount;
     protected int _length;
     protected string _EOL = "\n"; // Either "\r\n" or "\n"
@@ -47,7 +46,8 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     private void Create(IList<InlineStringBuffer> chunks, string eol, bool eolNormalized)
     {
-        _buffers = [new InlineStringBuffer()];
+        _buffers = new StringBufferCollection();
+        _buffers.Add(new InlineStringBuffer());
         _lastChangeBufferPos = new BufferCursor { Line = 0, Column = 0 };
         _lineCount = 1;
         _length = 0;
@@ -1518,7 +1518,7 @@ public class PieceTreeTextBuffer : ITextBuffer
         lineStarts = LineStarts.CreateFast(text);
 
         var start = _lastChangeBufferPos;
-        ref var changeBuffer = ref CollectionsMarshal.AsSpan(_buffers)[0];
+        ref var changeBuffer = ref _buffers[0];
         if (changeBuffer.LineStarts[changeBuffer.LineStarts.Length - 1] == startOffset
             && startOffset != 0
             && StartWithLF(text)
@@ -1796,7 +1796,7 @@ public class PieceTreeTextBuffer : ITextBuffer
             value += '\n';
 
         bool hitCRLF = ShouldCheckCRLF && StartWithLF(value) && EndWithCR(node);
-        ref var changeBuffer = ref CollectionsMarshal.AsSpan(_buffers)[0];
+        ref var changeBuffer = ref _buffers[0];
         int startOffset = changeBuffer.Text.Length;
         if (hitCRLF)
         {
