@@ -23,6 +23,7 @@ public struct InlineStringBuffer
     {
         _chars = new AppendOnlyList<char>();
         _lineStarts = new AppendOnlyList<int>();
+        _lineStarts.Add(0);
     }
 
     /// <summary>

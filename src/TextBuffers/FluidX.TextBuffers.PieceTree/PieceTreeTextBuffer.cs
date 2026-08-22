@@ -2008,7 +2008,7 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     private bool ShouldCheckCRLF { get => !(_EOLNormalized && _EOL == "\n"); }
 
-    private bool StartWithLF(string str) => str[0] == '\n';
+    private bool StartWithLF(string str) => str.Length > 0 && str[0] == '\n';
 
     private bool StartWithLF(TreeNode val)
     {
@@ -2033,7 +2033,7 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     private bool EndWithCR(string str)
     {
-        return str[^1] == '\r';
+        return str.Length > 0 && str[^1] == '\r';
     }
 
     private bool EndWithCR(ReadOnlySpan<char> span)
