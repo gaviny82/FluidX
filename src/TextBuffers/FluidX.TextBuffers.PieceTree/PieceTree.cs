@@ -13,7 +13,7 @@ internal readonly record struct BufferCursor(int Line, int Column);
 /// <summary>
 /// A piece of text in a text buffer.
 /// </summary>
-/// <param name="BufferIndex">The index of <see cref="StringBuffer"/> in a list of append-only buffers maintained by a text buffer system.</param>
+/// <param name="BufferIndex">The index of <see cref="InlineStringBuffer"/> in a list of append-only buffers maintained by a text buffer system.</param>
 /// <param name="Start">The start position of the piece in the buffer.</param>
 /// <param name="End">The end position of the piece in the buffer.</param>
 /// <param name="LineFeedCount">The number of line feeds in the piece.</param>

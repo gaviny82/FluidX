@@ -1,8 +1,10 @@
-﻿namespace FluidX.TextBuffers.PieceTree;
+﻿using System.Runtime.InteropServices;
+
+namespace FluidX.TextBuffers.PieceTree;
 
 public class PieceTreeTextBufferFactory
 {
-    private readonly IList<StringBuffer> _chunks;
+    private readonly IList<InlineStringBuffer> _chunks;
     private readonly string _bom;
     private readonly int _cr;
     private readonly int _lf;
@@ -13,7 +15,7 @@ public class PieceTreeTextBufferFactory
     private readonly bool _normalizeEOL;
 
     public PieceTreeTextBufferFactory(
-        IList<StringBuffer> chunks,
+        IList<InlineStringBuffer> chunks,
         string bom,
         int cr,
         int lf,
@@ -61,10 +63,10 @@ public class PieceTreeTextBufferFactory
             // Normalize pieces
             for (int i = 0, len = chunks.Count; i < len; i++)
             {
-                string str = chunks[i].Buffer;
+                string str = chunks[i].GetContent().ToString();
                 str = StringExtensions.EndOfLinesRegex.Replace(str, eol);
                 var newLineStart = LineStarts.CreateFast(str);
-                chunks[i] = new StringBuffer(str, newLineStart);
+                chunks[i] = new InlineStringBuffer(str, newLineStart);
             }
         }
 
@@ -74,7 +76,7 @@ public class PieceTreeTextBufferFactory
 
 public class PieceTreeTextBufferBuilder
 {
-    private readonly List<StringBuffer> _chunks = [];
+    private readonly List<InlineStringBuffer> _chunks = [];
     private string _BOM = ""; // Either "" or "\uFEFF"
 
     private bool _hasPreviousChar = false;
@@ -130,7 +132,7 @@ public class PieceTreeTextBufferBuilder
     {
         var lineStarts = LineStarts.Create(_tmpLineStarts, chunk);
 
-        _chunks.Add(new StringBuffer(chunk, lineStarts.Starts));
+        _chunks.Add(new InlineStringBuffer(chunk, (List<int>)lineStarts.Starts));
         _cr += lineStarts.CR;
         _lf += lineStarts.LF;
         _crlf += lineStarts.CRLF;
@@ -175,10 +177,8 @@ public class PieceTreeTextBufferBuilder
         {
             this._hasPreviousChar = false;
             // recreate last chunk
-            var lastChunk = _chunks[_chunks.Count - 1];
-            lastChunk.Buffer += _previousChar;
-            var newLineStarts = LineStarts.CreateFast(lastChunk.Buffer);
-            lastChunk.LineStarts = newLineStarts;
+            ref var lastChunk = ref CollectionsMarshal.AsSpan(_chunks)[_chunks.Count - 1];
+            lastChunk.Append(_previousChar);
             if (_previousChar == '\r')
             {
                 _cr++;

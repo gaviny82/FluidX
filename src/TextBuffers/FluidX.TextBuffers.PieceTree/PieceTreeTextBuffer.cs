@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.RegularExpressions;
 using FluidX.Common.DataStructures.RbTrees;
 
@@ -12,7 +13,7 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     internal readonly PieceTree _pieceTree = new();
 
-    protected List<StringBuffer> _buffers = null!; // 0 is change buffer, others are readonly original buffer.
+    protected List<InlineStringBuffer> _buffers = null!; // 0 is change buffer, others are readonly original buffer.
     protected int _lineCount;
     protected int _length;
     protected string _EOL = "\n"; // Either "\r\n" or "\n"
@@ -28,7 +29,7 @@ public class PieceTreeTextBuffer : ITextBuffer
     private bool _mightContainNonBasicASCII;
 
     public PieceTreeTextBuffer(
-        IList<StringBuffer> chunks,
+        IList<InlineStringBuffer> chunks,
         string bom,
         string eol,
         bool containsRTL,
@@ -43,10 +44,10 @@ public class PieceTreeTextBuffer : ITextBuffer
         Create(chunks, eol, eolNormalized);
     }
 
-    private void Create(IList<StringBuffer> chunks, string eol, bool eolNormalized)
+    private void Create(IList<InlineStringBuffer> chunks, string eol, bool eolNormalized)
     {
         _buffers = [
-            new StringBuffer("", [0])
+            InlineStringBuffer.CreateEmpty()
         ];
         _lastChangeBufferPos = new BufferCursor { Line = 0, Column = 0 };
         _lineCount = 1;
@@ -57,14 +58,9 @@ public class PieceTreeTextBuffer : ITextBuffer
         TreeNode? lastNode = null;
         for (int i = 0, len = chunks.Count; i < len; i++)
         {
-            if (chunks[i].Buffer.Length > 0)
+            if (chunks[i].Length > 0)
             {
-                IReadOnlyList<int>? ithChunkLineStarts = chunks[i].LineStarts;
-                if (ithChunkLineStarts is null)
-                {
-                    ithChunkLineStarts = LineStarts.CreateFast(chunks[i].Buffer);
-                    chunks[i].LineStarts = ithChunkLineStarts;
-                }
+                var ithChunkLineStarts = chunks[i].LineStarts;
 
                 var piece = new Piece(
                     i + 1,
@@ -72,10 +68,10 @@ public class PieceTreeTextBuffer : ITextBuffer
                     new BufferCursor
                     {
                         Line = ithChunkLineStarts.Count - 1,
-                        Column = chunks[i].Buffer.Length - ithChunkLineStarts[ithChunkLineStarts.Count - 1]
+                        Column = chunks[i].Length - ithChunkLineStarts[ithChunkLineStarts.Count - 1]
                     },
                     ithChunkLineStarts.Count - 1,
-                    chunks[i].Buffer.Length
+                    chunks[i].Length
                 );
                 _buffers.Add(chunks[i]);
                 lastNode = _pieceTree.InsertRight(lastNode, new PieceNodeData(piece));
@@ -95,7 +91,7 @@ public class PieceTreeTextBuffer : ITextBuffer
 
         string tempChunk = "";
         int tempChunkLen = 0;
-        List<StringBuffer> chunks = [];
+        List<InlineStringBuffer> chunks = [];
 
         for (var iterNode = _pieceTree.Root.LeftMost(); iterNode is not null; iterNode = iterNode.Next())
         {
@@ -110,7 +106,7 @@ public class PieceTreeTextBuffer : ITextBuffer
 
             // Flush anyways
             string text = StringExtensions.EndOfLinesRegex.Replace(tempChunk, eol);
-            chunks.Add(new StringBuffer(text, LineStarts.CreateFast(text)));
+            chunks.Add(new InlineStringBuffer(text, LineStarts.CreateFast(text)));
             tempChunk = str;
             tempChunkLen = len;
         }
@@ -118,7 +114,7 @@ public class PieceTreeTextBuffer : ITextBuffer
         if (tempChunkLen > 0)
         {
             string text = StringExtensions.EndOfLinesRegex.Replace(tempChunk, eol);
-            chunks.Add(new StringBuffer(text, LineStarts.CreateFast(text)));
+            chunks.Add(new InlineStringBuffer(text, LineStarts.CreateFast(text)));
         }
 
         Create(chunks, eol, true);
@@ -708,35 +704,33 @@ public class PieceTreeTextBuffer : ITextBuffer
     internal string GetValueInRange2(NodePosition startPosition, NodePosition endPosition)
     {
         TreeNode x = startPosition.Node;
-        string buffer = _buffers[x.Piece.BufferIndex].Buffer;
         int startOffset = OffsetInBuffer(x.Piece.BufferIndex, x.Piece.Start);
 
         if (startPosition.Node == endPosition.Node)
-            return buffer[(startOffset + startPosition.Remainder)..(startOffset + endPosition.Remainder)];
+            return _buffers[x.Piece.BufferIndex].GetContent().Slice(startOffset + startPosition.Remainder, endPosition.Remainder - startPosition.Remainder).ToString();
 
-        // TODO: consider optimization using StringBuilder
-        string ret = buffer[(startOffset + startPosition.Remainder)..(startOffset + x.Piece.Length)];
+        var sb = new StringBuilder();
+        sb.Append(_buffers[x.Piece.BufferIndex].GetContent().Slice(startOffset + startPosition.Remainder, x.Piece.Length - startPosition.Remainder));
 
         x = x.Next();
         while (x != TreeNode.Sentinel)
         {
-            buffer = _buffers[x.Piece.BufferIndex].Buffer;
             startOffset = OffsetInBuffer(x.Piece.BufferIndex, x.Piece.Start);
 
             if (x == endPosition.Node)
             {
-                ret += buffer[startOffset..(startOffset + endPosition.Remainder)];
+                sb.Append(_buffers[x.Piece.BufferIndex].GetContent().Slice(startOffset, endPosition.Remainder));
                 break;
             }
             else
             {
-                ret += buffer.Substring(startOffset, x.Piece.Length);
+                sb.Append(_buffers[x.Piece.BufferIndex].GetContent().Slice(startOffset, x.Piece.Length));
             }
 
             x = x.Next();
         }
 
-        return ret;
+        return sb.ToString();
     }
 
     public IReadOnlyList<string> GetLinesContent()
@@ -752,8 +746,8 @@ public class PieceTreeTextBuffer : ITextBuffer
             if (pieceLength == 0)
                 return true;
 
-            string buffer = _buffers[piece.BufferIndex].Buffer;
-            var lineStarts = _buffers[piece.BufferIndex].LineStarts;
+            var buffer = _buffers[piece.BufferIndex];
+            var lineStarts = buffer.LineStarts;
 
             int pieceStartLine = piece.Start.Line;
             int pieceEndLine = piece.End.Line;
@@ -780,11 +774,11 @@ public class PieceTreeTextBuffer : ITextBuffer
                 if (!_EOLNormalized && buffer[pieceStartOffset + pieceLength - 1] == '\r')
                 {
                     danglingCR = true;
-                    currentLine += buffer.Substring(pieceStartOffset, pieceLength - 1);
+                    currentLine += buffer.GetContent().Slice(pieceStartOffset, pieceLength - 1).ToString();
                 }
                 else
                 {
-                    currentLine += buffer.Substring(pieceStartOffset, pieceLength);
+                    currentLine += buffer.GetContent().Slice(pieceStartOffset, pieceLength).ToString();
                 }
                 return true;
             }
@@ -792,15 +786,15 @@ public class PieceTreeTextBuffer : ITextBuffer
 
             // add the text before the first line start in this piece
             currentLine += _EOLNormalized
-                ? buffer[pieceStartOffset..Math.Max(pieceStartOffset, lineStarts[pieceStartLine + 1] - _EOL.Length)]
-                : StringExtensions.EndOfLinesRegex.Replace(buffer[pieceStartOffset..lineStarts[pieceStartLine + 1]], "");
+                ? buffer.GetContent().Slice(pieceStartOffset, Math.Max(pieceStartOffset, lineStarts[pieceStartLine + 1] - _EOL.Length) - pieceStartOffset).ToString()
+                : StringExtensions.EndOfLinesRegex.Replace(buffer.GetContent().Slice(pieceStartOffset, lineStarts[pieceStartLine + 1] - pieceStartOffset).ToString(), "");
             lines.Add(currentLine);
 
             for (int line = pieceStartLine + 1; line < pieceEndLine; line++)
             {
                 currentLine = _EOLNormalized
-                    ? buffer[lineStarts[line]..(lineStarts[line + 1] - _EOL.Length)]
-                    : StringExtensions.EndOfLinesRegex.Replace(buffer[lineStarts[line]..lineStarts[line + 1]], "");
+                    ? buffer.GetContent().Slice(lineStarts[line], lineStarts[line + 1] - _EOL.Length - lineStarts[line]).ToString()
+                    : StringExtensions.EndOfLinesRegex.Replace(buffer.GetContent().Slice(lineStarts[line], lineStarts[line + 1] - lineStarts[line]).ToString(), "");
                 lines.Add(currentLine);
             }
 
@@ -811,11 +805,11 @@ public class PieceTreeTextBuffer : ITextBuffer
                     // The last line ended with a \r, let's undo the push, it will be pushed by next iteration
                     lines.RemoveAt(lines.Count - 1);
                 else
-                    currentLine = buffer.Substring(lineStarts[pieceEndLine], piece.End.Column - 1);
+                    currentLine = buffer.GetContent().Slice(lineStarts[pieceEndLine], piece.End.Column - 1).ToString();
             }
             else
             {
-                currentLine = buffer.Substring(lineStarts[pieceEndLine], piece.End.Column);
+                currentLine = buffer.GetContent().Slice(lineStarts[pieceEndLine], piece.End.Column).ToString();
             }
 
             return true;
@@ -861,17 +855,15 @@ public class PieceTreeTextBuffer : ITextBuffer
             if (matchingNode is null)
                 return '\0';
 
-            var buffer = _buffers[matchingNode.Piece.BufferIndex];
             int startOffset = OffsetInBuffer(matchingNode.Piece.BufferIndex, matchingNode.Piece.Start);
-            return buffer.Buffer[startOffset];
+            return _buffers[matchingNode.Piece.BufferIndex][startOffset];
         }
         else
         {
-            var buffer = _buffers[nodePos.Node.Piece.BufferIndex];
             int startOffset = OffsetInBuffer(nodePos.Node.Piece.BufferIndex, nodePos.Node.Piece.Start);
             int targetOffset = startOffset + nodePos.Remainder;
 
-            return buffer.Buffer[targetOffset];
+            return _buffers[nodePos.Node.Piece.BufferIndex][targetOffset];
         }
     }
 
@@ -907,17 +899,15 @@ public class PieceTreeTextBuffer : ITextBuffer
             if (matchingNode.IsSentinel)
                 return "";
 
-            var buffer = _buffers[matchingNode.Piece.BufferIndex];
             var startOffset = OffsetInBuffer(matchingNode.Piece.BufferIndex, matchingNode.Piece.Start);
-            return buffer.Buffer[startOffset..(startOffset + matchingNode.Piece.Length)];
+            return _buffers[matchingNode.Piece.BufferIndex].GetContent().Slice(startOffset, matchingNode.Piece.Length).ToString();
         }
         else
         {
-            var buffer = _buffers[nodePos.Node.Piece.BufferIndex];
             var startOffset = OffsetInBuffer(nodePos.Node.Piece.BufferIndex, nodePos.Node.Piece.Start);
             var targetOffset = startOffset + nodePos.Remainder;
             var targetEnd = startOffset + nodePos.Node.Piece.Length;
-            return buffer.Buffer[targetOffset..targetEnd];
+            return _buffers[nodePos.Node.Piece.BufferIndex].GetContent().Slice(targetOffset, targetEnd - targetOffset).ToString();
         }
     }
 
@@ -1006,7 +996,6 @@ public class PieceTreeTextBuffer : ITextBuffer
         int limitResultCount,
         List<FindMatch> result)
     {
-        var buffer = _buffers[node.Piece.BufferIndex];
         int startOffsetInBuffer = OffsetInBuffer(node.Piece.BufferIndex, node.Piece.Start);
         int start = OffsetInBuffer(node.Piece.BufferIndex, startCursor);
         int end = OffsetInBuffer(node.Piece.BufferIndex, endCursor);
@@ -1019,13 +1008,13 @@ public class PieceTreeTextBuffer : ITextBuffer
 
         if (searcher._wordSeparators is not null)
         {
-            searchText = buffer.Buffer.Substring(start, end - start);
+            searchText = _buffers[node.Piece.BufferIndex].GetContent().Slice(start, end - start).ToString();
             offsetInBuffer = (int offset) => offset + start;
             searcher.Reset(0);
         }
         else
         {
-            searchText = buffer.Buffer;
+            searchText = _buffers[node.Piece.BufferIndex].GetContent().ToString();
             offsetInBuffer = (int offset) => offset;
             searcher.Reset(start);
         }
@@ -1451,9 +1440,8 @@ public class PieceTreeTextBuffer : ITextBuffer
         // character at endOffset is \n, so we check the character before first
         // if character at endOffset is \r, end.column is 0 and we can't get here.
         int previousCharOffset = endOffset - 1; // end.column > 0 so it's okay.
-        string buffer = _buffers[bufferIndex].Buffer;
 
-        if (buffer[previousCharOffset] == 13)
+        if (_buffers[bufferIndex][previousCharOffset] == 13)
             return end.Line - start.Line + 1;
         else
             return end.Line - start.Line;
@@ -1507,7 +1495,7 @@ public class PieceTreeTextBuffer : ITextBuffer
                     lineStarts.Count - 1,
                     splitText.Length
                 ));
-                _buffers.Add(new StringBuffer(splitText, lineStarts));
+                _buffers.Add(new InlineStringBuffer(splitText, lineStarts));
             }
 
             lineStarts = LineStarts.CreateFast(text);
@@ -1522,19 +1510,20 @@ public class PieceTreeTextBuffer : ITextBuffer
                 lineStarts.Count - 1,
                 text.Length
             ));
-            _buffers.Add(new StringBuffer(text, lineStarts));
+            _buffers.Add(new InlineStringBuffer(text, lineStarts));
 
             return newPieces;
         }
 
-        int startOffset = _buffers[0].Buffer.Length;
+        int startOffset = _buffers[0].Length;
         lineStarts = LineStarts.CreateFast(text);
 
         var start = _lastChangeBufferPos;
-        if (_buffers[0].LineStarts[_buffers[0].LineStarts.Count - 1] == startOffset
+        ref var changeBuffer = ref CollectionsMarshal.AsSpan(_buffers)[0];
+        if (changeBuffer.LineStarts[changeBuffer.LineStarts.Count - 1] == startOffset
             && startOffset != 0
             && StartWithLF(text)
-            && EndWithCR(_buffers[0].Buffer) // TODO: we can check this._lastChangeBufferPos's column as it's the last one
+            && EndWithCR(changeBuffer.GetContent()) // TODO: we can check this._lastChangeBufferPos's column as it's the last one
         )
         {
             _lastChangeBufferPos = new BufferCursor
@@ -1544,35 +1533,18 @@ public class PieceTreeTextBuffer : ITextBuffer
             };
             start = _lastChangeBufferPos;
 
-            for (int i = 0; i < lineStarts.Count; i++)
-            {
-                lineStarts[i] += startOffset + 1;
-            }
-
-            _buffers[0].LineStarts = _buffers[0].LineStarts
-                .Concat(lineStarts.Skip(1))
-                .ToList();
-            _buffers[0].Buffer += '_' + text;
+            changeBuffer.Append('_');
+            changeBuffer.AppendText(text);
             startOffset += 1;
         }
         else
         {
-            if (startOffset != 0)
-            {
-                for (int i = 0; i < lineStarts.Count; i++)
-                {
-                    lineStarts[i] += startOffset;
-                }
-            }
-            _buffers[0].LineStarts = _buffers[0].LineStarts
-                .Concat(lineStarts.Skip(1))
-                .ToList();
-            _buffers[0].Buffer += text;
+            changeBuffer.AppendText(text);
         }
 
-        var endOffset = _buffers[0].Buffer.Length;
-        var endIndex = _buffers[0].LineStarts.Count - 1;
-        var endColumn = endOffset - _buffers[0].LineStarts[endIndex];
+        var endOffset = changeBuffer.Length;
+        var endIndex = changeBuffer.LineStarts.Count - 1;
+        var endColumn = endOffset - changeBuffer.LineStarts[endIndex];
         var endPos = new BufferCursor
         {
             Line = endIndex,
@@ -1601,16 +1573,15 @@ public class PieceTreeTextBuffer : ITextBuffer
         {
             x = cacheNode;
             int prevAccumulatedValue = GetAccumulatedValue(x, lineNumber - cacheNodeStartLineNumber - 1);
-            string buffer = _buffers[x.Piece.BufferIndex].Buffer;
             int startOffset = OffsetInBuffer(x.Piece.BufferIndex, x.Piece.Start);
             if (cacheNodeStartLineNumber + x.Piece.LineFeedCount == lineNumber)
             {
-                ret = buffer[(startOffset + prevAccumulatedValue)..(startOffset + x.Piece.Length)];
+                ret = _buffers[x.Piece.BufferIndex].GetContent().Slice(startOffset + prevAccumulatedValue, x.Piece.Length - prevAccumulatedValue).ToString();
             }
             else
             {
                 int accumulatedValue = GetAccumulatedValue(x, lineNumber - cacheNodeStartLineNumber);
-                return buffer[(startOffset + prevAccumulatedValue)..(startOffset + accumulatedValue - endOffset)];
+                return _buffers[x.Piece.BufferIndex].GetContent().Slice(startOffset + prevAccumulatedValue, accumulatedValue - endOffset - prevAccumulatedValue).ToString();
             }
         }
         else // cache is null
@@ -1627,7 +1598,6 @@ public class PieceTreeTextBuffer : ITextBuffer
                 {
                     int prevAccumulatedValue = GetAccumulatedValue(x, lineNumber - x.LfLeft - 2);
                     int accumulatedValue = GetAccumulatedValue(x, lineNumber - x.LfLeft - 1);
-                    string buffer = _buffers[x.Piece.BufferIndex].Buffer;
                     var startOffset = OffsetInBuffer(x.Piece.BufferIndex, x.Piece.Start);
                     nodeStartOffset += x.SizeLeft;
                     _searchCache.Set(new CacheEntry
@@ -1637,15 +1607,14 @@ public class PieceTreeTextBuffer : ITextBuffer
                         NodeStartLineNumber = originalLineNumber - (lineNumber - 1 - x.LfLeft)
                     });
 
-                    return buffer[(startOffset + prevAccumulatedValue)..(startOffset + accumulatedValue - endOffset)];
+                    return _buffers[x.Piece.BufferIndex].GetContent().Slice(startOffset + prevAccumulatedValue, accumulatedValue - endOffset - prevAccumulatedValue).ToString();
                 }
                 else if (x.LfLeft + x.Piece.LineFeedCount == lineNumber - 1)
                 {
                     var prevAccumulatedValue = GetAccumulatedValue(x, lineNumber - x.LfLeft - 2);
-                    var buffer = _buffers[x.Piece.BufferIndex].Buffer;
                     var startOffset = OffsetInBuffer(x.Piece.BufferIndex, x.Piece.Start);
 
-                    ret = buffer[(startOffset + prevAccumulatedValue)..(startOffset + x.Piece.Length)];
+                    ret = _buffers[x.Piece.BufferIndex].GetContent().Slice(startOffset + prevAccumulatedValue, x.Piece.Length - prevAccumulatedValue).ToString();
                     break;
                 }
                 else
@@ -1661,20 +1630,18 @@ public class PieceTreeTextBuffer : ITextBuffer
         x = x.Next();
         while (x != TreeNode.Sentinel)
         {
-            string buffer = _buffers[x.Piece.BufferIndex].Buffer;
-
             if (x.Piece.LineFeedCount > 0)
             {
                 int accumulatedValue = GetAccumulatedValue(x, 0);
                 int startOffset = OffsetInBuffer(x.Piece.BufferIndex, x.Piece.Start);
 
-                ret += buffer[startOffset..(startOffset + accumulatedValue - endOffset)];
+                ret += _buffers[x.Piece.BufferIndex].GetContent().Slice(startOffset, accumulatedValue - endOffset).ToString();
                 return ret;
             }
             else
             {
                 int startOffset = OffsetInBuffer(x.Piece.BufferIndex, x.Piece.Start);
-                ret += buffer.Substring(startOffset, x.Piece.Length);
+                ret += _buffers[x.Piece.BufferIndex].GetContent().Slice(startOffset, x.Piece.Length).ToString();
             }
 
             x = x.Next();
@@ -1830,18 +1797,12 @@ public class PieceTreeTextBuffer : ITextBuffer
             value += '\n';
 
         bool hitCRLF = ShouldCheckCRLF && StartWithLF(value) && EndWithCR(node);
-        int startOffset = _buffers[0].Buffer.Length;
-        _buffers[0].Buffer += value;
-        var lineStarts = LineStarts.CreateFast(value);
-        for (int i = 0; i < lineStarts.Count; i++)
-        {
-            lineStarts[i] += startOffset;
-        }
+        ref var changeBuffer = ref CollectionsMarshal.AsSpan(_buffers)[0];
+        int startOffset = changeBuffer.Length;
         if (hitCRLF)
         {
-            var prevStartOffset = _buffers[0].LineStarts[_buffers[0].LineStarts.Count - 2];
-            var buffer0LineStarts = (List<int>)_buffers[0].LineStarts;
-            buffer0LineStarts.RemoveAt(buffer0LineStarts.Count - 1);
+            var prevStartOffset = changeBuffer.LineStarts[changeBuffer.LineStarts.Count - 2];
+            changeBuffer.RemoveLastLineStart();
             // _lastChangeBufferPos is already wrong
             _lastChangeBufferPos = new BufferCursor
             {
@@ -1850,11 +1811,9 @@ public class PieceTreeTextBuffer : ITextBuffer
             };
         }
 
-        _buffers[0].LineStarts = _buffers[0].LineStarts
-            .Concat(lineStarts.Skip(1))
-            .ToList();
-        int endIndex = _buffers[0].LineStarts.Count - 1;
-        int endColumn = _buffers[0].Buffer.Length - _buffers[0].LineStarts[endIndex];
+        changeBuffer.AppendText(value);
+        int endIndex = changeBuffer.LineStarts.Count - 1;
+        int endColumn = changeBuffer.Length - changeBuffer.LineStarts[endIndex];
         var newEnd = new BufferCursor
         {
             Line = endIndex,
@@ -2021,9 +1980,8 @@ public class PieceTreeTextBuffer : ITextBuffer
         if (node.Piece.LineFeedCount < 1)
             return -1;
 
-        var buffer = _buffers[node.Piece.BufferIndex];
         var newOffset = OffsetInBuffer(node.Piece.BufferIndex, node.Piece.Start) + offset;
-        return buffer.Buffer[newOffset];
+        return _buffers[node.Piece.BufferIndex][newOffset];
     }
 
     private int OffsetOfNode(TreeNode node)
@@ -2071,12 +2029,17 @@ public class PieceTreeTextBuffer : ITextBuffer
         if (nextLineOffset > startOffset + 1)
             return false;
 
-        return _buffers[piece.BufferIndex].Buffer[startOffset] == 10;
+        return _buffers[piece.BufferIndex][startOffset] == 10;
     }
 
     private bool EndWithCR(string str)
     {
         return str[^1] == '\r';
+    }
+
+    private bool EndWithCR(ReadOnlySpan<char> span)
+    {
+        return span.Length > 0 && span[^1] == '\r';
     }
 
     private bool EndWithCR(TreeNode val)
@@ -2235,21 +2198,17 @@ public class PieceTreeTextBuffer : ITextBuffer
         if (node.IsSentinel)
             return "";
 
-        StringBuffer buffer = _buffers[node.Piece.BufferIndex];
         Piece piece = node.Piece;
         int startOffset = OffsetInBuffer(piece.BufferIndex, piece.Start);
         int endOffset = OffsetInBuffer(piece.BufferIndex, piece.End);
-        string currentContent = buffer.Buffer[startOffset..endOffset];
-        return currentContent;
+        return _buffers[node.Piece.BufferIndex].GetContent().Slice(startOffset, endOffset - startOffset).ToString();
     }
 
     internal string GetPieceContent(Piece piece)
     {
-        var buffer = _buffers[piece.BufferIndex];
         int startOffset = OffsetInBuffer(piece.BufferIndex, piece.Start);
         int endOffset = OffsetInBuffer(piece.BufferIndex, piece.End);
-        string currentContent = buffer.Buffer[startOffset..endOffset];
-        return currentContent;
+        return _buffers[piece.BufferIndex].GetContent().Slice(startOffset, endOffset - startOffset).ToString();
     }
 
     private string GetContentOfSubTree(TreeNode node)
@@ -2367,20 +2326,4 @@ internal class CacheEntry
     public required TreeNode Node { get; init; }
     public required int NodeStartOffset { get; init; }
     public required int? NodeStartLineNumber { get; init; }
-}
-
-/// <summary>
-/// Represents an append-only text buffer with cached line start positions.
-/// </summary>
-public class StringBuffer(string buffer, IReadOnlyList<int> lineStarts)
-{
-    /// <summary>
-    /// Append-only <see cref="char"/> buffer.
-    /// </summary>
-    public string Buffer { get; set; } = buffer;
-
-    /// <summary>
-    /// Append-only list of indices of line start positions in <see cref="Buffer"/>.
-    /// </summary>
-    public IReadOnlyList<int> LineStarts { get; set; } = lineStarts;
 }
