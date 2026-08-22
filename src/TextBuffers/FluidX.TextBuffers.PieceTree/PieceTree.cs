@@ -3,12 +3,11 @@ using FluidX.TextBuffers.PieceTree.Buffers;
 
 namespace FluidX.TextBuffers.PieceTree;
 
-// TODO: Confirm 0-based or 1-based indexing
 /// <summary>
-/// A position in a text buffer
+/// Represents the position of a character in an <see cref="InlineStringBuffer"/>.
 /// </summary>
-/// <param name="Line">Line number in current buffer</param>
-/// <param name="Column">Column number in current buffer</param>
+/// <param name="Line">0-based index into the buffer's <see cref="InlineStringBuffer.LineStarts"/>.</param>
+/// <param name="Column">0-based character offset from the start of the line.</param>
 internal readonly record struct BufferCursor(int Line, int Column);
 
 /// <summary>
@@ -19,12 +18,12 @@ internal readonly record struct BufferCursor(int Line, int Column);
 /// <param name="End">The end position of the piece in the buffer.</param>
 /// <param name="LineFeedCount">The number of line feeds in the piece.</param>
 /// <param name="Length">The length of <see cref="char"/> in the piece.</param>
-internal record class Piece(int BufferIndex, BufferCursor Start, BufferCursor End, int LineFeedCount, int Length);
+internal record struct Piece(int BufferIndex, BufferCursor Start, BufferCursor End, int LineFeedCount, int Length);
 
 /// <summary>
-/// Represents a node in the piece tree, containing a piece of text and metadata about the left subtree.
+/// Data on each piece tree node, containing a piece of text and metadata about its left subtree.
 /// </summary>
-internal class PieceNodeData(Piece piece)
+internal struct PieceNodeData(Piece piece)
 {
     /// <summary>
     /// Piece of text stored by this node.
@@ -47,15 +46,15 @@ internal sealed class PieceTree : RedBlackTree<PieceNodeData>
     protected override void OnAfterLeftRotate(TreeNode oldParent, TreeNode newParent)
     {
         // FUTURE: the null check might be redundant
-        newParent.SizeLeft += oldParent.SizeLeft + (oldParent.Piece?.Length ?? 0);
-        newParent.LfLeft += oldParent.LfLeft + (oldParent.Piece?.LineFeedCount ?? 0);
+        newParent.SizeLeft += oldParent.SizeLeft + oldParent.Piece.Length;
+        newParent.LfLeft += oldParent.LfLeft + oldParent.Piece.LineFeedCount;
     }
 
     protected override void OnAfterRightRotate(TreeNode oldParent, TreeNode newParent)
     {
         // FUTURE: the null check might be redundant
-        oldParent.SizeLeft -= newParent.SizeLeft + (newParent.Piece?.Length ?? 0);
-        oldParent.LfLeft -= newParent.LfLeft + (newParent.Piece?.LineFeedCount ?? 0);
+        oldParent.SizeLeft -= newParent.SizeLeft + newParent.Piece.Length;
+        oldParent.LfLeft -= newParent.LfLeft + newParent.Piece.LineFeedCount;
     }
 
     protected override void OnAfterInsert(TreeNode z)
@@ -173,19 +172,34 @@ internal static class PieceTreeNodeDataExtensions
         public Piece Piece
         {
             get => node.Data.Piece;
-            set => node.Data.Piece = value;
+            set
+            {
+                var data = node.Data;
+                data.Piece = value;
+                node.Data = data;
+            }
         }
 
         public int SizeLeft
         {
             get => node.Data.SizeLeft;
-            set => node.Data.SizeLeft = value;
+            set
+            {
+                var data = node.Data;
+                data.SizeLeft = value;
+                node.Data = data;
+            }
         }
 
         public int LfLeft
         {
             get => node.Data.LfLeft;
-            set => node.Data.LfLeft = value;
+            set
+            {
+                var data = node.Data;
+                data.LfLeft = value;
+                node.Data = data;
+            }
         }
     }
 }
