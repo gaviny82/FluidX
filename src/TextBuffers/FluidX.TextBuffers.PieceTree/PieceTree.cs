@@ -1,4 +1,5 @@
 using FluidX.Common.DataStructures.RbTrees;
+using FluidX.TextBuffers.PieceTree.Buffers;
 
 namespace FluidX.TextBuffers.PieceTree;
 

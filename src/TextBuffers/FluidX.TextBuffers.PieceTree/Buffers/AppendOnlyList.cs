@@ -1,4 +1,4 @@
-namespace FluidX.TextBuffers.PieceTree;
+namespace FluidX.TextBuffers.PieceTree.Buffers;
 
 /// <summary>
 /// A generic, append-only list backed by a contiguous array with exponential growth.
@@ -6,7 +6,7 @@ namespace FluidX.TextBuffers.PieceTree;
 /// <typeparam name="T">Element type.</typeparam>
 /// <remarks>
 /// This is a <see cref="struct"/> for inline storage in arrays or parent structs,
-/// eliminating per-instance object headers. Mutation must go through a <c>ref</c>
+/// eliminating per-instance object headers. Mutation must go through a <see langword="ref"/>
 /// to avoid modifying a copy.
 /// </remarks>
 public struct AppendOnlyList<T>
@@ -17,11 +17,11 @@ public struct AppendOnlyList<T>
     /// <summary>
     /// Creates an empty list with no initial allocation.
     /// </summary>
-    public static AppendOnlyList<T> CreateEmpty() => new()
+    public AppendOnlyList()
     {
-        _items = [],
-        _count = 0
-    };
+        _items = [];
+        _count = 0;
+    }
 
     /// <summary>
     /// Creates an empty list with the specified initial capacity.

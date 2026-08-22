@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace FluidX.TextBuffers.PieceTree;
+namespace FluidX.TextBuffers.PieceTree.Buffers;
 
 /// <summary>
 /// An append-only <see cref="char"/> buffer with cached line start positions.
@@ -9,12 +9,21 @@ namespace FluidX.TextBuffers.PieceTree;
 /// This is a <see cref="struct"/> so that a <see cref="List{T}"/> of buffers stores them inline,
 /// eliminating one level of pointer indirection and per-element object headers.
 /// Composes two <see cref="AppendOnlyList{T}"/> instances for chars and line starts.
-/// Mutation must go through a <c>ref</c> to avoid modifying a copy.
+/// Mutation must go through a <see langword="ref"/> to avoid modifying a copy.
 /// </remarks>
 public struct InlineStringBuffer
 {
     private AppendOnlyList<char> _chars;
     private AppendOnlyList<int> _lineStarts;
+
+    /// <summary>
+    /// Creates an empty buffer.
+    /// </summary>
+    public InlineStringBuffer()
+    {
+        _chars = new AppendOnlyList<char>();
+        _lineStarts = new AppendOnlyList<int>();
+    }
 
     /// <summary>
     /// Creates a buffer from existing content (used for readonly original buffers loaded at construction).
@@ -28,39 +37,17 @@ public struct InlineStringBuffer
     }
 
     /// <summary>
-    /// Creates an empty buffer.
+    /// Returns a readonly view of the text buffer.
     /// </summary>
-    public static InlineStringBuffer CreateEmpty() => new()
-    {
-        _chars = AppendOnlyList<char>.CreateEmpty(),
-        _lineStarts = AppendOnlyList<int>.CreateEmpty()
-    };
+    public readonly ReadOnlySpan<char> Text => _chars.AsSpan();
 
     /// <summary>
-    /// Current number of characters stored in the buffer.
+    /// Line start offsets into the <see langword="char"/> buffer.
+    /// The first element is always 0.
     /// </summary>
-    public readonly int Length => _chars.Count;
+    public readonly ReadOnlySpan<int> LineStarts => _lineStarts.AsSpan();
 
-    /// <summary>
-    /// Mutable list of line start offsets into the char buffer.
-    /// The first element is always <c>0</c>.
-    /// </summary>
-    public AppendOnlyList<int> LineStarts
-    {
-        readonly get => _lineStarts;
-        set => _lineStarts = value;
-    }
-
-    /// <summary>
-    /// Gets the character at the specified index.
-    /// </summary>
-    public readonly char this[int index] => _chars[index];
-
-    /// <summary>
-    /// Returns a <see cref="ReadOnlySpan{T}"/> over the entire buffer content.
-    /// Zero allocation — references the underlying array directly.
-    /// </summary>
-    public readonly ReadOnlySpan<char> GetContent() => _chars.AsSpan();
+    #region Append
 
     /// <summary>
     /// Appends a span of characters to the end of the buffer.
@@ -89,6 +76,8 @@ public struct InlineStringBuffer
 
         _lineStarts.AddRange(CollectionsMarshal.AsSpan(newStarts).Slice(1));
     }
+
+    #endregion
 
     /// <summary>
     /// Removes the last line start offset. O(1).

@@ -1,4 +1,5 @@
 ﻿using System.Runtime.InteropServices;
+using FluidX.TextBuffers.PieceTree.Buffers;
 
 namespace FluidX.TextBuffers.PieceTree;
 
@@ -63,7 +64,7 @@ public class PieceTreeTextBufferFactory
             // Normalize pieces
             for (int i = 0, len = chunks.Count; i < len; i++)
             {
-                string str = chunks[i].GetContent().ToString();
+                string str = chunks[i].Text.ToString();
                 str = StringExtensions.EndOfLinesRegex.Replace(str, eol);
                 var newLineStart = LineStarts.CreateFast(str);
                 chunks[i] = new InlineStringBuffer(str, newLineStart);
