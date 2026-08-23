@@ -15,10 +15,22 @@ public struct AppendOnlyList<T>
     private int _count;
 
     /// <summary>
+    /// Creates an empty list with a small initial allocation.
+    /// </summary>
+    /// <remarks>
+    /// An explicit parameterless constructor is required for structs: without it,
+    /// <c>new AppendOnlyList&lt;T&gt;()</c> zero-initializes the struct (null backing array)
+    /// instead of running a constructor with optional parameters.
+    /// </remarks>
+    public AppendOnlyList() : this(8)
+    {
+    }
+
+    /// <summary>
     /// Creates an empty list with the specified initial capacity.
     /// </summary>
     /// <param name="capacity">Initial capacity of the underlying array.</param>
-    public AppendOnlyList(int capacity = 8)
+    public AppendOnlyList(int capacity)
     {
         _items = new T[capacity];
         _count = 0;

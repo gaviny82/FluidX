@@ -17,10 +17,22 @@ public struct InlineStringBuffer
     private AppendOnlyList<int> _lineStarts;
 
     /// <summary>
+    /// Creates an empty buffer with a small pre-allocated character storage.
+    /// </summary>
+    /// <remarks>
+    /// An explicit parameterless constructor is required for structs: without it,
+    /// <c>new InlineStringBuffer()</c> zero-initializes the struct (null backing arrays)
+    /// instead of running a constructor with optional parameters.
+    /// </remarks>
+    public InlineStringBuffer() : this(64)
+    {
+    }
+
+    /// <summary>
     /// Creates an empty buffer with a pre-allocated character storage.
     /// </summary>
     /// <param name="capacity">The size of the pre-allocated character storage.</param>
-    public InlineStringBuffer(int capacity = 64)
+    public InlineStringBuffer(int capacity)
     {
         _chars = new AppendOnlyList<char>(capacity);
         _lineStarts = new AppendOnlyList<int>();

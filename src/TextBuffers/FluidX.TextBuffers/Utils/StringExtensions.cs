@@ -29,7 +29,7 @@ public static partial class StringExtensions
     /// </summary>
     /// <param name="str"><see cref="string"/> to test</param>
     /// <returns><see langword="true"/> if <paramref name="str"/> contains right-to-left characters.</returns>
-    public static bool ContainsRTL(this string str) => ContainsRTL(str);
+    public static bool ContainsRTL(this string str) => ContainsRTL(str.AsSpan());
 
     [GeneratedRegex(@"[\u2028\u2029]")] // LINE SEPARATOR (LS) or PARAGRAPH 
     private static partial Regex ContainsUnusualLineTerminatorsRegex { get; }
@@ -46,7 +46,7 @@ public static partial class StringExtensions
     /// </summary>
     /// <param name="str"><see cref="string"/> to test</param>
     /// <returns><see langword="true"/> if <paramref name="str"/> contains LINE SEPARATOR (LS) or PARAGRAPH.</returns>
-    public static bool ContainsUnusualLineTerminators(this string str) => ContainsUnusualLineTerminators(str);
+    public static bool ContainsUnusualLineTerminators(this string str) => ContainsUnusualLineTerminators(str.AsSpan());
 
     [GeneratedRegex(@"\r\n|\r|\n")]
     public static partial Regex EndOfLinesRegex { get; }
