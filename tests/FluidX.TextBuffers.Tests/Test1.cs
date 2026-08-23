@@ -1,5 +1,6 @@
 ﻿using FluidX.TextBuffers;
 using FluidX.TextBuffers.PieceTree;
+using FluidX.TextBuffers.PieceTree.Buffers;
 
 namespace FluidX.TextBuffers.Tests
 {
@@ -8,9 +9,19 @@ namespace FluidX.TextBuffers.Tests
     {
         private static PieceTreeTextBuffer CreateBuffer(string text)
         {
-            var builder = new PieceTreeTextBufferBuilder();
-            builder.AcceptChunk(text);
-            return builder.Finish(normalizeEOL: false).Create(DefaultEndOfLine.LF);
+            return PieceTreeTextBuffer.Create(text, DefaultEndOfLine.LF, normalizeEOL: false);
+        }
+
+        [TestMethod]
+        public void AppendText_HandlesCRLFAcrossAppends()
+        {
+            var buffer = new InlineStringBuffer();
+            buffer.AppendText("abc\r");
+            buffer.AppendText("\ndef");
+
+            Assert.AreEqual(2, buffer.LineStarts.Length);
+            Assert.AreEqual(0, buffer.LineStarts[0]);
+            Assert.AreEqual(5, buffer.LineStarts[1]);
         }
 
         [TestMethod]

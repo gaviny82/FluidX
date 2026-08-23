@@ -18,21 +18,35 @@ public static partial class StringExtensions
     private static partial Regex ContainsRTLRegex { get; }
 
     /// <summary>
-    /// Determines if the string contains any right-to-left characters.
+    /// Determines if the <seealso cref="ReadOnlySpan{char}"/> contains any right-to-left characters.
+    /// </summary>
+    /// <param name="str">Span to test</param>
+    /// <returns><see langword="true"/> if <paramref name="str"/> contains right-to-left characters.</returns>
+    public static bool ContainsRTL(this ReadOnlySpan<char> str) => ContainsRTLRegex.IsMatch(str);
+
+    /// <summary>
+    /// Determines if the <see cref="string"/> contains any right-to-left characters.
     /// </summary>
     /// <param name="str"><see cref="string"/> to test</param>
     /// <returns><see langword="true"/> if <paramref name="str"/> contains right-to-left characters.</returns>
-    public static bool ContainsRTL(this string str) => ContainsRTLRegex.IsMatch(str);
+    public static bool ContainsRTL(this string str) => ContainsRTL(str);
 
     [GeneratedRegex(@"[\u2028\u2029]")] // LINE SEPARATOR (LS) or PARAGRAPH 
     private static partial Regex ContainsUnusualLineTerminatorsRegex { get; }
 
     /// <summary>
-    /// Determines if the string contains LINE SEPARATOR (LS) or PARAGRAPH.
+    /// Determines if the <seealso cref="ReadOnlySpan{char}"/> contains LINE SEPARATOR (LS) or PARAGRAPH.
+    /// </summary>
+    /// <param name="str">Span to test</param>
+    /// <returns><see langword="true"/> if <paramref name="str"/> contains LINE SEPARATOR (LS) or PARAGRAPH.</returns>
+    public static bool ContainsUnusualLineTerminators(this ReadOnlySpan<char> str) => ContainsUnusualLineTerminatorsRegex.IsMatch(str);
+
+    /// <summary>
+    /// Determines if the <see cref="string"/> contains LINE SEPARATOR (LS) or PARAGRAPH.
     /// </summary>
     /// <param name="str"><see cref="string"/> to test</param>
     /// <returns><see langword="true"/> if <paramref name="str"/> contains LINE SEPARATOR (LS) or PARAGRAPH.</returns>
-    public static bool ContainsUnusualLineTerminators(this string str) => ContainsUnusualLineTerminatorsRegex.IsMatch(str);
+    public static bool ContainsUnusualLineTerminators(this string str) => ContainsUnusualLineTerminators(str);
 
     [GeneratedRegex(@"\r\n|\r|\n")]
     public static partial Regex EndOfLinesRegex { get; }

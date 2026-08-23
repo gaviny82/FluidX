@@ -17,11 +17,12 @@ public struct InlineStringBuffer
     private AppendOnlyList<int> _lineStarts;
 
     /// <summary>
-    /// Creates an empty buffer.
+    /// Creates an empty buffer with a pre-allocated character storage.
     /// </summary>
-    public InlineStringBuffer()
+    /// <param name="capacity">The size of the pre-allocated character storage.</param>
+    public InlineStringBuffer(int capacity = 64)
     {
-        _chars = new AppendOnlyList<char>();
+        _chars = new AppendOnlyList<char>(capacity);
         _lineStarts = new AppendOnlyList<int>();
         _lineStarts.Add(0);
     }
@@ -29,12 +30,21 @@ public struct InlineStringBuffer
     /// <summary>
     /// Creates a buffer from existing content (used for readonly original buffers loaded at construction).
     /// </summary>
-    public InlineStringBuffer(string content, List<int> lineStarts)
+    public InlineStringBuffer(ReadOnlySpan<char> content, List<int> lineStarts)
     {
         _chars = new AppendOnlyList<char>(content.Length);
-        _chars.AddRange(content.AsSpan());
+        _chars.AddRange(content);
         _lineStarts = new AppendOnlyList<int>(lineStarts.Count);
         _lineStarts.AddRange(CollectionsMarshal.AsSpan(lineStarts));
+    }
+
+    /// <summary>
+    /// Creates a buffer that wraps existing text and line start arrays, taking ownership without copy.
+    /// </summary>
+    public InlineStringBuffer(char[] text, int[] lineStarts)
+    {
+        _chars = new AppendOnlyList<char>(text);
+        _lineStarts = new AppendOnlyList<int>(lineStarts);
     }
 
     /// <summary>
@@ -69,6 +79,14 @@ public struct InlineStringBuffer
     public void AppendText(ReadOnlySpan<char> text)
     {
         int startOffset = _chars.Count;
+        if (startOffset > 0 && !text.IsEmpty
+            && _chars[startOffset - 1] == '\r' && text[0] == '\n'
+            && _lineStarts[_lineStarts.Count - 1] == startOffset)
+        {
+            // The trailing \r and the leading \n form a single \r\n line break.
+            _lineStarts.RemoveLast();
+        }
+
         _chars.AddRange(text);
 
         var newStarts = TextBuffers.PieceTree.LineStarts.CreateFast(text);
@@ -79,11 +97,4 @@ public struct InlineStringBuffer
     }
 
     #endregion
-
-    /// <summary>
-    /// Removes the last line start offset. O(1).
-    /// Used for the rare CRLF edge case where a split \r\n boundary
-    /// needs to be re-joined before appending new line starts.
-    /// </summary>
-    public void RemoveLastLineStart() => _lineStarts.RemoveLast();
 }

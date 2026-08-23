@@ -28,7 +28,7 @@ public class PieceTreeTextBuffer : ITextBuffer
     private bool _mightContainUnusualLineTerminators;
     private bool _mightContainNonBasicASCII;
 
-    public PieceTreeTextBuffer(
+    private PieceTreeTextBuffer(
         IList<InlineStringBuffer> chunks,
         string bom,
         string eol,
@@ -41,10 +41,10 @@ public class PieceTreeTextBuffer : ITextBuffer
         _mightContainNonBasicASCII = !isBasicASCII;
         _mightContainRTL = containsRTL;
         _mightContainUnusualLineTerminators = containsUnusualLineTerminators;
-        Create(chunks, eol, eolNormalized);
+        Initialize(chunks, eol, eolNormalized);
     }
 
-    private void Create(IList<InlineStringBuffer> chunks, string eol, bool eolNormalized)
+    private void Initialize(IList<InlineStringBuffer> chunks, string eol, bool eolNormalized)
     {
         _buffers = new StringBufferCollection();
         _buffers.Add(new InlineStringBuffer());
@@ -82,6 +82,159 @@ public class PieceTreeTextBuffer : ITextBuffer
         ComputeBufferMetadata();
     }
 
+    #region Creation
+
+    // Steps for initializing a PieceTreeTextBuffer:
+    // 1. Check BOM
+    // 2. Compute line starts
+    // 3. Count CR/LF/CRLF EOLs
+    // 4. Check IsBasicASCII
+    // 5. Check ContainsRTL
+    // 6. Check ContainsUnusualLineTerminators
+    // 7. Determine EOL to use (based on counts and defaultEOL)
+    // 8. Normalize EOL if required
+    // 9. Create InlineStringBuffer with line starts
+
+    /// <summary>
+    /// Creates a buffer from the given text.
+    /// </summary>
+    /// <param name="text">Content of the document.</param>
+    /// <param name="defaultEOL">Fallback end-of-line used when the text contains no line breaks.</param>
+    /// <param name="normalizeEOL">When <see langword="true"/>, mixed line endings are normalized to the majority one.</param>
+    public static PieceTreeTextBuffer Create(
+        ReadOnlySpan<char> text,
+        DefaultEndOfLine defaultEOL = DefaultEndOfLine.LF,
+        bool normalizeEOL = true)
+    {
+        // Step 1: Check BOM
+        string bom = "";
+        if (text.Length > 0 && text[0] == (char)CharCode.UTF8_BOM)
+        {
+            bom = ((char)CharCode.UTF8_BOM).ToString();
+            text = text[1..];
+        }
+        char[] content = text.ToArray();
+
+        // Delegates the rest of the steps to CreateCore
+        return CreateCore(content, bom, defaultEOL, normalizeEOL);
+    }
+
+    /// <summary>
+    /// Asynchronously creates a buffer from a stream.
+    /// The stream is left open after reading.
+    /// </summary>
+    /// <param name="stream">Stream to read the document from.</param>
+    /// <param name="defaultEOL">Fallback end-of-line used when the text contains no line breaks.</param>
+    /// <param name="normalizeEOL">When <see langword="true"/>, mixed line endings are normalized to the majority one.</param>
+    /// <param name="cancellationToken">Cancellation token for the read.</param>
+    public static async Task<PieceTreeTextBuffer> CreateAsync(
+        Stream stream,
+        DefaultEndOfLine defaultEOL = DefaultEndOfLine.LF,
+        bool normalizeEOL = true,
+        CancellationToken cancellationToken = default)
+    {
+        using var reader = new StreamReader(
+            stream,
+            encoding: null,
+            detectEncodingFromByteOrderMarks: false,
+            bufferSize: 4096,
+            leaveOpen: true);
+
+        // Get BOM
+        string bom = "";
+        int peekResult = reader.Peek();
+        if (peekResult > -1)
+        {
+            char firstChar = (char)peekResult;
+            if (firstChar == (char)CharCode.UTF8_BOM)
+            {
+                bom = ((char)CharCode.UTF8_BOM).ToString();
+                reader.Read(); // Consume the BOM
+            }
+        }
+
+        // Read the rest of the stream
+
+        // It is impossible to pre-allocate the exact number of char even for a seekable stream,
+        // because the encoding may be variable-length (e.g., UTF-8).
+        //
+        // FUTURE: For UTF-16 and UTF-32, we could pre-allocate reliably and avoid the 2x memory overhead of StringBuilder.
+        // For UTF-8, we could pre-allocate the upper bound (stream length in bytes) and then shrink the array after reading.
+        // This is optimal for common ASCII files, but not for files with many multi-byte characters.
+
+        var sb = new StringBuilder();
+        char[] scratch = new char[4096];
+        int read;
+        while ((read = await reader.ReadAsync(scratch, cancellationToken).ConfigureAwait(false)) > 0)
+            sb.Append(scratch, 0, read);
+        char[] content = new char[sb.Length];
+        sb.CopyTo(0, content, 0, sb.Length);
+
+        // Delegates the rest of the steps to CreateCore
+        return CreateCore(content, bom, defaultEOL, normalizeEOL);
+    }
+
+    private static PieceTreeTextBuffer CreateCore(
+        char[] content,
+        string bom,
+        DefaultEndOfLine defaultEOL,
+        bool normalizeEOL)
+    {
+        // Step 3: Count CR/LF/CRLF EOLs
+        var lineStarts = LineStarts.Create(content);
+
+        // Step 4-6: Check IsBasicASCII, ContainsRTL, ContainsUnusualLineTerminators
+        bool containsRTL = false;
+        bool containsUnusualLineTerminators = false;
+        if (!lineStarts.IsBasicAscii)
+        {
+            containsRTL = content.ContainsRTL();
+            containsUnusualLineTerminators = content.ContainsUnusualLineTerminators();
+        }
+
+        // Step 7: Determine EOL to use
+        string eol = DetermineEOL(defaultEOL, lineStarts.CR, lineStarts.LF, lineStarts.CRLF);
+
+        // Step 8-9: Normalize EOL if required and create InlineStringBuffer with line starts
+        InlineStringBuffer buffer;
+        if (normalizeEOL && NeedsNormalization(eol, lineStarts.CR, lineStarts.LF, lineStarts.CRLF))
+        {
+            // TODO: Normalize EOL in-place without allocating a new string
+            string normalized = StringExtensions.EndOfLinesRegex.Replace(new string(content), eol);
+            lineStarts = LineStarts.Create(normalized.AsSpan());
+            buffer = new InlineStringBuffer(normalized.ToCharArray(), lineStarts.Starts);
+        }
+        else
+        {
+            buffer = new InlineStringBuffer(content, lineStarts.Starts);
+        }
+
+        return new PieceTreeTextBuffer(
+            [buffer],
+            bom,
+            eol,
+            containsRTL,
+            containsUnusualLineTerminators,
+            lineStarts.IsBasicAscii,
+            normalizeEOL);
+    }
+
+    private static string DetermineEOL(DefaultEndOfLine defaultEOL, int cr, int lf, int crlf)
+    {
+        int totalEOLCount = cr + lf + crlf;
+        int totalCRCount = cr + crlf;
+        if (totalEOLCount == 0)
+            return defaultEOL == DefaultEndOfLine.LF ? "\n" : "\r\n";
+        if (totalCRCount > totalEOLCount / 2)
+            return "\r\n";
+        return "\n";
+    }
+
+    private static bool NeedsNormalization(string eol, int cr, int lf, int crlf)
+        => (eol == "\r\n" && (cr > 0 || lf > 0)) || (eol == "\n" && (cr > 0 || crlf > 0));
+
+    #endregion
+
     private void NormalizeEOL(string eol)
     {
         int averageBufferSize = AverageBufferSize;
@@ -116,7 +269,7 @@ public class PieceTreeTextBuffer : ITextBuffer
             chunks.Add(new InlineStringBuffer(text, LineStarts.CreateFast(text)));
         }
 
-        Create(chunks, eol, true);
+        Initialize(chunks, eol, true);
     }
 
     #region IReadOnlyTextBuffer Members
@@ -1801,7 +1954,6 @@ public class PieceTreeTextBuffer : ITextBuffer
         if (hitCRLF)
         {
             var prevStartOffset = changeBuffer.LineStarts[changeBuffer.LineStarts.Length - 2];
-            changeBuffer.RemoveLastLineStart();
             // _lastChangeBufferPos is already wrong
             _lastChangeBufferPos = new BufferCursor
             {
@@ -1810,6 +1962,7 @@ public class PieceTreeTextBuffer : ITextBuffer
             };
         }
 
+        // AppendText handles the \r\n merge of the trailing \r with the leading \n.
         changeBuffer.AppendText(value);
         int endIndex = changeBuffer.LineStarts.Length - 1;
         int endColumn = changeBuffer.Text.Length - changeBuffer.LineStarts[endIndex];

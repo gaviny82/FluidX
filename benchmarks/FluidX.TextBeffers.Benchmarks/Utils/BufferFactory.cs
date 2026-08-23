@@ -25,10 +25,7 @@ public static class BufferFactory
 
     public static PieceTreeTextBuffer CreatePieceTreeBuffer(string text)
     {
-        var builder = new PieceTreeTextBufferBuilder();
-        builder.AcceptChunk(text);
-        var factory = builder.Finish(normalizeEOL: false);
-        return factory.Create(DefaultEndOfLine.LF);
+        return PieceTreeTextBuffer.Create(text, DefaultEndOfLine.LF, normalizeEOL: false);
     }
 
     public static LineArrayTextBuffer CreateLineArrayBuffer(string text)

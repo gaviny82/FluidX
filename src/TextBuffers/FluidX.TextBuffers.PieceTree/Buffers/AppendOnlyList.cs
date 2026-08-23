@@ -15,21 +15,23 @@ public struct AppendOnlyList<T>
     private int _count;
 
     /// <summary>
-    /// Creates an empty list with no initial allocation.
+    /// Creates an empty list with the specified initial capacity.
     /// </summary>
-    public AppendOnlyList()
+    /// <param name="capacity">Initial capacity of the underlying array.</param>
+    public AppendOnlyList(int capacity = 8)
     {
-        _items = [];
+        _items = new T[capacity];
         _count = 0;
     }
 
     /// <summary>
-    /// Creates an empty list with the specified initial capacity.
+    /// Creates a list that wraps an existing array, taking ownership of it (no copy).
     /// </summary>
-    public AppendOnlyList(int initialCapacity)
+    /// <param name="items">The array to use as the backing storage. Must not be mutated afterwards.</param>
+    public AppendOnlyList(T[] items)
     {
-        _items = initialCapacity > 0 ? new T[initialCapacity] : Array.Empty<T>();
-        _count = 0;
+        _items = items;
+        _count = items.Length;
     }
 
     /// <summary>

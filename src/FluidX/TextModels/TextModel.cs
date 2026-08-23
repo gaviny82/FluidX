@@ -60,9 +60,7 @@ public class TextModel : IDecorationTreesHost
         DefaultEndOfLine eol,
         GlobalLanguageId languageId)
     {
-        var builder = new PieceTreeTextBufferBuilder();
-        builder.AcceptChunk(source);
-        TextBuffer = builder.Finish().Create(eol);
+        TextBuffer = PieceTreeTextBuffer.Create(source, eol);
 
         int bufferLineCount = TextBuffer.LineCount;
         int bufferTextLength = TextBuffer.GetValueLengthInRange(new(1, 1, bufferLineCount, TextBuffer.GetLineMaxColumn(bufferLineCount)), EndOfLinePreference.TextDefined);
