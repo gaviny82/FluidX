@@ -45,14 +45,12 @@ internal sealed class PieceTree : RedBlackTree<PieceNodeData>
 {
     protected override void OnAfterLeftRotate(TreeNode oldParent, TreeNode newParent)
     {
-        // FUTURE: the null check might be redundant
         newParent.SizeLeft += oldParent.SizeLeft + oldParent.Piece.Length;
         newParent.LfLeft += oldParent.LfLeft + oldParent.Piece.LineFeedCount;
     }
 
     protected override void OnAfterRightRotate(TreeNode oldParent, TreeNode newParent)
     {
-        // FUTURE: the null check might be redundant
         oldParent.SizeLeft -= newParent.SizeLeft + newParent.Piece.Length;
         oldParent.LfLeft -= newParent.LfLeft + newParent.Piece.LineFeedCount;
     }
