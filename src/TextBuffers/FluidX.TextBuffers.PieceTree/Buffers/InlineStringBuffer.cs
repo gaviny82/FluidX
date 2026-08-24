@@ -66,8 +66,8 @@ public struct InlineStringBuffer
 
     /// <summary>
     /// Line start offsets into the <see langword="char"/> buffer.
-    /// The first element is always 0.
     /// </summary>
+    /// <remarks>The first element is always 0.</remarks>
     public readonly ReadOnlySpan<int> LineStarts => _lineStarts.AsSpan();
 
     #region Append
@@ -84,6 +84,18 @@ public struct InlineStringBuffer
             && _lineStarts[_lineStarts.Count - 1] == startOffset)
         {
             // The trailing \r and the leading \n form a single \r\n line break.
+
+            // Note: this means the line starts are not strictly append-only. The only behavior
+            // that violates the append-only assumption is that the last line start is increased
+            // by 1 when \n is appended after a trailing \r. Reference to content up to the last
+            // \r still recognizes the line break as CR, before the \n is appended, so the text
+            // buffer can still be considered append-only for all practical purposes.
+
+            // AppendOnlyList provides this API internally for code reuse. Another option is to
+            // create another type for this purpose or duplicate the code in this class to provide
+            // a strictly append-only list.
+
+            // FUTURE: Try to avoid this case at call sites.
             _lineStarts.RemoveLast();
         }
 
