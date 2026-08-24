@@ -2,11 +2,7 @@
 using FluidX.TextBuffers;
 using FluidX.TextBuffers.PieceTree;
 
-var pieceTreeBuilder = new PieceTreeTextBufferBuilder();
-pieceTreeBuilder.AcceptChunk("Hello\n");
-pieceTreeBuilder.AcceptChunk("world!");
-var pieceTreeFactory = pieceTreeBuilder.Finish(true);
-var buffer = pieceTreeFactory.Create(DefaultEndOfLine.LF);
+var buffer = PieceTreeTextBuffer.Create("Hello\nworld!");
 
 // Read text from the buffer
 Console.WriteLine(buffer.LineCount); // 2
@@ -92,10 +88,7 @@ Console.WriteLine();
 
 // Test 5: Multiple edits
 Console.WriteLine("=== Test 5: Multiple edits ===");
-var builder2 = new PieceTreeTextBufferBuilder();
-builder2.AcceptChunk("line1\nline2\nline3\nline4\nline5");
-var factory2 = builder2.Finish(true);
-var buffer2 = factory2.Create(DefaultEndOfLine.LF);
+var buffer2 = PieceTreeTextBuffer.Create("line1\nline2\nline3\nline4\nline5");
 Console.WriteLine($"Initial lines: {buffer2.LineCount}");
 for (int i = 1; i <= buffer2.LineCount; i++)
 {
@@ -167,10 +160,7 @@ Console.WriteLine($"Full text: [{fullText}]");
 
 // Test 8: Stress test - many inserts
 Console.WriteLine("=== Test 8: Stress test ===");
-var builder3 = new PieceTreeTextBufferBuilder();
-builder3.AcceptChunk("");
-var factory3 = builder3.Finish(true);
-var buffer3 = factory3.Create(DefaultEndOfLine.LF);
+var buffer3 = PieceTreeTextBuffer.Create("");
 for (int i = 0; i < 100; i++)
 {
     buffer3.ApplyEdits([new EditOperation
