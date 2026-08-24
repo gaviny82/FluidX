@@ -18,7 +18,7 @@ internal readonly record struct BufferCursor(int Line, int Column);
 /// <param name="End">The end position of the piece in the buffer.</param>
 /// <param name="LineFeedCount">The number of line feeds in the piece.</param>
 /// <param name="Length">The length of <see cref="char"/> in the piece.</param>
-internal record struct Piece(int BufferIndex, BufferCursor Start, BufferCursor End, int LineFeedCount, int Length);
+internal record class Piece(int BufferIndex, BufferCursor Start, BufferCursor End, int LineFeedCount, int Length);
 
 /// <summary>
 /// Data on each piece tree node, containing a piece of text and metadata about its left subtree.
