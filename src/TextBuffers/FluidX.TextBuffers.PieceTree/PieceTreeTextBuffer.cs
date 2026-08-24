@@ -1685,7 +1685,7 @@ public class PieceTreeTextBuffer : ITextBuffer
             };
             start = _lastChangeBufferPos;
 
-            changeBuffer.Append('_');
+            changeBuffer.AppendText(['_']);
             changeBuffer.AppendText(text);
             startOffset += 1;
         }

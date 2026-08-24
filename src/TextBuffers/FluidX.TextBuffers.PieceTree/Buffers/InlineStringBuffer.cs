@@ -73,18 +73,6 @@ public struct InlineStringBuffer
     #region Append
 
     /// <summary>
-    /// Appends a span of characters to the end of the buffer.
-    /// Amortized O(1) via exponential capacity growth.
-    /// </summary>
-    public void Append(ReadOnlySpan<char> text) => _chars.AddRange(text);
-
-    /// <summary>
-    /// Appends a single character to the end of the buffer.
-    /// Amortized O(1) via exponential capacity growth.
-    /// </summary>
-    public void Append(char c) => _chars.Add(c);
-
-    /// <summary>
     /// Appends text and automatically computes + appends line start offsets.
     /// Encapsulates the common pattern shared by all mutation sites in the piece tree.
     /// </summary>

@@ -100,7 +100,7 @@ public struct AppendOnlyList<T>
     /// Removes the last element. O(1).
     /// Does not clear the slot — acceptable for value types (<c>int</c>, <c>char</c>).
     /// </summary>
-    public void RemoveLast()
+    internal void RemoveLast()
     {
         _count--;
     }
