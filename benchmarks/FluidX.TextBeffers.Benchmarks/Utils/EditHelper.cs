@@ -22,15 +22,8 @@ public static class EditHelper
             var startPos = buffer.GetPositionAt(edit.InsertOffset);
             var endPos = buffer.GetPositionAt(edit.InsertOffset + edit.DeleteLength);
             var range = new TextRange(startPos, endPos);
-            var op = new EditOperation
-            {
-                Range = range,
-                Text = edit.Text,
-                ForceMoveMarkers = false,
-                IsAutoWhitespaceEdit = false,
-                IsTracked = false
-            };
-            buffer.ApplyEdits([op], false, false);
+            var replacement = new TextReplacement(range, edit.Text);
+            buffer.ApplyEdits([replacement], false);
         }
     }
 

@@ -322,36 +322,34 @@ public class LineArrayTextBuffer : ITextBuffer
         return _eol;
     }
 
-    public ApplyEditsResult ApplyEdits(EditOperation[] rawOperations, bool recordTrimAutoWhitespace, bool computeUndoEdits)
+    public ApplyEditsResult ApplyEdits(TextReplacement[] replacements, bool computeUndoEdits)
     {
         // no-op
-        if (rawOperations.Length == 0)
+        if (replacements.Length == 0)
             return new ApplyEditsResult
             {
                 ReverseEdits = null,
-                Changes = [],
-                TrimAutoWhitespaceLineNumbers = null
+                Changes = []
             };
 
-        var contentChanges = new List<InternalModelContentChange>(rawOperations.Length);
+        var contentChanges = new List<InternalModelContentChange>(replacements.Length);
 
-        foreach (var op in rawOperations)
-            contentChanges.Add(ApplySingleEdit(op));
+        for (int i = 0; i < replacements.Length; i++)
+            contentChanges.Add(ApplySingleEdit(replacements[i], i));
 
         OnDidChangeContent?.Invoke(this, EventArgs.Empty);
 
         return new ApplyEditsResult
         {
             ReverseEdits = null,
-            Changes = contentChanges,
-            TrimAutoWhitespaceLineNumbers = null
+            Changes = contentChanges
         };
     }
 
-    private InternalModelContentChange ApplySingleEdit(EditOperation op)
+    private InternalModelContentChange ApplySingleEdit(TextReplacement replacement, int sortIndex)
     {
-        var range = op.Range;
-        string insertText = op.Text ?? string.Empty;
+        var range = replacement.Range;
+        string insertText = replacement.Text ?? string.Empty;
 
         int startLineIndex = range.StartLineNumber - 1;
         int endLineIndex = range.EndLineNumber - 1;
@@ -418,11 +416,11 @@ public class LineArrayTextBuffer : ITextBuffer
 
         return new InternalModelContentChange
         {
+            SortIndex = sortIndex,
             Range = range,
             RangeOffset = rangeOffset,
             RangeLength = rangeLength,
-            Text = insertText,
-            ForceMoveMarkers = op.ForceMoveMarkers
+            Text = insertText
         };
     }
 

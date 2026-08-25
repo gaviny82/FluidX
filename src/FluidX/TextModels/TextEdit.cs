@@ -19,8 +19,3 @@ public class TextEdit
         Replacements = replacements.ToArray();
     }
 }
-
-public record class TextReplacement(TextRange Range, string Text)
-{
-    public bool IsEmpty => Range.IsEmpty && Text.Length == 0;
-}

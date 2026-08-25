@@ -14,5 +14,8 @@
     <Project Path="src/TextBuffers/FluidX.TextBuffers/FluidX.TextBuffers.csproj" Id="9480a24f-e934-4a9e-92cd-b6a1c4b2a29b" />
     <Project Path="tests/FluidX.TextBuffers.Tests/FluidX.TextBuffers.Tests.csproj" Id="efa82396-d502-4d04-bdf4-72bc5a47552d" />
   </Folder>
+  <Folder Name="/TextModels/">
+    <Project Path="tests/FluidX.TextModels.Tests/FluidX.TextModels.Tests.csproj" />
+  </Folder>
   <Project Path="src/FluidX/FluidX.csproj" />
 </Solution>

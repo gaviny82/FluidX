@@ -137,7 +137,7 @@ public class SingleModelEditStackElement : IUndoRedoElement
                 }
                 if (prevEdit.NewPosition < currEdit.OldPosition)
                 {
-                    var (e1, e2) = SplitPrev(currEdit, prevEdit.NewPosition - currEdit.OldPosition);
+                    var (e1, e2) = SplitPrev(prevEdit, currEdit.OldPosition - prevEdit.NewPosition);
                     AcceptPrev(e1);
                     prevEdit = e2;
                     continue;
@@ -219,7 +219,7 @@ public class SingleModelEditStackElement : IUndoRedoElement
         private static (TextChange, TextChange) SplitPrev(TextChange edit, int offset)
         {
             string preText = edit.NewText.Substring(0, offset);
-            string postText = edit.NewText.Substring(offset);
+            string postText = edit.OldText.Substring(offset);
             return (
                 new TextChange(
                     edit.OldPosition,
@@ -239,7 +239,7 @@ public class SingleModelEditStackElement : IUndoRedoElement
         private static (TextChange, TextChange) SplitCurr(TextChange edit, int offset)
         {
             string preText = edit.OldText.Substring(0, offset);
-            string postText = edit.NewText.Substring(offset);
+            string postText = edit.OldText.Substring(offset);
             return (
                 new TextChange(
                     edit.OldPosition,

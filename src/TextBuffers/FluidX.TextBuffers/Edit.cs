@@ -3,13 +3,15 @@ using System.Text;
 
 namespace FluidX.TextBuffers;
 
-public class EditOperation
+/// <summary>
+/// Replaces a <see cref="TextRange"/> in a text buffer with a new <see langword="string"/>.
+/// An empty range represents an insertion, and an empty string represents a deletion.
+/// </summary>
+/// <param name="Range"></param>
+/// <param name="Text"></param>
+public record class TextReplacement(TextRange Range, string Text)
 {
-    public required TextRange Range { get; init; }
-    public required string? Text { get; init; }
-    public required bool ForceMoveMarkers { get; init; }
-    public required bool IsAutoWhitespaceEdit { get; init; }
-    public required bool IsTracked { get; init; }
+    public bool IsEmpty => Range.IsEmpty && Text.Length == 0;
 }
 
 public class ValidatedEditOperation
@@ -22,15 +24,12 @@ public class ValidatedEditOperation
     public required int EOLCount { get; init; }
     public required int FirstLineLength { get; init; }
     public required int LastLineLength { get; init; }
-    public required bool ForceMoveMarkers { get; init; }
-    public required bool IsAutoWhitespaceEdit { get; init; }
 }
 
 public class ApplyEditsResult
 {
     public required ReverseSingleEditOperation[]? ReverseEdits { get; init; }
     public required IReadOnlyList<InternalModelContentChange> Changes { get; init; }
-    public required IReadOnlyList<int>? TrimAutoWhitespaceLineNumbers { get; init; }
 }
 
 public class ReverseSingleEditOperation
@@ -146,6 +145,10 @@ public class TextChange
 public class InternalModelContentChange
 {
     /// <summary>
+    /// The index of the replacement in the input array. Used for tie-breaking in sorting.
+    /// </summary>
+    public required int SortIndex { get; set; }
+    /// <summary>
     /// The old range that got replaced.
     /// </summary>
     public required TextRange Range { get; init; }
@@ -161,5 +164,4 @@ public class InternalModelContentChange
     /// The new text for the range.
     /// </summary>
     public required string Text { get; init; }
-    public required bool ForceMoveMarkers { get; init; }
 }
