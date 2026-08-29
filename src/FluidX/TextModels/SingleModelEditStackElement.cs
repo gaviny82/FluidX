@@ -219,7 +219,7 @@ public class SingleModelEditStackElement : IUndoRedoElement
         private static (TextChange, TextChange) SplitPrev(TextChange edit, int offset)
         {
             string preText = edit.NewText.Substring(0, offset);
-            string postText = edit.OldText.Substring(offset);
+            string postText = edit.NewText.Substring(offset);
             return (
                 new TextChange(
                     edit.OldPosition,

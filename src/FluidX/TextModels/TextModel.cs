@@ -153,7 +153,7 @@ public class TextModel : IDecorationTreesHost
         int oldLineCount = TextBuffer.LineCount;
         bool computeBufferUndoEdits = computeUndoEdits || autoWhitespaceEdits.Count > 0;
         var result = TextBuffer.ApplyEdits(
-            editOperations.Select(operation => operation.Replacement).ToArray(),
+            operations.Select(operation => operation.Replacement).ToArray(),
             computeUndoEdits);
         int newLineCount = TextBuffer.LineCount;
 
@@ -377,7 +377,7 @@ public class TextModel : IDecorationTreesHost
         ModelEditOperation[] sortedOperations = [.. operations];
         Array.Sort(sortedOperations, (a, b) => TextRange.CompareRangesUsingStarts(a.Range, b.Range));
 
-        for (int i = 0; i < sortedOperations.Length; i++)
+        for (int i = 0; i < sortedOperations.Length - 1; i++)
         {
             if (sortedOperations[i + 1].Range.StartPosition.IsBefore(sortedOperations[i].Range.EndPosition))
                 throw new ArgumentException("Overlapping ranges are not allowed", nameof(operations));
