@@ -13,67 +13,30 @@ Console.WriteLine(buffer.GetValueInRange(new TextRange(1, 2, 2, 2), EndOfLinePre
 // Writing to the buffer
 
 // INSERT a character 'a' at (line 2, column 4)
-var insertEdit = new EditOperation
-{
-    Range = new TextRange(2, 4, 2, 4), // Empty range = insert at this position
-    Text = "a", // Text to insert
-    ForceMoveMarkers = false,
-    IsAutoWhitespaceEdit = false,
-    IsTracked = false
-};
-buffer.ApplyEdits([insertEdit], false, false);
+buffer.ApplyEdits([new TextReplacement(new TextRange(2, 4, 2, 4), "a")], false);
 PrintAllLines();
 
 // DELETE a character at (line 1, column 4)
-var deleteEdit = new EditOperation
-{
-    Range = new TextRange(1, 4, 1, 5), // Covers single character
-    Text = "", // Empty text = delete
-    ForceMoveMarkers = false,
-    IsAutoWhitespaceEdit = false,
-    IsTracked = false
-};
-buffer.ApplyEdits([deleteEdit], false, false);
+buffer.ApplyEdits([new TextReplacement(new TextRange(1, 4, 1, 5), "")], false);
 PrintAllLines();
 
 // === More complex tests ===
 
 // Test 1: Insert multi-line text
 Console.WriteLine("=== Test 1: Insert multi-line text ===");
-buffer.ApplyEdits([new EditOperation
-{
-    Range = new TextRange(2, 6, 2, 6),
-    Text = "\nfoo\nbar",
-    ForceMoveMarkers = false,
-    IsAutoWhitespaceEdit = false,
-    IsTracked = false
-}], false, false);
+buffer.ApplyEdits([new TextReplacement(new TextRange(2, 6, 2, 6), "\nfoo\nbar")], false);
 PrintAllLines();
 Console.WriteLine($"Total lines: {buffer.LineCount}");
 Console.WriteLine($"Total length: {buffer.Length}");
 
 // Test 2: Delete across lines
 Console.WriteLine("=== Test 2: Delete across lines ===");
-buffer.ApplyEdits([new EditOperation
-{
-    Range = new TextRange(1, 4, 3, 3), // Delete from "o" in Helo to "o" in foo
-    Text = "",
-    ForceMoveMarkers = false,
-    IsAutoWhitespaceEdit = false,
-    IsTracked = false
-}], false, false);
+buffer.ApplyEdits([new TextReplacement(new TextRange(1, 4, 3, 3), "")], false);
 PrintAllLines();
 
 // Test 3: Replace text
 Console.WriteLine("=== Test 3: Replace text ===");
-buffer.ApplyEdits([new EditOperation
-{
-    Range = new TextRange(1, 1, 1, 4),
-    Text = "Goodbye",
-    ForceMoveMarkers = false,
-    IsAutoWhitespaceEdit = false,
-    IsTracked = false
-}], false, false);
+buffer.ApplyEdits([new TextReplacement(new TextRange(1, 1, 1, 4), "Goodbye")], false);
 PrintAllLines();
 
 // Test 4: Snapshot
@@ -96,14 +59,7 @@ for (int i = 1; i <= buffer2.LineCount; i++)
 }
 
 // Delete line 3
-buffer2.ApplyEdits([new EditOperation
-{
-    Range = new TextRange(3, 1, 4, 1),
-    Text = "",
-    ForceMoveMarkers = false,
-    IsAutoWhitespaceEdit = false,
-    IsTracked = false
-}], false, false);
+buffer2.ApplyEdits([new TextReplacement(new TextRange(3, 1, 4, 1), "")], false);
 Console.WriteLine($"After deleting line 3: {buffer2.LineCount} lines");
 for (int i = 1; i <= buffer2.LineCount; i++)
 {
@@ -111,14 +67,7 @@ for (int i = 1; i <= buffer2.LineCount; i++)
 }
 
 // Insert at beginning
-buffer2.ApplyEdits([new EditOperation
-{
-    Range = new TextRange(1, 1, 1, 1),
-    Text = "NEW ",
-    ForceMoveMarkers = false,
-    IsAutoWhitespaceEdit = false,
-    IsTracked = false
-}], false, false);
+buffer2.ApplyEdits([new TextReplacement(new TextRange(1, 1, 1, 1), "NEW ")], false);
 Console.WriteLine($"After insert at beginning:");
 for (int i = 1; i <= buffer2.LineCount; i++)
 {
@@ -126,14 +75,7 @@ for (int i = 1; i <= buffer2.LineCount; i++)
 }
 
 // Append to end
-buffer2.ApplyEdits([new EditOperation
-{
-    Range = new TextRange(4, 6, 4, 6),
-    Text = " added",
-    ForceMoveMarkers = false,
-    IsAutoWhitespaceEdit = false,
-    IsTracked = false
-}], false, false);
+buffer2.ApplyEdits([new TextReplacement(new TextRange(4, 6, 4, 6), " added")], false);
 Console.WriteLine($"After append:");
 for (int i = 1; i <= buffer2.LineCount; i++)
 {
@@ -163,14 +105,9 @@ Console.WriteLine("=== Test 8: Stress test ===");
 var buffer3 = PieceTreeTextBuffer.Create("");
 for (int i = 0; i < 100; i++)
 {
-    buffer3.ApplyEdits([new EditOperation
-    {
-        Range = new TextRange(buffer3.LineCount, buffer3.GetLineLength(buffer3.LineCount) + 1, buffer3.LineCount, buffer3.GetLineLength(buffer3.LineCount) + 1),
-        Text = $"item{i}\n",
-        ForceMoveMarkers = false,
-        IsAutoWhitespaceEdit = false,
-        IsTracked = false
-    }], false, false);
+    buffer3.ApplyEdits([new TextReplacement(
+        new TextRange(buffer3.LineCount, buffer3.GetLineLength(buffer3.LineCount) + 1, buffer3.LineCount, buffer3.GetLineLength(buffer3.LineCount) + 1),
+        $"item{i}\n")], false);
 }
 Console.WriteLine($"After 100 inserts: {buffer3.LineCount} lines");
 Console.WriteLine($"  First: {buffer3.GetLineContent(1)}");

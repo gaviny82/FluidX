@@ -420,38 +420,43 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     public void SetEOL(string eol) => EOL = eol;
 
-    public ApplyEditsResult ApplyEdits(EditOperation[] rawOperations, bool recordTrimAutoWhitespace, bool computeUndoEdits)
+    // NOTE: teh current text buffer API applies EOL normalization in ApplyEdits, and the applied edits might
+    // be different from the text replacements provided yb the caller. Therefore, the reverse operations must
+    // be computed in thsi method, and cannot be easily lifted to TextModel.
+    // 
+    // VSCode performs more validations in the TextModel: clamps line and column to document limits, check invalid
+    // ranges, validates against UTF-16 surrogate pairs, normalizes replacement text EOLs.
+    //
+    // To lift reverse edit computation to TextModel, the actual changes made must be the same as the edits provided
+    // by the caller.
+    public ApplyEditsResult ApplyEdits(TextReplacement[] replacements, bool computeUndoEdits)
     {
         bool mightContainRTL = _mightContainRTL;
         bool mightContainUnusualLineTerminators = _mightContainUnusualLineTerminators;
         bool mightContainNonBasicASCII = _mightContainNonBasicASCII;
-        bool canReduceOperations = true;
 
-        var operations = new ValidatedEditOperation[rawOperations.Length];
-        for (int i = 0; i < rawOperations.Length; i++)
+        var operations = new ValidatedEditOperation[replacements.Length];
+        for (int i = 0; i < replacements.Length; i++)
         {
-            EditOperation op = rawOperations[i];
-            if (canReduceOperations && op.IsTracked)
-                canReduceOperations = false;
-
-            TextRange validatedRange = op.Range;
-            if (!string.IsNullOrEmpty(op.Text))
+            TextReplacement replacement = replacements[i];
+            TextRange validatedRange = replacement.Range;
+            if (!string.IsNullOrEmpty(replacement.Text))
             {
                 bool textMightContainNonBasicASCII = true;
                 if (!mightContainNonBasicASCII)
                 {
-                    textMightContainNonBasicASCII = !op.Text.IsBasicASCII();
+                    textMightContainNonBasicASCII = !replacement.Text.IsBasicASCII();
                     mightContainNonBasicASCII = textMightContainNonBasicASCII;
                 }
                 if (!mightContainRTL && textMightContainNonBasicASCII)
                 {
                     // check if the new inserted text contains RTL
-                    mightContainRTL = op.Text.ContainsRTL();
+                    mightContainRTL = replacement.Text.ContainsRTL();
                 }
                 if (!mightContainUnusualLineTerminators && textMightContainNonBasicASCII)
                 {
                     // check if the new inserted text contains unusual line terminators
-                    mightContainUnusualLineTerminators = op.Text.ContainsUnusualLineTerminators();
+                    mightContainUnusualLineTerminators = replacement.Text.ContainsUnusualLineTerminators();
                 }
             }
 
@@ -459,17 +464,17 @@ public class PieceTreeTextBuffer : ITextBuffer
             int eolCount = 0;
             int firstLineLength = 0;
             int lastLineLength = 0;
-            if (!string.IsNullOrEmpty(op.Text))
+            if (!string.IsNullOrEmpty(replacement.Text))
             {
                 (eolCount, firstLineLength, lastLineLength, StringEndOfLine strEOL) =
-                    EOLCounter.CountEOL(op.Text);
+                    EOLCounter.CountEOL(replacement.Text);
 
                 string bufferEOL = GetEOL();
                 StringEndOfLine expectedStrEOL = (bufferEOL == "\r\n" ? StringEndOfLine.CRLF : StringEndOfLine.LF);
                 if (strEOL == StringEndOfLine.Unknown || strEOL == expectedStrEOL)
-                    validText = op.Text;
+                    validText = replacement.Text;
                 else
-                    validText = StringExtensions.EndOfLinesRegex.Replace(op.Text, bufferEOL);
+                    validText = StringExtensions.EndOfLinesRegex.Replace(replacement.Text, bufferEOL);
             }
             operations[i] = new ValidatedEditOperation
             {
@@ -480,9 +485,7 @@ public class PieceTreeTextBuffer : ITextBuffer
                 Text = validText,
                 EOLCount = eolCount,
                 FirstLineLength = firstLineLength,
-                LastLineLength = lastLineLength,
-                ForceMoveMarkers = op.ForceMoveMarkers,
-                IsAutoWhitespaceEdit = op.IsAutoWhitespaceEdit
+                LastLineLength = lastLineLength
             };
         }
 
@@ -506,38 +509,35 @@ public class PieceTreeTextBuffer : ITextBuffer
             }
         }
 
-        if (canReduceOperations)
-            operations = ReduceOperations(operations);
-
         // WithLineDelta encode operations
-        TextRange[] reverseRanges = computeUndoEdits || recordTrimAutoWhitespace
+        TextRange[] reverseRanges = computeUndoEdits
             ? GetInverseEditRanges(operations)
             : [];
-        List<(int lineNumber, string oldContent)> newTrimAutoWhitespaceCandidates = [];
-        if (recordTrimAutoWhitespace)
-        {
-            for (int i = 0; i < operations.Length; i++)
-            {
-                var op = operations[i];
-                var reverseRange = reverseRanges[i];
+        //List<(int lineNumber, string oldContent)> newTrimAutoWhitespaceCandidates = [];
+        //if (recordTrimAutoWhitespace)
+        //{
+        //    for (int i = 0; i < operations.Length; i++)
+        //    {
+        //        var op = operations[i];
+        //        var reverseRange = reverseRanges[i];
 
-                if (op.IsAutoWhitespaceEdit && op.Range.IsEmpty)
-                {
-                    // Record already the future line numbers that might be auto whitespace removal candidates on next edit
-                    for (int lineNumber = reverseRange.StartLineNumber; lineNumber < reverseRange.EndLineNumber; lineNumber++)
-                    {
-                        string currentLineContent = "";
-                        if (lineNumber == reverseRange.StartLineNumber)
-                        {
-                            currentLineContent = GetLineContent(op.Range.StartLineNumber);
-                            if (currentLineContent.FirstNonWhitespaceIndex() != -1)
-                                continue;
-                        }
-                        newTrimAutoWhitespaceCandidates.Add((lineNumber, currentLineContent));
-                    }
-                }
-            }
-        }
+        //        if (op.IsAutoWhitespaceEdit && op.Range.IsEmpty)
+        //        {
+        //            // Record already the future line numbers that might be auto whitespace removal candidates on next edit
+        //            for (int lineNumber = reverseRange.StartLineNumber; lineNumber < reverseRange.EndLineNumber; lineNumber++)
+        //            {
+        //                string currentLineContent = "";
+        //                if (lineNumber == reverseRange.StartLineNumber)
+        //                {
+        //                    currentLineContent = GetLineContent(op.Range.StartLineNumber);
+        //                    if (currentLineContent.FirstNonWhitespaceIndex() != -1)
+        //                        continue;
+        //                }
+        //                newTrimAutoWhitespaceCandidates.Add((lineNumber, currentLineContent));
+        //            }
+        //        }
+        //    }
+        //}
 
         ReverseSingleEditOperation[]? reverseOperations = null;
         if (computeUndoEdits)
@@ -574,36 +574,35 @@ public class PieceTreeTextBuffer : ITextBuffer
 
         var contentChanges = DoApplyEdits(operations);
 
-        List<int>? trimAutoWhitespaceLineNumbers = null;
-        if (recordTrimAutoWhitespace && newTrimAutoWhitespaceCandidates.Count > 0)
-        {
-            // sort line numbers auto whitespace removal candidates for next edit descending
-            newTrimAutoWhitespaceCandidates.Sort((a, b) => b.lineNumber - a.lineNumber);
+        //List<int>? trimAutoWhitespaceLineNumbers = null;
+        //if (recordTrimAutoWhitespace && newTrimAutoWhitespaceCandidates.Count > 0)
+        //{
+        //    // sort line numbers auto whitespace removal candidates for next edit descending
+        //    newTrimAutoWhitespaceCandidates.Sort((a, b) => b.lineNumber - a.lineNumber);
 
-            trimAutoWhitespaceLineNumbers = [];
-            for (int i = 0, len = newTrimAutoWhitespaceCandidates.Count; i < len; i++)
-            {
-                int lineNumber = newTrimAutoWhitespaceCandidates[i].lineNumber;
-                if (i > 0 && newTrimAutoWhitespaceCandidates[i - 1].lineNumber == lineNumber)
-                    continue; // Do not have the same line number twice
+        //    trimAutoWhitespaceLineNumbers = [];
+        //    for (int i = 0, len = newTrimAutoWhitespaceCandidates.Count; i < len; i++)
+        //    {
+        //        int lineNumber = newTrimAutoWhitespaceCandidates[i].lineNumber;
+        //        if (i > 0 && newTrimAutoWhitespaceCandidates[i - 1].lineNumber == lineNumber)
+        //            continue; // Do not have the same line number twice
 
-                string prevContent = newTrimAutoWhitespaceCandidates[i].oldContent;
-                string lineContent = GetLineContent(lineNumber);
+        //        string prevContent = newTrimAutoWhitespaceCandidates[i].oldContent;
+        //        string lineContent = GetLineContent(lineNumber);
 
-                if (lineContent.Length == 0 || lineContent == prevContent || lineContent.FirstNonWhitespaceIndex() != -1)
-                    continue;
+        //        if (lineContent.Length == 0 || lineContent == prevContent || lineContent.FirstNonWhitespaceIndex() != -1)
+        //            continue;
 
-                trimAutoWhitespaceLineNumbers.Add(lineNumber);
-            }
-        }
+        //        trimAutoWhitespaceLineNumbers.Add(lineNumber);
+        //    }
+        //}
 
         OnDidChangeContent?.Invoke(this, EventArgs.Empty);
 
         return new ApplyEditsResult
         {
             ReverseEdits = reverseOperations,
-            Changes = contentChanges,
-            TrimAutoWhitespaceLineNumbers = trimAutoWhitespaceLineNumbers
+            Changes = contentChanges
         };
     }
 
@@ -611,61 +610,61 @@ public class PieceTreeTextBuffer : ITextBuffer
      * Transform operations such that they represent the same logic edit,
      * but that they also do not cause OOM crashes.
      */
-    private ValidatedEditOperation[] ReduceOperations(ValidatedEditOperation[] operations)
-    {
-        if (operations.Length < 1000)
-            return operations; // We know from empirical testing that a thousand edits work fine regardless of their shape.
+    //private ValidatedEditOperation[] ReduceOperations(ValidatedEditOperation[] operations)
+    //{
+    //    if (operations.Length < 1000)
+    //        return operations; // We know from empirical testing that a thousand edits work fine regardless of their shape.
 
-        bool forceMoveMarkers = false;
-        TextRange firstEditRange = operations[0].Range;
-        TextRange lastEditRange = operations[^1].Range;
-        TextRange entireEditRange = new(firstEditRange.StartLineNumber, firstEditRange.StartColumn, lastEditRange.EndLineNumber, lastEditRange.EndColumn);
-        int lastEndLineNumber = firstEditRange.StartLineNumber;
-        int lastEndColumn = firstEditRange.StartColumn;
-        List<string> result = [];
+    //    bool forceMoveMarkers = false;
+    //    TextRange firstEditRange = operations[0].Range;
+    //    TextRange lastEditRange = operations[^1].Range;
+    //    TextRange entireEditRange = new(firstEditRange.StartLineNumber, firstEditRange.StartColumn, lastEditRange.EndLineNumber, lastEditRange.EndColumn);
+    //    int lastEndLineNumber = firstEditRange.StartLineNumber;
+    //    int lastEndColumn = firstEditRange.StartColumn;
+    //    List<string> result = [];
 
-        for (int i = 0, len = operations.Length; i < len; i++)
-        {
-            ValidatedEditOperation operation = operations[i];
-            TextRange range = operation.Range;
+    //    for (int i = 0, len = operations.Length; i < len; i++)
+    //    {
+    //        ValidatedEditOperation operation = operations[i];
+    //        TextRange range = operation.Range;
 
-            forceMoveMarkers = forceMoveMarkers || operation.ForceMoveMarkers;
+    //        forceMoveMarkers = forceMoveMarkers || operation.ForceMoveMarkers;
 
-            // (1) -- Push old text
-            result.Add(GetValueInRange(new TextRange(lastEndLineNumber, lastEndColumn, range.StartLineNumber, range.StartColumn)));
+    //        // (1) -- Push old text
+    //        result.Add(GetValueInRange(new TextRange(lastEndLineNumber, lastEndColumn, range.StartLineNumber, range.StartColumn)));
 
-            // (2) -- Push new text
-            if (operation.Text.Length > 0)
-                result.Add(operation.Text);
+    //        // (2) -- Push new text
+    //        if (operation.Text.Length > 0)
+    //            result.Add(operation.Text);
 
-            lastEndLineNumber = range.EndLineNumber;
-            lastEndColumn = range.EndColumn;
-        }
+    //        lastEndLineNumber = range.EndLineNumber;
+    //        lastEndColumn = range.EndColumn;
+    //    }
 
-        string text = string.Concat(result);
-        var (eolCount, firstLineLength, lastLineLength, _) = EOLCounter.CountEOL(text);
+    //    string text = string.Concat(result);
+    //    var (eolCount, firstLineLength, lastLineLength, _) = EOLCounter.CountEOL(text);
 
-        var combinedOperation = new ValidatedEditOperation
-        {
-            SortIndex = 0,
-            Range = entireEditRange,
-            RangeOffset = GetOffsetAt(entireEditRange.StartLineNumber, entireEditRange.StartColumn),
-            RangeLength = GetValueLengthInRange(entireEditRange, EndOfLinePreference.TextDefined),
-            Text = text,
-            EOLCount = eolCount,
-            FirstLineLength = firstLineLength,
-            LastLineLength = lastLineLength,
-            ForceMoveMarkers = forceMoveMarkers,
-            IsAutoWhitespaceEdit = false
-        };
+    //    var combinedOperation = new ValidatedEditOperation
+    //    {
+    //        SortIndex = 0,
+    //        Range = entireEditRange,
+    //        RangeOffset = GetOffsetAt(entireEditRange.StartLineNumber, entireEditRange.StartColumn),
+    //        RangeLength = GetValueLengthInRange(entireEditRange, EndOfLinePreference.TextDefined),
+    //        Text = text,
+    //        EOLCount = eolCount,
+    //        FirstLineLength = firstLineLength,
+    //        LastLineLength = lastLineLength,
+    //        ForceMoveMarkers = forceMoveMarkers,
+    //        IsAutoWhitespaceEdit = false
+    //    };
 
-        // At one point, due to how events are emitted and how each operation is handled,
-        // some operations can trigger a high amount of temporary string allocations,
-        // that will immediately get edited again.
-        // e.g. a formatter inserting ridiculous amounts of \n on a model with a single line
-        // Therefore, the strategy is to collapse all the operations into a huge single edit operation
-        return [combinedOperation];
-    }
+    //    // At one point, due to how events are emitted and how each operation is handled,
+    //    // some operations can trigger a high amount of temporary string allocations,
+    //    // that will immediately get edited again.
+    //    // e.g. a formatter inserting ridiculous amounts of \n on a model with a single line
+    //    // Therefore, the strategy is to collapse all the operations into a huge single edit operation
+    //    return [combinedOperation];
+    //}
 
     private List<InternalModelContentChange> DoApplyEdits(ValidatedEditOperation[] operations)
     {
@@ -696,11 +695,11 @@ public class PieceTreeTextBuffer : ITextBuffer
 
             contentChanges.Add(new InternalModelContentChange
             {
+                SortIndex = op.SortIndex,
                 Range = op.Range,
                 RangeLength = op.RangeLength,
                 Text = op.Text,
-                RangeOffset = op.RangeOffset,
-                ForceMoveMarkers = op.ForceMoveMarkers
+                RangeOffset = op.RangeOffset
             });
         }
         return contentChanges;

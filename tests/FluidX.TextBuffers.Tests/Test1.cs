@@ -32,16 +32,8 @@ namespace FluidX.TextBuffers.Tests
             var end = buffer.GetPositionAt(13);
             buffer.ApplyEdits(
                 [
-                    new EditOperation
-                    {
-                        Range = new TextRange(start, end),
-                        Text = "abcdefghij",
-                        ForceMoveMarkers = false,
-                        IsAutoWhitespaceEdit = false,
-                        IsTracked = false
-                    }
+                    new TextReplacement(new TextRange(start, end), "abcdefghij")
                 ],
-                false,
                 false);
 
             Assert.AreEqual("helabcdefghijoo bar baz", buffer.GetLinesRawContent());
@@ -67,16 +59,8 @@ namespace FluidX.TextBuffers.Tests
                 var text = new string(Enumerable.Repeat('x', length).ToArray());
                 buffer.ApplyEdits(
                     [
-                        new EditOperation
-                        {
-                            Range = new TextRange(start, end),
-                            Text = text,
-                            ForceMoveMarkers = false,
-                            IsAutoWhitespaceEdit = false,
-                            IsTracked = false
-                        }
+                        new TextReplacement(new TextRange(start, end), text)
                     ],
-                    false,
                     false);
             }
 

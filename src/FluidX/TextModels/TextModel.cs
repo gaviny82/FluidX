@@ -1,3 +1,4 @@
+using System.Text;
 using FluidX.TextBuffers;
 using FluidX.TextBuffers.PieceTree;
 using FluidX.Tokenization;
@@ -53,6 +54,7 @@ public class TextModel : IDecorationTreesHost
         => TextBuffer.GetRangeAt(start, end - start);
 
     private readonly UndoRedoStack _undoRedoStack = new();
+    private readonly TextModelDecorationTrees _decorationTrees = new();
     private int[]? _trimAutoWhitespaceLineNumbers;
 
     public TextModel(
@@ -74,18 +76,15 @@ public class TextModel : IDecorationTreesHost
         // Ported from microsoft/vscode/src/vs/editor/common/model/textModel.ts
         // This is a simplified implementation of TextModel.edit=>pushEditOperations=>_pushEditOperations=>_commandManager.pushEditOperation
         // TODO: Emit events for ContentChanged and DecorationsChanged
-        PushEditOperations(edit.Replacements.Select(r => new EditOperation
-        {
-            Range = r.Range,
-            Text = r.Text,
-            ForceMoveMarkers = false,
-            IsAutoWhitespaceEdit = false,
-            IsTracked = false,
-        }).ToArray(), null, null);
+        PushEditOperations(
+            edit.Replacements.Select(replacement => new ModelEditOperation(replacement)).ToArray(),
+            null,
+            null
+        );
     }
 
     public Selection[]? PushEditOperations(
-        EditOperation[] editOperations,
+        ModelEditOperation[] editOperations,
         Selection[]? beforeCursorState,
         Func<ReverseSingleEditOperation[]?, Selection[]?>? cursorStateComputer
         )
@@ -103,6 +102,8 @@ public class TextModel : IDecorationTreesHost
             editStackElement = new SingleModelEditStackElement(this, beforeCursorState);
             _undoRedoStack.PushElement(editStackElement);
         }
+
+        editOperations = AppendAutoWhitespaceTrimEdits(editOperations, beforeCursorState);
 
         // Apply the edits to the text buffer
         var inverseEditOperations = ApplyEdits(editOperations, true)!;
@@ -132,28 +133,32 @@ public class TextModel : IDecorationTreesHost
 
 
     /// <summary>
-    /// 
+    /// Applies model edit operations without adding them to the undostack.
     /// </summary>
-    /// <param name="rawOperations"></param>
+    /// <param name="editOperations">The text replacements and their model-level behavior.</param>
     /// <param name="computeUndoEdits"></param>
     /// <returns>Not null when <paramref name="computeUndoEdits"/> is true</returns>
-    /// <exception cref="NotImplementedException"></exception>
     public ReverseSingleEditOperation[]? ApplyEdits(
-        EditOperation[] rawOperations,
+        ModelEditOperation[] editOperations,
         bool computeUndoEdits,
         TextModelEditSource? reason = null,
         bool isUndoing = false,
         bool isRedoing = false)
     {
         reason ??= EditSources.CreateApplyEdits();
+        ModelEditOperation[] operations = ReduceOperations(editOperations);
+        var autoWhitespaceEdits = CaptureAutoWhitespaceEdits(operations);
 
         // TODO: Emit events
         int oldLineCount = TextBuffer.LineCount;
-        var result = TextBuffer.ApplyEdits(rawOperations, Options.TrimAutoWhitespace, computeUndoEdits);
+        bool computeBufferUndoEdits = computeUndoEdits || autoWhitespaceEdits.Count > 0;
+        var result = TextBuffer.ApplyEdits(
+            operations.Select(operation => operation.Replacement).ToArray(),
+            computeUndoEdits);
         int newLineCount = TextBuffer.LineCount;
 
         var contentChanges = result.Changes;
-        _trimAutoWhitespaceLineNumbers = result.TrimAutoWhitespaceLineNumbers?.ToArray();
+        _trimAutoWhitespaceLineNumbers = ComputeAutoWhitespaceLineNumbers(operations, autoWhitespaceEdits, result.ReverseEdits);
 
         if (contentChanges.Count != 0)
         {
@@ -166,7 +171,12 @@ public class TextModel : IDecorationTreesHost
             for (int i = 0, len = contentChanges.Count; i < len; i++)
             {
                 var change = contentChanges[i];
-                //this._decorationsTree.acceptReplace(change.rangeOffset, change.rangeLength, change.text.length, change.forceMoveMarkers);
+                var operation = operations[change.SortIndex];
+                _decorationTrees.AcceptReplace(
+                    change.RangeOffset,
+                    change.RangeLength,
+                    change.Text.Length,
+                    operation.ForceMoveMarkers);
             }
 
             IncreaseVersionId();
@@ -285,8 +295,213 @@ public class TextModel : IDecorationTreesHost
             );
         }
 
-        return result.ReverseEdits;
+        return computeUndoEdits ? result.ReverseEdits : null;
     }
+
+    private ModelEditOperation[] AppendAutoWhitespaceTrimEdits(
+        ModelEditOperation[] editOperations,
+        Selection[]? beforeCursorState)
+    {
+        if (!Options.TrimAutoWhitespace || _trimAutoWhitespaceLineNumbers is null)
+            return editOperations;
+
+        int[] trimLineNumbers = _trimAutoWhitespaceLineNumbers;
+        _trimAutoWhitespaceLineNumbers = null;
+
+        bool editsAreNearCursors = true;
+        if (beforeCursorState is not null)
+        {
+            foreach (var selection in beforeCursorState)
+            {
+                int selectionStartLine = Math.Min(selection.SelectionStartLineNumber, selection.PositionLineNumber);
+                int selectionEndLine = Math.Max(selection.SelectionStartLineNumber, selection.PositionLineNumber);
+                bool foundNearbyEdit = editOperations.Any(operation =>
+                    operation.Range.StartLineNumber <= selectionEndLine
+                    && operation.Range.EndLineNumber >= selectionStartLine);
+                if (!foundNearbyEdit)
+                {
+                    editsAreNearCursors = false;
+                    break;
+                }
+            }
+        }
+
+        // If the edits are not near the cursors, we don't trim auto whitespace
+        if (!editsAreNearCursors)
+            return editOperations;
+
+        List<ModelEditOperation> result = [.. editOperations];
+        foreach (int trimLineNumber in trimLineNumbers)
+        {
+            int maxLineColumn = TextBuffer.GetLineMaxColumn(trimLineNumber);
+            bool allowTrimLine = true;
+
+            foreach (var operation in editOperations)
+            {
+                TextRange editRange = operation.Range;
+                if (trimLineNumber < editRange.StartLineNumber || trimLineNumber > editRange.EndLineNumber)
+                    continue;
+
+                bool insertsLineAfter = editRange.IsEmpty
+                    && editRange.StartLineNumber == trimLineNumber
+                    && editRange.StartColumn == maxLineColumn
+                    && StartsWithLineBreak(operation.Text);
+                bool insertsLineBefore = editRange.IsEmpty
+                    && editRange.StartLineNumber == trimLineNumber
+                    && editRange.StartColumn == 1
+                    && EndsWithLineBreak(operation.Text);
+                if (insertsLineAfter || insertsLineBefore)
+                    continue;
+
+                allowTrimLine = false;
+                break;
+            }
+
+            if (allowTrimLine)
+            {
+                result.Add(new ModelEditOperation(
+                    new TextRange(trimLineNumber, 1, trimLineNumber, maxLineColumn),
+                    ""));
+            }
+        }
+
+        return result.ToArray();
+    }
+
+    public ModelEditOperation[] ReduceOperations(ModelEditOperation[] operations)
+    {
+        // We know from empirical testing that a thousand edits work fine regardless of their shape.
+        if (operations.Length < 1000 || operations.Any(operation => operation.IsTracked))
+            return operations;
+
+        ModelEditOperation[] sortedOperations = [.. operations];
+        Array.Sort(sortedOperations, (a, b) => TextRange.CompareRangesUsingStarts(a.Range, b.Range));
+
+        for (int i = 0; i < sortedOperations.Length - 1; i++)
+        {
+            if (sortedOperations[i + 1].Range.StartPosition.IsBefore(sortedOperations[i].Range.EndPosition))
+                throw new ArgumentException("Overlapping ranges are not allowed", nameof(operations));
+        }
+
+        TextRange firstRange = operations[0].Range;
+        TextRange lastRange = operations[^1].Range;
+        TextRange combinedRange = new(
+            firstRange.StartLineNumber,
+            firstRange.StartColumn,
+            lastRange.EndLineNumber,
+            lastRange.EndColumn);
+        int lastEndLineNumber = firstRange.StartLineNumber;
+        int lastEndColumn = firstRange.StartColumn;
+        bool forceMoveMarkers = false;
+        StringBuilder text = new();
+
+        foreach (var operation in sortedOperations)
+        {
+            TextRange range = operation.Range;
+            forceMoveMarkers |= operation.ForceMoveMarkers;
+            text.Append(TextBuffer.GetValueInRange(
+                new TextRange(
+                    lastEndLineNumber,
+                    lastEndColumn,
+                    range.StartLineNumber,
+                    range.StartColumn),
+                EndOfLinePreference.TextDefined));
+            text.Append(operation.Text);
+            lastEndLineNumber = range.EndLineNumber;
+            lastEndColumn = range.EndColumn;
+        }
+
+        // At one point, due to how events are emitted and how each operation is handled,
+        // some operations can trigger a high amount of temporary string allocations,
+        // that will immediately get edited again.
+        // e.g. a formatter inserting ridiculous amounts of \n on a model with a single line
+        // Therefore, the strategy is to collapse all the operations into a huge single edit operation
+        return [new ModelEditOperation(combinedRange, text.ToString())
+            {
+                ForceMoveMarkers = forceMoveMarkers
+            }
+        ];
+    }
+
+    private List<AutoWhitespaceEdit> CaptureAutoWhitespaceEdits(ModelEditOperation[] operations)
+    {
+        List<AutoWhitespaceEdit> result = [];
+        if (!Options.TrimAutoWhitespace)
+            return result;
+
+        for (int i = 0; i < operations.Length; i++)
+        {
+            var operation = operations[i];
+            if (operation.IsAutowhitespaceEdit && operation.Range.IsEmpty)
+            {
+                result.Add(new AutoWhitespaceEdit(i, TextBuffer.GetLineContent(operation.Range.StartLineNumber)));
+            }
+        }
+
+        return result;
+    }
+
+    private int[]? ComputeAutoWhitespaceLineNumbers(
+        ModelEditOperation[] operations,
+        List<AutoWhitespaceEdit> autoWhitespaceEdits,
+        ReverseSingleEditOperation[]? reverseOperations)
+    {
+        if (autoWhitespaceEdits.Count == 0 || reverseOperations is null)
+            return null;
+
+        Dictionary<int, ReverseSingleEditOperation> reverseOperationsByIndex =
+            reverseOperations.ToDictionary(op => op.SortIndex);
+        List<(int LineNumber, string OldContent)> candidates = [];
+
+        foreach (var edit in autoWhitespaceEdits)
+        {
+            if (!reverseOperationsByIndex.TryGetValue(edit.SortIndex, out var reverseOperation))
+                continue;
+
+            for (int lineNumber = reverseOperation.Range.StartLineNumber;
+                lineNumber <= reverseOperation.Range.EndLineNumber;
+                lineNumber++)
+            {
+                string oldContent = lineNumber == reverseOperation.Range.StartLineNumber
+                    ? edit.OldLineContent
+                    : "";
+                if (lineNumber == reverseOperation.Range.StartLineNumber && ContainsNonWhitespace(oldContent))
+                    continue;
+                candidates.Add((lineNumber, oldContent));
+            }
+        }
+
+        candidates.Sort((a, b) => b.LineNumber - a.LineNumber);
+        List<int> result = [];
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            var candidate = candidates[i];
+            if (i > 0 && candidates[i - 1].LineNumber == candidate.LineNumber)
+                continue;
+
+            string lineContent = TextBuffer.GetLineContent(candidate.LineNumber);
+            if (lineContent.Length == 0
+                || lineContent == candidate.OldContent
+                || ContainsNonWhitespace(lineContent))
+            {
+                continue;
+            }
+            result.Add(candidate.LineNumber);
+        }
+
+        return result.Count == 0 ? null : result.ToArray();
+    }
+
+    private static bool ContainsNonWhitespace(string text)
+        => text.Any(ch => ch is not (' ' or '\t'));
+
+    private static bool StartsWithLineBreak(string text)
+        => text.StartsWith('\n') || text.StartsWith("\r");
+
+    private static bool EndsWithLineBreak(string text)
+        => text.EndsWith('\n') || text.EndsWith("\r");
+
+    private readonly record struct AutoWhitespaceEdit(int SortIndex, string OldLineContent);
 
     public void Undo()
     {
@@ -302,19 +517,14 @@ public class TextModel : IDecorationTreesHost
         {
             var rangeStart = TextBuffer.GetPositionAt(change.NewPosition);
             var rangeEnd = TextBuffer.GetPositionAt(change.NewEnd);
-            return new EditOperation
-            {
-                Range = new TextRange(
+            return new ModelEditOperation(
+                new TextRange(
                     rangeStart.LineNumber,
                     rangeStart.Column,
                     rangeEnd.LineNumber,
                     rangeEnd.Column
                 ),
-                Text = change.OldText,
-                ForceMoveMarkers = false,
-                IsAutoWhitespaceEdit = false,
-                IsTracked = false
-            };
+                change.OldText);
         }).ToArray();
 
         // TODO: Emit events
@@ -330,19 +540,14 @@ public class TextModel : IDecorationTreesHost
         {
             var rangeStart = TextBuffer.GetPositionAt(change.OldPosition);
             var rangeEnd = TextBuffer.GetPositionAt(change.OldEnd);
-            return new EditOperation
-            {
-                Range = new TextRange(
+            return new ModelEditOperation(
+                new TextRange(
                     rangeStart.LineNumber,
                     rangeStart.Column,
                     rangeEnd.LineNumber,
                     rangeEnd.Column
                 ),
-                Text = change.NewText,
-                ForceMoveMarkers = false,
-                IsAutoWhitespaceEdit = false,
-                IsTracked = false
-            };
+                change.NewText);
         }).ToArray();
 
         // TODO: Emit events
