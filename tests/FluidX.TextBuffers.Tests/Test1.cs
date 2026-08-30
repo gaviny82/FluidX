@@ -1,4 +1,5 @@
 ﻿using FluidX.TextBuffers;
+using FluidX.TextBuffers.LineArray;
 using FluidX.TextBuffers.PieceTree;
 using FluidX.TextBuffers.PieceTree.Buffers;
 
@@ -9,7 +10,7 @@ namespace FluidX.TextBuffers.Tests
     {
         private static PieceTreeTextBuffer CreateBuffer(string text)
         {
-            return PieceTreeTextBuffer.Create(text, DefaultEndOfLine.LF, normalizeEOL: false);
+            return PieceTreeTextBuffer.Create(text, DefaultEndOfLine.LF);
         }
 
         [TestMethod]
@@ -65,6 +66,52 @@ namespace FluidX.TextBuffers.Tests
             }
 
             Assert.IsTrue(buffer.Length > 0);
+        }
+        [TestMethod]
+        public void MixedEOL_ReadsUseActualLineBreakLengths()
+        {
+            var buffer = CreateBuffer("one\r\ntwo\nthree\rfour");
+            var fullRange = new TextRange(1, 1, 4, 5);
+
+            CollectionAssert.AreEqual(new[] { "one", "two", "three", "four" }, buffer.GetLinesContent().ToArray());
+            Assert.AreEqual("one\r\ntwo\r\nthree\r\nfour", buffer.GetValueInRange(fullRange, EndOfLinePreference.TextDefined));
+            Assert.AreEqual("one\ntwo\nthree\nfour", buffer.GetValueInRange(fullRange, EndOfLinePreference.LF));
+            Assert.AreEqual(21, buffer.GetValueLengthInRange(fullRange, EndOfLinePreference.TextDefined));
+            Assert.AreEqual(18, buffer.GetValueLengthInRange(fullRange, EndOfLinePreference.LF));
+            Assert.AreEqual(21, buffer.GetCharacterCountInRange(fullRange, EndOfLinePreference.TextDefined));
+        }
+
+        [TestMethod]
+        public void ApplyEdits_PreservesForeignEOLAndReadPathsRemainCorrect()
+        {
+            var buffer = CreateBuffer("one\ntwo");
+            buffer.ApplyEdits(
+                [new TextReplacement(new TextRange(1, 4, 1, 4), "\r\ninserted")],
+                false);
+
+            CollectionAssert.AreEqual(new[] { "one", "inserted", "two" }, buffer.GetLinesContent().ToArray());
+            Assert.AreEqual("one\r\ninserted\ntwo", buffer.GetLinesRawContent());
+        }
+
+        [TestMethod]
+        public void NormalizeEOL_RewritesMixedContent()
+        {
+            var buffer = CreateBuffer("one\r\ntwo\nthree\rfour");
+            buffer.NormalizeEOL("\n");
+
+            var fullRange = new TextRange(1, 1, 4, 5);
+            Assert.AreEqual("\n", buffer.GetEOL());
+            Assert.AreEqual("one\ntwo\nthree\nfour", buffer.GetValueInRange(fullRange));
+            Assert.AreEqual(15, buffer.GetValueLengthInRange(fullRange, EndOfLinePreference.TextDefined));
+        }
+
+        [TestMethod]
+        public void LineArrayBuffer_SplitsBareCR()
+        {
+            var buffer = new LineArrayTextBuffer("one\rtwo\r\nthree\nfour");
+
+            CollectionAssert.AreEqual(new[] { "one", "two", "three", "four" }, buffer.GetLinesContent().ToArray());
+            Assert.AreEqual("one\ntwo\nthree\nfour", buffer.GetValueInRange(new TextRange(1, 1, 4, 5), EndOfLinePreference.TextDefined));
         }
     }
 }

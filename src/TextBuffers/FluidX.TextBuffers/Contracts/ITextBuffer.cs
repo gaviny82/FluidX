@@ -2,7 +2,11 @@
 
 public interface ITextBuffer : IReadOnlyTextBuffer
 {
-    void SetEOL(string eol); // either "\r\n" or "\n"
+    /// <summary>
+    /// Rewrites the buffer's content so that every line break uses the given
+    /// end-of-line sequence. Either "\r\n" or "\n".
+    /// </summary>
+    void NormalizeEOL(string eol);
 
     /// <summary>
     /// Applies a set of non-overlapping text replacements to the buffer.

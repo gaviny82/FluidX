@@ -149,12 +149,17 @@ public class TextModel : IDecorationTreesHost
         ModelEditOperation[] operations = ReduceOperations(editOperations);
         var autoWhitespaceEdits = CaptureAutoWhitespaceEdits(operations);
 
+        // Normalize replacement text to the model's EOL before handing it to
+        // the buffer. The buffer applies replacements verbatim, so TextModel
+        // owns the EOL policy and keeps the buffer in normalized (fast) mode.
+        var replacements = operations
+            .Select(operation => new TextReplacement(operation.Range, NormalizeTextEOL(operation.Text)))
+            .ToArray();
+
         // TODO: Emit events
         int oldLineCount = TextBuffer.LineCount;
         bool computeBufferUndoEdits = computeUndoEdits || autoWhitespaceEdits.Count > 0;
-        var result = TextBuffer.ApplyEdits(
-            operations.Select(operation => operation.Replacement).ToArray(),
-            computeUndoEdits);
+        var result = TextBuffer.ApplyEdits(replacements, computeUndoEdits);
         int newLineCount = TextBuffer.LineCount;
 
         var contentChanges = result.Changes;
@@ -416,7 +421,7 @@ public class TextModel : IDecorationTreesHost
         // that will immediately get edited again.
         // e.g. a formatter inserting ridiculous amounts of \n on a model with a single line
         // Therefore, the strategy is to collapse all the operations into a huge single edit operation
-        return [new ModelEditOperation(combinedRange, text.ToString())
+        return [new ModelEditOperation(combinedRange, NormalizeTextEOL(text.ToString()))
             {
                 ForceMoveMarkers = forceMoveMarkers
             }
@@ -582,7 +587,7 @@ public class TextModel : IDecorationTreesHost
         int endColumn = TextBuffer.GetLineMaxColumn(endLineNumber);
 
         // TODO: OnEOLChanging
-        TextBuffer.SetEOL(newEOL);
+        TextBuffer.NormalizeEOL(newEOL);
         IncreaseVersionId();
         // TODO: OnEOLChanged
 
@@ -659,6 +664,25 @@ public class TextModel : IDecorationTreesHost
         var fullText = TextBuffer.GetValueInRange(fullRange, eol);
         string bom = preserveBOM ? TextBuffer.BOM : "";
         return $"{bom}{fullText}";
+    }
+
+    /// <summary>
+    /// Normalizes the EOL form of a replacement string to the model's preferred
+    /// EOL. The text buffers apply replacements verbatim, so this keeps the
+    /// buffer content in a single-EOL form and its fast read paths engaged.
+    /// </summary>
+    private string NormalizeTextEOL(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return text;
+
+        string preferredEOL = TextBuffer.GetEOL();
+        var (_, _, _, actualEOL) = EOLCounter.CountEOL(text);
+        StringEndOfLine expectedEOL = preferredEOL == "\r\n" ? StringEndOfLine.CRLF : StringEndOfLine.LF;
+        if (actualEOL == StringEndOfLine.Unknown || actualEOL == expectedEOL)
+            return text;
+
+        return StringExtensions.EndOfLinesRegex.Replace(text, preferredEOL);
     }
 
     private void IncreaseVersionId()

@@ -33,7 +33,7 @@ public class LoadFileBenchmark
         using var stream = new MemoryStream(_fileData);
         if (Implementation == BufferImplementation.PieceTree)
         {
-            return await PieceTreeTextBuffer.CreateAsync(stream, DefaultEndOfLine.LF, normalizeEOL: false);
+            return await PieceTreeTextBuffer.CreateAsync(stream, DefaultEndOfLine.LF);
         }
 
         using var reader = new StreamReader(stream);

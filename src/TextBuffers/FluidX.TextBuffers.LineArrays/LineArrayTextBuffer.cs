@@ -35,6 +35,7 @@ public class LineArrayTextBuffer : ITextBuffer
             return;
         }
 
+        // Splits on every line-break form: \r\n, bare \r, and bare \n,
         int lineStart = 0; // offset in the string
         for (int i = 0; i < text.Length; i++)
         {
@@ -45,8 +46,14 @@ public class LineArrayTextBuffer : ITextBuffer
                     lineText = text.AsSpan(lineStart, i - lineStart - 1); // \r\n
                 else
                     lineText = text.AsSpan(lineStart, i - lineStart); // \n
-                
+
                 _lines.Add([.. lineText]);
+                lineStart = i + 1;
+            }
+            else if (text[i] == '\r' && (i + 1 >= text.Length || text[i + 1] != '\n'))
+            {
+                // bare \r
+                _lines.Add([.. text.AsSpan(lineStart, i - lineStart)]);
                 lineStart = i + 1;
             }
         }
@@ -312,7 +319,7 @@ public class LineArrayTextBuffer : ITextBuffer
 
     #region ITextBuffer Members
 
-    public void SetEOL(string eol)
+    public void NormalizeEOL(string eol)
     {
         _eol = eol;
     }
@@ -432,8 +439,14 @@ public class LineArrayTextBuffer : ITextBuffer
         {
             if (text[i] == '\n')
             {
-                int lineEnd = (i > 0 && text[i - 1] == '\r') ? i - 1 : i;
+                int lineEnd = (i > 0 && text[i - 1] == '\r') ? i - 1 : i; // \r\n or \n
                 lines.Add([.. text.AsSpan(lineStart, lineEnd - lineStart)]);
+                lineStart = i + 1;
+            }
+            else if (text[i] == '\r' && (i + 1 >= text.Length || text[i + 1] != '\n'))
+            {
+                // bare \r
+                lines.Add([.. text.AsSpan(lineStart, i - lineStart)]);
                 lineStart = i + 1;
             }
         }
