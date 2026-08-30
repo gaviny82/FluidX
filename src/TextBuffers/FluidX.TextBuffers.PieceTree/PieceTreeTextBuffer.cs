@@ -35,16 +35,21 @@ public class PieceTreeTextBuffer : ITextBuffer
         bool containsRTL,
         bool containsUnusualLineTerminators,
         bool isBasicASCII,
-        bool eolNormalized)
+        LineStarts? initialLineStarts = null)
     {
         _BOM = bom;
         _mightContainNonBasicASCII = !isBasicASCII;
         _mightContainRTL = containsRTL;
         _mightContainUnusualLineTerminators = containsUnusualLineTerminators;
-        Initialize(chunks, eol, eolNormalized);
+        Initialize(chunks, eol, initialLineStarts);
     }
 
-    private void Initialize(IList<InlineStringBuffer> chunks, string eol, bool eolNormalized)
+    /// <summary>
+    /// Rebuilds the buffer with the given chunks and derives whether every stored line
+    /// break uses <paramref name="eol"/>. This deliberately keeps the flag private and
+    /// intake-computed, rather than trusting a caller-provided hint.
+    /// </summary>
+    private void Initialize(IList<InlineStringBuffer> chunks, string eol, LineStarts? initialLineStarts = null)
     {
         _buffers = new StringBufferCollection();
         _buffers.Add(new InlineStringBuffer());
@@ -52,7 +57,9 @@ public class PieceTreeTextBuffer : ITextBuffer
         _lineCount = 1;
         _length = 0;
         _EOL = eol;
-        _EOLNormalized = eolNormalized;
+        _EOLNormalized = initialLineStarts is null
+            ? AreChunksEOLNormalized(chunks, eol)
+            : !NeedsNormalization(eol, initialLineStarts.CR, initialLineStarts.LF, initialLineStarts.CRLF);
 
         TreeNode? lastNode = null;
         for (int i = 0, len = chunks.Count; i < len; i++)
@@ -82,6 +89,42 @@ public class PieceTreeTextBuffer : ITextBuffer
         ComputeBufferMetadata();
     }
 
+    private static bool AreChunksEOLNormalized(IList<InlineStringBuffer> chunks, string eol)
+    {
+        bool pendingCR = false;
+
+        foreach (InlineStringBuffer chunk in chunks)
+        {
+            foreach (char character in chunk.Text)
+            {
+                if (pendingCR)
+                {
+                    if (character == '\n')
+                    {
+                        if (eol != "\r\n")
+                            return false;
+                        pendingCR = false;
+                        continue;
+                    }
+
+                    // A bare CR is never one of the two supported normalized forms.
+                    return false;
+                }
+
+                if (character == '\r')
+                {
+                    pendingCR = true;
+                }
+                else if (character == '\n' && eol != "\n")
+                {
+                    return false;
+                }
+            }
+        }
+
+        return !pendingCR;
+    }
+
     #region Creation
 
     // Steps for initializing a PieceTreeTextBuffer:
@@ -92,7 +135,7 @@ public class PieceTreeTextBuffer : ITextBuffer
     // 5. Check ContainsRTL
     // 6. Check ContainsUnusualLineTerminators
     // 7. Determine EOL to use (based on counts and defaultEOL)
-    // 8. Normalize EOL if required
+    // 8. Store content as-is and derive the private normalization flag
     // 9. Create InlineStringBuffer with line starts
 
     /// <summary>
@@ -100,11 +143,9 @@ public class PieceTreeTextBuffer : ITextBuffer
     /// </summary>
     /// <param name="text">Content of the document.</param>
     /// <param name="defaultEOL">Fallback end-of-line used when the text contains no line breaks.</param>
-    /// <param name="normalizeEOL">When <see langword="true"/>, mixed line endings are normalized to the majority one.</param>
     public static PieceTreeTextBuffer Create(
         ReadOnlySpan<char> text,
-        DefaultEndOfLine defaultEOL = DefaultEndOfLine.LF,
-        bool normalizeEOL = true)
+        DefaultEndOfLine defaultEOL = DefaultEndOfLine.LF)
     {
         // Step 1: Check BOM
         string bom = "";
@@ -116,7 +157,7 @@ public class PieceTreeTextBuffer : ITextBuffer
         char[] content = text.ToArray();
 
         // Delegates the rest of the steps to CreateCore
-        return CreateCore(content, bom, defaultEOL, normalizeEOL);
+        return CreateCore(content, bom, defaultEOL);
     }
 
     /// <summary>
@@ -125,12 +166,10 @@ public class PieceTreeTextBuffer : ITextBuffer
     /// </summary>
     /// <param name="stream">Stream to read the document from.</param>
     /// <param name="defaultEOL">Fallback end-of-line used when the text contains no line breaks.</param>
-    /// <param name="normalizeEOL">When <see langword="true"/>, mixed line endings are normalized to the majority one.</param>
     /// <param name="cancellationToken">Cancellation token for the read.</param>
     public static async Task<PieceTreeTextBuffer> CreateAsync(
         Stream stream,
         DefaultEndOfLine defaultEOL = DefaultEndOfLine.LF,
-        bool normalizeEOL = true,
         CancellationToken cancellationToken = default)
     {
         using var reader = new StreamReader(
@@ -171,14 +210,14 @@ public class PieceTreeTextBuffer : ITextBuffer
         sb.CopyTo(0, content, 0, sb.Length);
 
         // Delegates the rest of the steps to CreateCore
-        return CreateCore(content, bom, defaultEOL, normalizeEOL);
+        return CreateCore(content, bom, defaultEOL);
     }
 
+    /// <summary>
     private static PieceTreeTextBuffer CreateCore(
         char[] content,
         string bom,
-        DefaultEndOfLine defaultEOL,
-        bool normalizeEOL)
+        DefaultEndOfLine defaultEOL)
     {
         // Step 3: Count CR/LF/CRLF EOLs
         var lineStarts = LineStarts.Create(content);
@@ -195,19 +234,9 @@ public class PieceTreeTextBuffer : ITextBuffer
         // Step 7: Determine EOL to use
         string eol = DetermineEOL(defaultEOL, lineStarts.CR, lineStarts.LF, lineStarts.CRLF);
 
-        // Step 8-9: Normalize EOL if required and create InlineStringBuffer with line starts
-        InlineStringBuffer buffer;
-        if (normalizeEOL && NeedsNormalization(eol, lineStarts.CR, lineStarts.LF, lineStarts.CRLF))
-        {
-            // TODO: Normalize EOL in-place without allocating a new string
-            string normalized = StringExtensions.EndOfLinesRegex.Replace(new string(content), eol);
-            lineStarts = LineStarts.Create(normalized.AsSpan());
-            buffer = new InlineStringBuffer(normalized.ToCharArray(), lineStarts.Starts);
-        }
-        else
-        {
-            buffer = new InlineStringBuffer(content, lineStarts.Starts);
-        }
+        // Step 8: Content is stored as-is. Initialize derives normalization status
+        // from the stored chunks (mixed breaks -> slower read paths).
+        var buffer = new InlineStringBuffer(content, lineStarts.Starts);
 
         return new PieceTreeTextBuffer(
             [buffer],
@@ -216,7 +245,7 @@ public class PieceTreeTextBuffer : ITextBuffer
             containsRTL,
             containsUnusualLineTerminators,
             lineStarts.IsBasicAscii,
-            normalizeEOL);
+            lineStarts);
     }
 
     private static string DetermineEOL(DefaultEndOfLine defaultEOL, int cr, int lf, int crlf)
@@ -235,8 +264,18 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     #endregion
 
-    private void NormalizeEOL(string eol)
+    /// <summary>
+    /// Rewrites every line break in the buffer to the given EOL sequence,
+    /// rebuilding the piece tree in the process.
+    /// </summary>
+    public void NormalizeEOL(string eol)
     {
+        if (eol != "\n" && eol != "\r\n")
+            throw new ArgumentException("Invalid EOL value");
+
+        if (_EOLNormalized && _EOL == eol)
+            return; // already normalized to the target
+
         int averageBufferSize = AverageBufferSize;
         int min = averageBufferSize - averageBufferSize / 3;
         int max = min * 2;
@@ -269,7 +308,7 @@ public class PieceTreeTextBuffer : ITextBuffer
             chunks.Add(new InlineStringBuffer(text, LineStarts.CreateFast(text)));
         }
 
-        Initialize(chunks, eol, true);
+        Initialize(chunks, eol);
     }
 
     #region IReadOnlyTextBuffer Members
@@ -333,15 +372,18 @@ public class PieceTreeTextBuffer : ITextBuffer
         int endOffset = GetOffsetAt(range.EndLineNumber, range.EndColumn);
 
         // offsets use the text EOL, so we need to compensate for length differences
-        // if the requested EOL doesn't match the text EOL
-        int eolOffsetCompensation = 0;
+        // when the requested EOL differs from what is actually stored at each boundary
         string desiredEOL = GetEndOfLine(eol);
-        string actualEOL = GetEOL();
-        if (desiredEOL.Length != actualEOL.Length)
+        int eolOffsetCompensation = 0;
+        if (!_EOLNormalized)
         {
-            int delta = desiredEOL.Length - actualEOL.Length;
+            for (int line = range.StartLineNumber; line < range.EndLineNumber; line++)
+                eolOffsetCompensation += desiredEOL.Length - GetEOLLengthAtLineBreak(line);
+        }
+        else if (desiredEOL.Length != _EOL.Length)
+        {
             int eolCount = range.EndLineNumber - range.StartLineNumber;
-            eolOffsetCompensation = delta * eolCount;
+            eolOffsetCompensation = (desiredEOL.Length - _EOL.Length) * eolCount;
         }
 
         return endOffset - startOffset + eolOffsetCompensation;
@@ -376,7 +418,17 @@ public class PieceTreeTextBuffer : ITextBuffer
                 }
             }
 
-            result += GetEndOfLine(eol).Length * (toLineNumber - fromLineNumber);
+            // TextDefined reads must account for the actual EOL at each boundary in
+            // mixed-EOL buffers; explicit LF/CRLF use the uniform desired length.
+            if (eol == EndOfLinePreference.TextDefined && !_EOLNormalized)
+            {
+                for (int line = fromLineNumber; line < toLineNumber; line++)
+                    result += GetEOLLengthAtLineBreak(line);
+            }
+            else
+            {
+                result += GetEndOfLine(eol).Length * (toLineNumber - fromLineNumber);
+            }
 
             return result;
         }
@@ -418,22 +470,16 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     public event EventHandler? OnDidChangeContent;
 
-    public void SetEOL(string eol) => EOL = eol;
-
-    // NOTE: teh current text buffer API applies EOL normalization in ApplyEdits, and the applied edits might
-    // be different from the text replacements provided yb the caller. Therefore, the reverse operations must
-    // be computed in thsi method, and cannot be easily lifted to TextModel.
-    // 
-    // VSCode performs more validations in the TextModel: clamps line and column to document limits, check invalid
-    // ranges, validates against UTF-16 surrogate pairs, normalizes replacement text EOLs.
-    //
-    // To lift reverse edit computation to TextModel, the actual changes made must be the same as the edits provided
-    // by the caller.
+    // The text buffer applies replacements verbatim. Any EOL normalization of
+    // replacement text is the caller's (TextModel's) responsibility, so the
+    // actual changes made here always match the provided replacements. This
+    // allows reverse edit computation to be lifted to TextModel.
     public ApplyEditsResult ApplyEdits(TextReplacement[] replacements, bool computeUndoEdits)
     {
         bool mightContainRTL = _mightContainRTL;
         bool mightContainUnusualLineTerminators = _mightContainUnusualLineTerminators;
         bool mightContainNonBasicASCII = _mightContainNonBasicASCII;
+        bool eolNormalized = _EOLNormalized;
 
         var operations = new ValidatedEditOperation[replacements.Length];
         for (int i = 0; i < replacements.Length; i++)
@@ -466,15 +512,20 @@ public class PieceTreeTextBuffer : ITextBuffer
             int lastLineLength = 0;
             if (!string.IsNullOrEmpty(replacement.Text))
             {
+                // Replacement text is stored verbatim; we only measure its line
+                // structure. If its break kind differs from the buffer EOL, the
+                // buffer becomes non-normalized and slower read paths apply.
                 (eolCount, firstLineLength, lastLineLength, StringEndOfLine strEOL) =
                     EOLCounter.CountEOL(replacement.Text);
 
-                string bufferEOL = GetEOL();
-                StringEndOfLine expectedStrEOL = (bufferEOL == "\r\n" ? StringEndOfLine.CRLF : StringEndOfLine.LF);
-                if (strEOL == StringEndOfLine.Unknown || strEOL == expectedStrEOL)
-                    validText = replacement.Text;
-                else
-                    validText = StringExtensions.EndOfLinesRegex.Replace(replacement.Text, bufferEOL);
+                if (strEOL != StringEndOfLine.Unknown)
+                {
+                    StringEndOfLine expectedStrEOL = (_EOL == "\r\n" ? StringEndOfLine.CRLF : StringEndOfLine.LF);
+                    if (strEOL != expectedStrEOL)
+                        eolNormalized = false;
+                }
+
+                validText = replacement.Text;
             }
             operations[i] = new ValidatedEditOperation
             {
@@ -571,6 +622,7 @@ public class PieceTreeTextBuffer : ITextBuffer
         _mightContainRTL = mightContainRTL;
         _mightContainUnusualLineTerminators = mightContainUnusualLineTerminators;
         _mightContainNonBasicASCII = mightContainNonBasicASCII;
+        _EOLNormalized = eolNormalized;
 
         var contentChanges = DoApplyEdits(operations);
 
@@ -685,7 +737,7 @@ public class PieceTreeTextBuffer : ITextBuffer
             {
                 // replacement
                 Delete(op.RangeOffset, op.RangeLength);
-                Insert(op.RangeOffset, op.Text, true);
+                Insert(op.RangeOffset, op.Text);
             }
             else
             {
@@ -709,18 +761,12 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     #region Buffer API
 
-    public string EOL
-    {
-        get => _EOL;
-        set
-        {
-            if (value != "\n" && value != "\r\n")
-                throw new ArgumentException("Invalid EOL value");
-
-            _EOL = value;
-            NormalizeEOL(value);
-        }
-    }
+    /// <summary>
+    /// The preferred/majority EOL of the buffer. Informational only — the stored
+    /// content may contain foreign or mixed breaks; use <see cref="NormalizeEOL"/>
+    /// to rewrite all breaks to a single sequence.
+    /// </summary>
+    public string EOL => _EOL;
 
     public bool Equals(PieceTreeTextBuffer? other)
     {
@@ -1031,7 +1077,31 @@ public class PieceTreeTextBuffer : ITextBuffer
             int startOffset = GetOffsetAt(lineNumber, 1);
             return Length - startOffset;
         }
-        return GetOffsetAt(lineNumber + 1, 1) - GetOffsetAt(lineNumber, 1) - _EOL.Length;
+        int eolLength = _EOLNormalized
+            ? _EOL.Length
+            : GetEOLLengthAtLineBreak(lineNumber);
+        return GetOffsetAt(lineNumber + 1, 1) - GetOffsetAt(lineNumber, 1) - eolLength;
+    }
+
+    /// <summary>
+    /// Determines the actual number of EOL characters at the end of a line.
+    /// Used for mixed-EOL buffers where <see name="_EOLNormalized"/> is false.
+    /// </summary>
+    private int GetEOLLengthAtLineBreak(int lineNumber)
+    {
+        if (lineNumber >= LineCount)
+            return 0; // last line has no trailing EOL
+
+        int currentStart = GetOffsetAt(lineNumber, 1);
+        int nextStart = GetOffsetAt(lineNumber + 1, 1);
+        char lastChar = GetCharCode(nextStart - 1);
+        if (lastChar == '\n')
+        {
+            if (nextStart - currentStart >= 2 && GetCharCode(nextStart - 2) == '\r')
+                return 2; // \r\n
+            return 1; // \n
+        }
+        return 1; // bare \r
     }
 
     public char GetCharCode(int offset)
@@ -1240,9 +1310,34 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     #region Piece Table
 
-    public void Insert(int offset, string value, bool eolNormalized = false)
+    /// <summary>
+    /// Evaluates the EOL kind of <paramref name="value"/> and degrades
+    /// <see cref="_EOLNormalized"/> when the text introduces breaks that do not
+    /// match the buffer's preferred EOL. Never upgrades the flag — that requires
+    /// a full rewrite via <see cref="NormalizeEOL"/>.
+    /// </summary>
+    private void UpdateEOLNormalized(string value)
     {
-        _EOLNormalized = _EOLNormalized && eolNormalized;
+        if (!_EOLNormalized || string.IsNullOrEmpty(value))
+            return;
+
+        var (_, _, _, strEOL) = EOLCounter.CountEOL(value);
+        if (strEOL == StringEndOfLine.Unknown)
+            return; // no breaks in the inserted text
+
+        StringEndOfLine expectedStrEOL = (_EOL == "\r\n" ? StringEndOfLine.CRLF : StringEndOfLine.LF);
+        if (strEOL != expectedStrEOL)
+            _EOLNormalized = false;
+    }
+
+    /// <summary>
+    /// Inserts raw text. If the text contains line breaks that do not match the
+    /// buffer's preferred EOL, the buffer degrades to non-normalized mode and
+    /// slower read paths apply until <see cref="NormalizeEOL"/> is called.
+    /// </summary>
+    public void Insert(int offset, string value)
+    {
+        UpdateEOLNormalized(value);
         _lastVisitedLine.LineNumber = 0;
         _lastVisitedLine.Value = "";
 
