@@ -20,43 +20,6 @@ public interface IReadOnlyTextBuffer : IEquatable<IReadOnlyTextBuffer>
     #region Document properties
 
     /// <summary>
-    /// The Byte Order Mark of the document (either <see cref="string.Empty"/> or U+FEFF)
-    /// </summary>
-    [Obsolete("This will be lifted to TextModel")]
-    string BOM { get; }
-
-    /// <summary>
-    /// The end-of-line sequence of the document (either CRLF, CR or LF)
-    /// <para>If the document has mixed end-of-line sequences, the majority one is returned.</para>
-    /// </summary>
-    [Obsolete("This will be lifted to TextModel, the text buffer will not have a document level EOL property. The plain EOL sequences are stored for all lines.")]
-    string GetEOL();
-
-    /// <summary>
-    /// <see langword="true"/> if the document might contain RTL characters
-    /// </summary>
-    [Obsolete("This will be lifted to TextModel")]
-    bool MightContainRTL { get; }
-
-    /// <summary>
-    /// <see langword="true"/> if the document might contain LINE SEPARATOR (LS) or PARAGRAPH
-    /// </summary>
-    [Obsolete("Unusual line terminators will not be supported. They will be treated as general Unicode characters.")]
-    bool MightContainUnusualLineTerminators { get; }
-
-    /// <summary>
-    /// Reset the state of the buffer to indicate that it doesn't contain unusual line terminators
-    /// </summary>
-    [Obsolete("Unusual line terminators will not be supported. They will be treated as general Unicode characters.")]
-    void ResetMightContainUnusualLineTerminators();
-
-    /// <summary>
-    /// <see langword="true"/> if the document might contain non-ASCII content
-    /// </summary>
-    [Obsolete("This will be lifted to TextModel")]
-    bool MightContainNonBasicASCII { get; }
-
-    /// <summary>
     /// Total number of characters in the document, including end-of-line sequences. High surrogate characters occupy a length of 2.
     /// </summary>
     int Length { get; }
@@ -117,15 +80,6 @@ public interface IReadOnlyTextBuffer : IEquatable<IReadOnlyTextBuffer>
     int GetTextLengthInRange(TextRange range);
 
     /// <summary>
-    /// Get the number of Unicode characters in a <see cref="TextRange"/> with the specified <see cref="EndOfLinePreference"/>.
-    /// </summary>
-    /// <param name="range">TextRange of text</param>
-    /// <param name="eol">End-of-line preference</param>
-    /// <returns>Number of characters in <paramref name="range"/> with the specified <see cref="EndOfLinePreference"/>.</returns>
-    [Obsolete("This is a high-level API, Unicode character count can be computed from string content outside text buffer.")]
-    int GetCharacterCountInRange(TextRange range, EndOfLinePreference eol);
-
-    /// <summary>
     /// Get all lines in the document as a list of <see langword="string"/>.
     /// The end-of-line sequence is not included in the content of each line.
     /// </summary>
@@ -143,7 +97,7 @@ public interface IReadOnlyTextBuffer : IEquatable<IReadOnlyTextBuffer>
     /// Get the end-of-line sequence of a line.
     /// </summary>
     /// <param name="lineNumber">Line number of the line.</param>
-    /// <returns>The end-of-line sequence of the line at <paramref name="lineNumber"/>, either CR, LF or CRLF.</returns>
+    /// <returns>The end-of-line sequence of the line at <paramref name="lineNumber"/>, either CR, LF, CRLF, or empty for the final line.</returns>
     string GetLineEOL(int lineNumber);
 
     /// <summary>
@@ -172,30 +126,14 @@ public interface IReadOnlyTextBuffer : IEquatable<IReadOnlyTextBuffer>
     /// </summary>
     /// <param name="position">Position of the character.</param>
     /// <returns>The <see langword="char"/> at the given <paramref name="position"/>.</returns>
-    char GetCharCode(TextPosition position);
+    char GetChar(TextPosition position);
 
     /// <summary>
     /// Get the <see langword="char"/> at a given <paramref name="offset"/>.
     /// </summary>
     /// <param name="offset">Offset of the character.</param>
     /// <returns>The <see langword="char"/> at the given <paramref name="offset"/>.</returns>
-    char GetCharCode(int offset);
-
-    /// <summary>
-    /// Get the minimum column number in a line.
-    /// </summary>
-    /// <param name="lineNumber">Line number of the line</param>
-    /// <returns>Minimum column number of line <paramref name="lineNumber"/>.</returns>
-    [Obsolete("The minimum column number is always 1.")]
-    int GetLineMinColumn(int lineNumber);
-
-    /// <summary>
-    /// Get the maximum column number in a line.
-    /// </summary>
-    /// <param name="lineNumber">Line number of the line</param>
-    /// <returns>Maximum column number in line <paramref name="lineNumber"/>.</returns>
-    [Obsolete("The maximum column number is equal to the length of the line plus 1.")]
-    int GetLineMaxColumn(int lineNumber);
+    char GetChar(int offset);
 
     #endregion
 

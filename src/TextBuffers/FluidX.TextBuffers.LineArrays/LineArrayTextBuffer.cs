@@ -1,181 +1,141 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace FluidX.TextBuffers.LineArray;
 
+/// <summary>
+/// A simple text buffer used by tests and benchmarks. The document remains a
+/// list of character lists, with each non-final line retaining its original
+/// end-of-line characters.
+/// </summary>
 public class LineArrayTextBuffer : ITextBuffer
 {
     private readonly List<List<char>> _lines = [];
-    private string _eol;
-    private string _bom;
 
-    public LineArrayTextBuffer() : this(string.Empty, "\n", string.Empty) { }
+    public LineArrayTextBuffer() : this(string.Empty) { }
 
-    public LineArrayTextBuffer(string text, string eol = "\n", string bom = "")
+    public LineArrayTextBuffer(string text)
     {
-        _eol = eol;
-        _bom = bom;
-        SetText(text);
+        _lines.AddRange(SplitTextIntoLines(text.AsSpan()));
     }
 
     public LineArrayTextBuffer(LineArrayTextBuffer source)
     {
-        _eol = source._eol;
-        _bom = source._bom;
-        foreach (var line in source._lines)
+        foreach (List<char> line in source._lines)
             _lines.Add([.. line]);
     }
 
-    private void SetText(string text)
-    {
-        _lines.Clear();
-        if (string.IsNullOrEmpty(text))
-        {
-            _lines.Add([]);
-            return;
-        }
+    public int Length => _lines.Sum(line => line.Count);
 
-        // Splits on every line-break form: \r\n, bare \r, and bare \n,
-        int lineStart = 0; // offset in the string
-        for (int i = 0; i < text.Length; i++)
-        {
-            if (text[i] == '\n')
-            {
-                ReadOnlySpan<char> lineText;
-                if (i > 0 && text[i - 1] == '\r')
-                    lineText = text.AsSpan(lineStart, i - lineStart - 1); // \r\n
-                else
-                    lineText = text.AsSpan(lineStart, i - lineStart); // \n
+    public int LineCount => _lines.Count;
 
-                _lines.Add([.. lineText]);
-                lineStart = i + 1;
-            }
-            else if (text[i] == '\r' && (i + 1 >= text.Length || text[i + 1] != '\n'))
-            {
-                // bare \r
-                _lines.Add([.. text.AsSpan(lineStart, i - lineStart)]);
-                lineStart = i + 1;
-            }
-        }
-
-        if (lineStart <= text.Length)
-            _lines.Add([.. text[lineStart..]]);
-    }
-
-    private string _getFullText()
-    {
-        if (_lines.Count == 0)
-            return string.Empty;
-
-        var sb = new StringBuilder();
-        for (int i = 0; i < _lines.Count; i++)
-        {
-            if (i > 0)
-                sb.Append(_eol);
-            sb.Append(CollectionsMarshal.AsSpan(_lines[i]));
-        }
-        return sb.ToString();
-    }
-
-    public void Dispose()
-    {
-    }
+    public event EventHandler? ContentChanged;
 
     public bool Equals(IReadOnlyTextBuffer? other)
     {
-        if (other is not LineArrayTextBuffer lineArrayTextBuffer)
+        if (other is not LineArrayTextBuffer buffer || LineCount != buffer.LineCount)
             return false;
 
-        if (ReferenceEquals(this, other))
+        if (ReferenceEquals(this, buffer))
             return true;
-
-        if (_lines.Count != lineArrayTextBuffer._lines.Count)
-            return false;
 
         for (int i = 0; i < _lines.Count; i++)
         {
-            ReadOnlySpan<char> thisLineSpan = CollectionsMarshal.AsSpan(_lines[i]);
-            ReadOnlySpan<char> otherLineSpan = CollectionsMarshal.AsSpan(lineArrayTextBuffer._lines[i]);
-
-            if (!thisLineSpan.SequenceEqual(otherLineSpan))
+            var currentLineSpan = CollectionsMarshal.AsSpan(_lines[i]);
+            var otherLineSpan = CollectionsMarshal.AsSpan(buffer._lines[i]);
+            if (!currentLineSpan.SequenceEqual(otherLineSpan))
                 return false;
         }
 
         return true;
     }
 
-    #region IReadOnlyTextBuffer Members
-
-    public string BOM => _bom;
-
-    public bool MightContainRTL => false;
-
-    public bool MightContainUnusualLineTerminators => false;
-
-    public bool MightContainNonBasicASCII => false;
-
-    public int Length
+    public int GetOffsetAt(TextPosition position)
     {
-        get
-        {
-            if (_lines.Count == 0) return 0;
-            if (_lines.Count == 1) return _lines[0].Count;
+        int lineIndex = GetLineIndex(position.LineNumber);
+        int relativeOffset = position.Column - 1;
+        if (relativeOffset < 0 || relativeOffset > _lines[lineIndex].Count)
+            throw new ArgumentOutOfRangeException(nameof(position));
 
-            int total = 0;
-            int eolLen = _eol.Length;
-            int lastIndex = _lines.Count - 1;
-            for (int i = 0; i < lastIndex; i++)
-                total += _lines[i].Count + eolLen;
-            total += _lines[lastIndex].Count;
-            return total;
-        }
+        int offset = relativeOffset;
+        for (int i = 0; i < lineIndex; i++)
+            offset += _lines[i].Count;
+        return offset;
     }
 
-    public int LineCount => _lines.Count;
-
-    public event EventHandler? OnDpiChangeContent;
-
-    public ITextSnapshot CreateSnapshot(bool preserveBOM)
+    public TextPosition GetPositionAt(int offset)
     {
-        var copy = new LineArrayTextBuffer(this);
-        return new Snapshot(copy, preserveBOM ? _bom : string.Empty);
-    }
+        if (offset < 0 || offset > Length)
+            throw new ArgumentOutOfRangeException(nameof(offset));
 
-    public int GetCharacterCountInRange(TextRange range, EndOfLinePreference eol)
-    {
-        return GetValueLengthInRange(range, eol);
-    }
-
-    public char GetCharCode(int offset)
-    {
-        int currentOffset = 0;
+        int lineStart = 0;
         for (int i = 0; i < _lines.Count; i++)
         {
-            int lineLen = _lines[i].Count;
-            if (currentOffset + lineLen > offset)
-                return _lines[i][offset - currentOffset];
-
-            currentOffset += lineLen + _eol.Length;
+            int lineEnd = lineStart + _lines[i].Count;
+            if (offset < lineEnd || i == _lines.Count - 1)
+                return new TextPosition(i + 1, offset - lineStart + 1);
+            lineStart = lineEnd;
         }
-        return '\0';
+
+        return new TextPosition(1, 1);
     }
 
-    public char GetLineCharCode(int lineNumber, int index)
+    public TextRange GetRangeAt(int offset, int length)
     {
-        return _lines[lineNumber][index];
+        if (length < 0 || offset < 0 || offset > Length - length)
+            throw new ArgumentOutOfRangeException(nameof(length));
+        return new TextRange(GetPositionAt(offset), GetPositionAt(offset + length));
+    }
+
+    public string GetTextInRange(TextRange range)
+    {
+        int start = GetOffsetAt(range.StartPosition);
+        int length = GetOffsetAt(range.EndPosition) - start;
+        if (length < 0)
+            throw new ArgumentOutOfRangeException(nameof(range));
+        return GetTextAt(start, length);
+    }
+
+    public int GetTextLengthInRange(TextRange range)
+        => GetOffsetAt(range.EndPosition) - GetOffsetAt(range.StartPosition);
+
+    public IReadOnlyList<string> GetLinesContent()
+    {
+        string[] result = new string[_lines.Count];
+        for (int i = 0; i < result.Length; i++)
+            result[i] = GetLineContent(i + 1);
+        return result;
     }
 
     public string GetLineContent(int lineNumber)
     {
-        return new string(CollectionsMarshal.AsSpan(_lines[lineNumber - 1]));
+        List<char> line = _lines[GetLineIndex(lineNumber)];
+        int contentLength = line.Count - GetEOLLength(line);
+        return new string(CollectionsMarshal.AsSpan(line)[..contentLength]);
+    }
+
+    public string GetLineEOL(int lineNumber)
+    {
+        List<char> line = _lines[GetLineIndex(lineNumber)];
+        int eolLength = GetEOLLength(line);
+        return eolLength == 0
+            ? string.Empty
+            : new string(CollectionsMarshal.AsSpan(line)[^eolLength..]);
+    }
+
+    public int GetLineLength(int lineNumber)
+    {
+        List<char> line = _lines[GetLineIndex(lineNumber)];
+        return line.Count - GetEOLLength(line);
     }
 
     public int GetLineFirstNonWhitespaceColumn(int lineNumber)
     {
-        var line = CollectionsMarshal.AsSpan(_lines[lineNumber - 1]);
-        for (int i = 0; i < line.Length; i++)
+        List<char> line = _lines[GetLineIndex(lineNumber)];
+        ReadOnlySpan<char> content = CollectionsMarshal.AsSpan(line)[..(line.Count - GetEOLLength(line))];
+        for (int i = 0; i < content.Length; i++)
         {
-            if (!char.IsWhiteSpace(line[i]))
+            if (!char.IsWhiteSpace(content[i]))
                 return i + 1;
         }
         return 0;
@@ -183,304 +143,286 @@ public class LineArrayTextBuffer : ITextBuffer
 
     public int GetLineLastNonWhitespaceColumn(int lineNumber)
     {
-        var line = CollectionsMarshal.AsSpan(_lines[lineNumber - 1]);
-        for (int i = line.Length - 1; i >= 0; i--)
+        List<char> line = _lines[GetLineIndex(lineNumber)];
+        ReadOnlySpan<char> content = CollectionsMarshal.AsSpan(line)[..(line.Count - GetEOLLength(line))];
+        for (int i = content.Length - 1; i >= 0; i--)
         {
-            if (!char.IsWhiteSpace(line[i]))
+            if (!char.IsWhiteSpace(content[i]))
                 return i + 2;
         }
         return 0;
     }
 
-    public int GetLineLength(int lineNumber)
+    public char GetChar(TextPosition position)
     {
-        return _lines[lineNumber - 1].Count;
+        int lineIndex = GetLineIndex(position.LineNumber);
+        int relativeOffset = position.Column - 1;
+        if (relativeOffset < 0 || relativeOffset >= _lines[lineIndex].Count)
+            throw new ArgumentOutOfRangeException(nameof(position));
+        return _lines[lineIndex][relativeOffset];
     }
 
-    public int GetLineMaxColumn(int lineNumber)
+    public char GetChar(int offset)
     {
-        return GetLineLength(lineNumber) + 1;
-    }
+        if (offset < 0 || offset >= Length)
+            throw new ArgumentOutOfRangeException(nameof(offset));
 
-    public int GetLineMinColumn(int lineNumber)
-    {
-        return 1;
-    }
-
-    public IReadOnlyList<string> GetLinesContent()
-    {
-        List<string> lines = [];
-        for (int i = 0; i < _lines.Count; i++)
+        int lineStart = 0;
+        foreach (List<char> line in _lines)
         {
-            string line = GetLineContent(i + 1);
-            lines.Add(line);
+            if (offset < lineStart + line.Count)
+                return line[offset - lineStart];
+            lineStart += line.Count;
         }
-        return lines;
+        throw new ArgumentOutOfRangeException(nameof(offset));
     }
-
-    public int GetOffsetAt(int lineNumber, int column)
-    {
-        int offset = 0;
-        for (int i = 0; i < lineNumber - 1; i++)
-        {
-            offset += _lines[i].Count;
-            if (i < _lines.Count - 1)
-                offset += _eol.Length;
-        }
-        offset += column - 1;
-        return offset;
-    }
-
-    public TextPosition GetPositionAt(int offset)
-    {
-        int currentOffset = 0;
-        for (int i = 0; i < _lines.Count; i++)
-        {
-            int lineLen = _lines[i].Count;
-            if (currentOffset + lineLen >= offset)
-            {
-                int column = offset - currentOffset + 1;
-                return new TextPosition(i + 1, column);
-            }
-            currentOffset += lineLen + _eol.Length;
-        }
-        return new TextPosition(_lines.Count, _lines[^1].Count + 1);
-    }
-
-    public TextRange GetRangeAt(int offset, int length)
-    {
-        var start = GetPositionAt(offset);
-        var end = GetPositionAt(offset + length);
-        return new TextRange(start.LineNumber, start.Column, end.LineNumber, end.Column);
-    }
-
-    public string GetValueInRange(TextRange range, EndOfLinePreference eol)
-    {
-        if (range.IsEmpty)
-            return string.Empty;
-
-        string lineEnding = eol switch
-        {
-            EndOfLinePreference.LF => "\n",
-            EndOfLinePreference.CRLF => "\r\n",
-            _ => _eol
-        };
-
-        var sb = new StringBuilder();
-        for (int line = range.StartLineNumber; line <= range.EndLineNumber; line++)
-        {
-            int lineIndex = line - 1;
-            if (line > range.StartLineNumber)
-                sb.Append(lineEnding);
-
-            int startCol = (line == range.StartLineNumber) ? range.StartColumn - 1 : 0;
-            int endCol = (line == range.EndLineNumber) ? range.EndColumn - 1 : _lines[lineIndex].Count;
-            int len = endCol - startCol;
-            if (len > 0)
-                sb.Append(CollectionsMarshal.AsSpan(_lines[lineIndex]).Slice(startCol, len));
-        }
-        return sb.ToString();
-    }
-
-    public int GetValueLengthInRange(TextRange range, EndOfLinePreference eol)
-    {
-        if (range.IsEmpty)
-            return 0;
-
-        if (range.StartLineNumber == range.EndLineNumber)
-            return range.EndColumn - range.StartColumn;
-
-        int length = 0;
-        string desiredEOL = eol switch
-        {
-            EndOfLinePreference.LF => "\n",
-            EndOfLinePreference.CRLF => "\r\n",
-            _ => _eol
-        };
-
-        for (int line = range.StartLineNumber; line <= range.EndLineNumber; line++)
-        {
-            int lineIndex = line - 1;
-            if (line > range.StartLineNumber)
-                length += desiredEOL.Length;
-
-            int startCol = (line == range.StartLineNumber) ? range.StartColumn - 1 : 0;
-            int endCol = (line == range.EndLineNumber) ? range.EndColumn - 1 : _lines[lineIndex].Count;
-            length += endCol - startCol;
-        }
-        return length;
-    }
-
-    public void ResetMightContainUnusualLineTerminators()
-    {
-    }
-
-    #endregion
-
-    #region ITextBuffer Members
 
     public void NormalizeEOL(string eol)
     {
-        _eol = eol;
+        if (eol is not ("\n" or "\r\n"))
+            throw new ArgumentException("Invalid EOL value", nameof(eol));
+
+        for (int i = 0; i < _lines.Count - 1; i++)
+        {
+            List<char> line = _lines[i];
+            int eolLength = GetEOLLength(line);
+            line.RemoveRange(line.Count - eolLength, eolLength);
+            line.AddRange(eol);
+        }
     }
 
-    public string GetEOL()
+    public ITextSnapshot CreateSnapshot(bool preserveBOM)
+        => new Snapshot(GetTextAt(0, Length));
+
+    public IReadOnlyList<FindMatch> FindMatchesLineByLine(
+        TextRange searchRange,
+        SearchData searchData,
+        bool captureMatches,
+        int limitResultCount)
     {
-        return _eol;
+        List<FindMatch> result = [];
+        var searcher = new Searcher(searchData.WordSeparators, searchData.Regex);
+
+        for (int lineNumber = searchRange.StartLineNumber;
+            lineNumber <= searchRange.EndLineNumber && result.Count < limitResultCount;
+            lineNumber++)
+        {
+            string line = GetLineContent(lineNumber);
+            int start = lineNumber == searchRange.StartLineNumber ? searchRange.StartColumn - 1 : 0;
+            int end = lineNumber == searchRange.EndLineNumber ? searchRange.EndColumn - 1 : line.Length;
+            start = Math.Min(start, line.Length);
+            end = Math.Min(end, line.Length);
+            string searchedText = line[start..end];
+
+            searcher.Reset(0);
+            System.Text.RegularExpressions.Match? match;
+            while ((match = searcher.Next(searchedText)) is not null && result.Count < limitResultCount)
+            {
+                result.Add(SearchUtils.CreateFindMatch(
+                    new TextRange(
+                        lineNumber,
+                        start + match.Index + 1,
+                        lineNumber,
+                        start + match.Index + match.Length + 1),
+                    [match],
+                    captureMatches));
+            }
+        }
+
+        return result;
     }
 
     public ApplyEditsResult ApplyEdits(TextReplacement[] replacements, bool computeUndoEdits)
     {
-        // no-op
-        if (replacements.Length == 0)
-            return new ApplyEditsResult
+        EditInfo[] edits = replacements
+            .Select((replacement, index) =>
             {
-                ReverseEdits = null,
-                Changes = []
-            };
+                int offset = GetOffsetAt(replacement.Range.StartPosition);
+                int length = GetTextLengthInRange(replacement.Range);
+                return new EditInfo(index, replacement, offset, length, GetTextAt(offset, length));
+            })
+            .OrderBy(edit => edit.Offset + edit.Length)
+            .ThenBy(edit => edit.SortIndex)
+            .ToArray();
 
-        var contentChanges = new List<InternalModelContentChange>(replacements.Length);
-
-        for (int i = 0; i < replacements.Length; i++)
-            contentChanges.Add(ApplySingleEdit(replacements[i], i));
-
-        OnDidChangeContent?.Invoke(this, EventArgs.Empty);
-
-        return new ApplyEditsResult
+        bool hasTouchingRanges = false;
+        for (int i = 0; i < edits.Length - 1; i++)
         {
-            ReverseEdits = null,
-            Changes = contentChanges
-        };
+            int end = edits[i].Offset + edits[i].Length;
+            if (end > edits[i + 1].Offset)
+                throw new ArgumentException("Overlapping ranges are not allowed.", nameof(replacements));
+            if (end == edits[i + 1].Offset)
+                hasTouchingRanges = true;
+        }
+
+        LineArrayTextBuffer? resultingBuffer = computeUndoEdits ? CreateEditedCopy(edits) : null;
+        ReverseSingleEditOperation[]? reverseEdits = null;
+        if (computeUndoEdits)
+        {
+            reverseEdits = new ReverseSingleEditOperation[edits.Length];
+            int delta = 0;
+            for (int i = 0; i < edits.Length; i++)
+            {
+                EditInfo edit = edits[i];
+                int newOffset = edit.Offset + delta;
+                reverseEdits[i] = new ReverseSingleEditOperation
+                {
+                    SortIndex = edit.SortIndex,
+                    Range = resultingBuffer!.GetRangeAt(newOffset, edit.Replacement.Text.Length),
+                    Text = edit.OldText,
+                    TextChange = new TextChange(edit.Offset, edit.OldText, newOffset, edit.Replacement.Text)
+                };
+                delta += edit.Replacement.Text.Length - edit.Length;
+            }
+            if (!hasTouchingRanges)
+                Array.Sort(reverseEdits, (a, b) => a.SortIndex - b.SortIndex);
+        }
+
+        List<InternalModelContentChange> changes = [];
+        for (int i = edits.Length - 1; i >= 0; i--)
+        {
+            EditInfo edit = edits[i];
+            if (edit.Length == 0 && edit.Replacement.Text.Length == 0)
+                continue;
+
+            ReplaceText(edit.Offset, edit.Length, edit.Replacement.Text);
+            changes.Add(new InternalModelContentChange
+            {
+                SortIndex = edit.SortIndex,
+                Range = edit.Replacement.Range,
+                RangeOffset = edit.Offset,
+                RangeLength = edit.Length,
+                Text = edit.Replacement.Text
+            });
+        }
+
+        if (changes.Count > 0)
+            ContentChanged?.Invoke(this, EventArgs.Empty);
+
+        return new ApplyEditsResult { ReverseEdits = reverseEdits, Changes = changes };
     }
 
-    private InternalModelContentChange ApplySingleEdit(TextReplacement replacement, int sortIndex)
+    private LineArrayTextBuffer CreateEditedCopy(EditInfo[] edits)
     {
-        var range = replacement.Range;
-        string insertText = replacement.Text ?? string.Empty;
-
-        int startLineIndex = range.StartLineNumber - 1;
-        int endLineIndex = range.EndLineNumber - 1;
-        int startCol0 = range.StartColumn - 1;
-        int endCol0 = range.EndColumn - 1;
-
-        // Compute range offset/length before modification
-        int rangeOffset = 0;
-        for (int i = 0; i < startLineIndex; i++)
-            rangeOffset += _lines[i].Count + _eol.Length;
-        rangeOffset += startCol0;
-
-        int rangeLength;
-        if (startLineIndex == endLineIndex)
-        {
-            rangeLength = endCol0 - startCol0;
-        }
-        else
-        {
-            rangeLength = _lines[startLineIndex].Count - startCol0 + _eol.Length;
-            for (int i = startLineIndex + 1; i < endLineIndex; i++)
-                rangeLength += _lines[i].Count + _eol.Length;
-            rangeLength += endCol0;
-        }
-
-        // Get prefix of start line and suffix of end line
-        var startLine = _lines[startLineIndex];
-        var endLine = _lines[endLineIndex];
-        ReadOnlySpan<char> startSpan = CollectionsMarshal.AsSpan(startLine);
-        ReadOnlySpan<char> endSpan = CollectionsMarshal.AsSpan(endLine);
-
-        // Split insert text into lines
-        var insertLines = SplitTextIntoLines(insertText);
-
-        // Build replacement lines and splice into _lines
-        int deleteCount = endLineIndex - startLineIndex + 1;
-
-        if (insertLines.Count == 1)
-        {
-            // Single line insert (or empty): prefix + insert + suffix on one line
-            _lines[startLineIndex] = [.. startSpan[..startCol0], .. CollectionsMarshal.AsSpan(insertLines[0]), .. endSpan[endCol0..]];
-            if (deleteCount > 1)
-                _lines.RemoveRange(startLineIndex + 1, deleteCount - 1);
-        }
-        else
-        {
-            // Multi-line insert
-            var replacementLines = new List<List<char>>(insertLines.Count);
-
-            // First line: prefix + first insert line
-            replacementLines.Add([.. startSpan[..startCol0], .. CollectionsMarshal.AsSpan(insertLines[0])]);
-
-            // Middle lines (moved directly, no copy needed)
-            for (int i = 1; i < insertLines.Count - 1; i++)
-                replacementLines.Add(insertLines[i]);
-
-            // Last line: last insert line + suffix
-            replacementLines.Add([.. CollectionsMarshal.AsSpan(insertLines[^1]), .. endSpan[endCol0..]]);
-
-            // Replace the affected lines
-            _lines.RemoveRange(startLineIndex, deleteCount);
-            _lines.InsertRange(startLineIndex, replacementLines);
-        }
-
-        return new InternalModelContentChange
-        {
-            SortIndex = sortIndex,
-            Range = range,
-            RangeOffset = rangeOffset,
-            RangeLength = rangeLength,
-            Text = insertText
-        };
+        var result = new LineArrayTextBuffer(this);
+        for (int i = edits.Length - 1; i >= 0; i--)
+            result.ReplaceText(edits[i].Offset, edits[i].Length, edits[i].Replacement.Text);
+        return result;
     }
 
-    private static List<List<char>> SplitTextIntoLines(string text)
+    private void ReplaceText(int offset, int length, string text)
     {
-        var lines = new List<List<char>>();
+        BufferLocation start = GetLocation(offset);
+        BufferLocation end = GetLocation(offset + length);
+        List<char> startLine = _lines[start.LineIndex];
+        List<char> endLine = _lines[end.LineIndex];
+
+        var replacementText = new List<char>(start.IndexInLine + text.Length + endLine.Count - end.IndexInLine);
+        replacementText.AddRange(CollectionsMarshal.AsSpan(startLine)[..start.IndexInLine]);
+        replacementText.AddRange(text);
+        replacementText.AddRange(CollectionsMarshal.AsSpan(endLine)[end.IndexInLine..]);
+
+        List<List<char>> replacementLines = SplitTextIntoLines(CollectionsMarshal.AsSpan(replacementText));
+        _lines.RemoveRange(start.LineIndex, end.LineIndex - start.LineIndex + 1);
+        _lines.InsertRange(start.LineIndex, replacementLines);
+    }
+
+    private string GetTextAt(int offset, int length)
+    {
+        if (length == 0)
+            return string.Empty;
+        if (offset < 0 || length < 0 || offset > Length - length)
+            throw new ArgumentOutOfRangeException(nameof(offset));
+
+        BufferLocation start = GetLocation(offset);
+        int remaining = length;
+        var result = new StringBuilder(length);
+        for (int i = start.LineIndex; i < _lines.Count && remaining > 0; i++)
+        {
+            ReadOnlySpan<char> line = CollectionsMarshal.AsSpan(_lines[i]);
+            int lineOffset = i == start.LineIndex ? start.IndexInLine : 0;
+            int count = Math.Min(line.Length - lineOffset, remaining);
+            result.Append(line.Slice(lineOffset, count));
+            remaining -= count;
+        }
+        return result.ToString();
+    }
+
+    private BufferLocation GetLocation(int offset)
+    {
+        if (offset < 0 || offset > Length)
+            throw new ArgumentOutOfRangeException(nameof(offset));
+
+        int lineStart = 0;
+        for (int i = 0; i < _lines.Count; i++)
+        {
+            int lineEnd = lineStart + _lines[i].Count;
+            if (offset < lineEnd || i == _lines.Count - 1)
+                return new BufferLocation(i, offset - lineStart);
+            lineStart = lineEnd;
+        }
+        return new BufferLocation(0, 0);
+    }
+
+    private int GetLineIndex(int lineNumber)
+    {
+        if (lineNumber < 1 || lineNumber > _lines.Count)
+            throw new ArgumentOutOfRangeException(nameof(lineNumber));
+        return lineNumber - 1;
+    }
+
+    private static List<List<char>> SplitTextIntoLines(ReadOnlySpan<char> text)
+    {
+        List<List<char>> lines = [];
         int lineStart = 0;
         for (int i = 0; i < text.Length; i++)
         {
-            if (text[i] == '\n')
+            int eolLength = text[i] switch
             {
-                int lineEnd = (i > 0 && text[i - 1] == '\r') ? i - 1 : i; // \r\n or \n
-                lines.Add([.. text.AsSpan(lineStart, lineEnd - lineStart)]);
-                lineStart = i + 1;
-            }
-            else if (text[i] == '\r' && (i + 1 >= text.Length || text[i + 1] != '\n'))
-            {
-                // bare \r
-                lines.Add([.. text.AsSpan(lineStart, i - lineStart)]);
-                lineStart = i + 1;
-            }
+                '\r' when i + 1 < text.Length && text[i + 1] == '\n' => 2,
+                '\r' or '\n' => 1,
+                _ => 0
+            };
+            if (eolLength == 0)
+                continue;
+
+            int lineEnd = i + eolLength;
+            lines.Add([.. text[lineStart..lineEnd]]);
+            i = lineEnd - 1;
+            lineStart = lineEnd;
         }
-        if (lineStart <= text.Length)
-            lines.Add([.. text.AsSpan(lineStart)]);
+        lines.Add([.. text[lineStart..]]);
         return lines;
     }
 
-    public IReadOnlyList<FindMatch> FindMatchesLineByLine(TextRange searchRange, SearchData searchData, bool captureMatches, int limitResultCount)
+    private static int GetEOLLength(List<char> line)
     {
-        throw new NotImplementedException();
+        if (line.Count == 0)
+            return 0;
+        if (line[^1] == '\n')
+            return line.Count > 1 && line[^2] == '\r' ? 2 : 1;
+        return line[^1] == '\r' ? 1 : 0;
     }
 
-    public event EventHandler? OnDidChangeContent;
+    private readonly record struct BufferLocation(int LineIndex, int IndexInLine);
 
-    #endregion
+    private readonly record struct EditInfo(
+        int SortIndex,
+        TextReplacement Replacement,
+        int Offset,
+        int Length,
+        string OldText);
 
-    private sealed class Snapshot : ITextSnapshot
+    private sealed class Snapshot(string text) : ITextSnapshot
     {
-        private readonly LineArrayTextBuffer _copy;
-        private readonly string _bom;
         private bool _read;
-
-        public Snapshot(LineArrayTextBuffer copy, string bom)
-        {
-            _copy = copy;
-            _bom = bom;
-        }
 
         public string? Read()
         {
-            if (_read) return null;
+            if (_read)
+                return null;
             _read = true;
-            return _bom + _copy._getFullText();
+            return text;
         }
     }
 }

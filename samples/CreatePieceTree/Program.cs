@@ -8,7 +8,7 @@ var buffer = PieceTreeTextBuffer.Create("Hello\nworld!");
 Console.WriteLine(buffer.LineCount); // 2
 Console.WriteLine(buffer.GetLineContent(1)); // Hello
 Console.WriteLine(buffer.GetLineContent(2)); // world!
-Console.WriteLine(buffer.GetValueInRange(new TextRange(1, 2, 2, 2), EndOfLinePreference.LF)); // ello\nw
+Console.WriteLine(buffer.GetTextInRange(new TextRange(1, 2, 2, 2))); // ello\nw
 
 // Writing to the buffer
 
@@ -87,7 +87,7 @@ Console.WriteLine("=== Test 6: Position/Offset roundtrip ===");
 for (int offset = 0; offset < buffer2.Length; offset++)
 {
     var pos = buffer2.GetPositionAt(offset);
-    int roundtrip = buffer2.GetOffsetAt(pos.LineNumber, pos.Column);
+    int roundtrip = buffer2.GetOffsetAt(pos);
     if (roundtrip != offset)
     {
         Console.WriteLine($"  MISMATCH at offset {offset}: got {roundtrip}");
@@ -95,9 +95,9 @@ for (int offset = 0; offset < buffer2.Length; offset++)
 }
 Console.WriteLine("Position/Offset roundtrip complete.");
 
-// Test 7: GetValueInRange consistency
-Console.WriteLine("=== Test 7: GetValueInRange consistency ===");
-var fullText = buffer2.GetValueInRange(new TextRange(1, 1, 4, buffer2.GetLineLength(4) + 1), EndOfLinePreference.LF);
+// Test 7: GetTextInRange consistency
+Console.WriteLine("=== Test 7: GetTextInRange consistency ===");
+var fullText = buffer2.GetTextInRange(new TextRange(1, 1, 4, buffer2.GetLineLength(4) + 1));
 Console.WriteLine($"Full text: [{fullText}]");
 
 // Test 8: Stress test - many inserts

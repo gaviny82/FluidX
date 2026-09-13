@@ -4,7 +4,7 @@ namespace FluidX.TextModels;
 
 public class SingleModelEditStackElement : IUndoRedoElement
 {
-    public TextModel Model { get; }
+    public PlainTextModel Model { get; }
 
     public long BeforeVersionId { get; }
     public long AfterVersionId { get; private set; }
@@ -17,7 +17,7 @@ public class SingleModelEditStackElement : IUndoRedoElement
 
     public TextChange[] Changes { get; private set; }
 
-    public SingleModelEditStackElement(TextModel model, Selection[]? beforeCursorState)
+    public SingleModelEditStackElement(PlainTextModel model, Selection[]? beforeCursorState)
     {
         Model = model;
         long versionId = model.AlternativeVersionId;

@@ -23,24 +23,11 @@ public class PieceTreeTextBuffer : ITextBuffer
     private PieceTreeSearchCache _searchCache = null!;
     private (int LineNumber, string Value) _lastVisitedLine;
 
-    private readonly string _BOM;
-    private bool _mightContainRTL;
-    private bool _mightContainUnusualLineTerminators;
-    private bool _mightContainNonBasicASCII;
-
     private PieceTreeTextBuffer(
         IList<InlineStringBuffer> chunks,
-        string bom,
         string eol,
-        bool containsRTL,
-        bool containsUnusualLineTerminators,
-        bool isBasicASCII,
         LineStarts? initialLineStarts = null)
     {
-        _BOM = bom;
-        _mightContainNonBasicASCII = !isBasicASCII;
-        _mightContainRTL = containsRTL;
-        _mightContainUnusualLineTerminators = containsUnusualLineTerminators;
         Initialize(chunks, eol, initialLineStarts);
     }
 
@@ -128,43 +115,30 @@ public class PieceTreeTextBuffer : ITextBuffer
     #region Creation
 
     // Steps for initializing a PieceTreeTextBuffer:
-    // 1. Check BOM
-    // 2. Compute line starts
-    // 3. Count CR/LF/CRLF EOLs
-    // 4. Check IsBasicASCII
-    // 5. Check ContainsRTL
-    // 6. Check ContainsUnusualLineTerminators
-    // 7. Determine EOL to use (based on counts and defaultEOL)
-    // 8. Store content as-is and derive the private normalization flag
-    // 9. Create InlineStringBuffer with line starts
+    // 1. Compute line starts and count CR/LF/CRLF EOLs
+    // 2. Determine the internal fast-path EOL
+    // 3. Store content as-is and derive the private EOL normalization status
 
     /// <summary>
     /// Creates a buffer from the given text.
     /// </summary>
-    /// <param name="text">Content of the document.</param>
+    /// <param name="text">Raw content. The caller must remove any BOM before calling this method.</param>
     /// <param name="defaultEOL">Fallback end-of-line used when the text contains no line breaks.</param>
     public static PieceTreeTextBuffer Create(
         ReadOnlySpan<char> text,
         DefaultEndOfLine defaultEOL = DefaultEndOfLine.LF)
     {
-        // Step 1: Check BOM
-        string bom = "";
-        if (text.Length > 0 && text[0] == (char)CharCode.UTF8_BOM)
-        {
-            bom = ((char)CharCode.UTF8_BOM).ToString();
-            text = text[1..];
-        }
         char[] content = text.ToArray();
 
         // Delegates the rest of the steps to CreateCore
-        return CreateCore(content, bom, defaultEOL);
+        return CreateCore(content, defaultEOL);
     }
 
     /// <summary>
     /// Asynchronously creates a buffer from a stream.
     /// The stream is left open after reading.
     /// </summary>
-    /// <param name="stream">Stream to read the document from.</param>
+    /// <param name="stream">Stream containing raw text. The caller must remove any BOM before calling this method.</param>
     /// <param name="defaultEOL">Fallback end-of-line used when the text contains no line breaks.</param>
     /// <param name="cancellationToken">Cancellation token for the read.</param>
     public static async Task<PieceTreeTextBuffer> CreateAsync(
@@ -178,19 +152,6 @@ public class PieceTreeTextBuffer : ITextBuffer
             detectEncodingFromByteOrderMarks: false,
             bufferSize: 4096,
             leaveOpen: true);
-
-        // Get BOM
-        string bom = "";
-        int peekResult = reader.Peek();
-        if (peekResult > -1)
-        {
-            char firstChar = (char)peekResult;
-            if (firstChar == (char)CharCode.UTF8_BOM)
-            {
-                bom = ((char)CharCode.UTF8_BOM).ToString();
-                reader.Read(); // Consume the BOM
-            }
-        }
 
         // Read the rest of the stream
 
@@ -210,26 +171,16 @@ public class PieceTreeTextBuffer : ITextBuffer
         sb.CopyTo(0, content, 0, sb.Length);
 
         // Delegates the rest of the steps to CreateCore
-        return CreateCore(content, bom, defaultEOL);
+        return CreateCore(content, defaultEOL);
     }
 
     /// <summary>
     private static PieceTreeTextBuffer CreateCore(
         char[] content,
-        string bom,
         DefaultEndOfLine defaultEOL)
     {
         // Step 3: Count CR/LF/CRLF EOLs
         var lineStarts = LineStarts.Create(content);
-
-        // Step 4-6: Check IsBasicASCII, ContainsRTL, ContainsUnusualLineTerminators
-        bool containsRTL = false;
-        bool containsUnusualLineTerminators = false;
-        if (!lineStarts.IsBasicAscii)
-        {
-            containsRTL = content.ContainsRTL();
-            containsUnusualLineTerminators = content.ContainsUnusualLineTerminators();
-        }
 
         // Step 7: Determine EOL to use
         string eol = DetermineEOL(defaultEOL, lineStarts.CR, lineStarts.LF, lineStarts.CRLF);
@@ -240,11 +191,7 @@ public class PieceTreeTextBuffer : ITextBuffer
 
         return new PieceTreeTextBuffer(
             [buffer],
-            bom,
             eol,
-            containsRTL,
-            containsUnusualLineTerminators,
-            lineStarts.IsBasicAscii,
             lineStarts);
     }
 
@@ -315,23 +262,8 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     public event EventHandler? OnDpiChangeContent;
 
-    public bool MightContainRTL { get => _mightContainRTL; }
-
-    public bool MightContainUnusualLineTerminators { get => _mightContainUnusualLineTerminators; }
-
-    public void ResetMightContainUnusualLineTerminators()
-    {
-        _mightContainUnusualLineTerminators = false;
-    }
-
-    public bool MightContainNonBasicASCII { get => _mightContainNonBasicASCII; }
-
-    public string BOM { get => _BOM; }
-
-    public string GetEOL() => EOL;
-
     public ITextSnapshot CreateSnapshot(bool preserveBOM)
-        => new PieceTreeSnapshot(this, preserveBOM ? _BOM : "");
+        => new PieceTreeSnapshot(this);
 
     public bool Equals(IReadOnlyTextBuffer? other)
     {
@@ -349,16 +281,16 @@ public class PieceTreeTextBuffer : ITextBuffer
         return new TextRange(startPosition.LineNumber, startPosition.Column, endPosition.LineNumber, endPosition.Column);
     }
 
-    public string GetValueInRange(TextRange range, EndOfLinePreference eol = EndOfLinePreference.TextDefined)
+    public string GetTextInRange(TextRange range)
     {
         if (range.IsEmpty)
             return "";
-
-        string lineEnding = GetEndOfLine(eol);
-        return GetValueInRange(range, lineEnding);
+        return GetValueInRange2(
+            NodeAt2(range.StartLineNumber, range.StartColumn),
+            NodeAt2(range.EndLineNumber, range.EndColumn));
     }
 
-    public int GetValueLengthInRange(TextRange range, EndOfLinePreference eol = EndOfLinePreference.TextDefined)
+    public int GetTextLengthInRange(TextRange range)
     {
         if (range.IsEmpty)
             return 0;
@@ -371,74 +303,8 @@ public class PieceTreeTextBuffer : ITextBuffer
         int startOffset = GetOffsetAt(range.StartLineNumber, range.StartColumn);
         int endOffset = GetOffsetAt(range.EndLineNumber, range.EndColumn);
 
-        // offsets use the text EOL, so we need to compensate for length differences
-        // when the requested EOL differs from what is actually stored at each boundary
-        string desiredEOL = GetEndOfLine(eol);
-        int eolOffsetCompensation = 0;
-        if (!_EOLNormalized)
-        {
-            for (int line = range.StartLineNumber; line < range.EndLineNumber; line++)
-                eolOffsetCompensation += desiredEOL.Length - GetEOLLengthAtLineBreak(line);
-        }
-        else if (desiredEOL.Length != _EOL.Length)
-        {
-            int eolCount = range.EndLineNumber - range.StartLineNumber;
-            eolOffsetCompensation = (desiredEOL.Length - _EOL.Length) * eolCount;
-        }
-
-        return endOffset - startOffset + eolOffsetCompensation;
+        return endOffset - startOffset;
     }
-
-    public int GetCharacterCountInRange(TextRange range, EndOfLinePreference eol)
-    {
-        if (_mightContainNonBasicASCII)
-        {
-            // we must count by iterating
-            int result = 0;
-
-            int fromLineNumber = range.StartLineNumber;
-            int toLineNumber = range.EndLineNumber;
-            for (int lineNumber = fromLineNumber; lineNumber <= toLineNumber; lineNumber++)
-            {
-                string lineContent = GetLineContent(lineNumber);
-                int fromOffset = (lineNumber == fromLineNumber ? range.StartColumn - 1 : 0);
-                int toOffset = (lineNumber == toLineNumber ? range.EndColumn - 1 : lineContent.Length);
-
-                for (int offset = fromOffset; offset < toOffset; offset++)
-                {
-                    if (char.IsHighSurrogate(lineContent[offset]))
-                    {
-                        result++;
-                        offset++;
-                    }
-                    else
-                    {
-                        result++;
-                    }
-                }
-            }
-
-            // TextDefined reads must account for the actual EOL at each boundary in
-            // mixed-EOL buffers; explicit LF/CRLF use the uniform desired length.
-            if (eol == EndOfLinePreference.TextDefined && !_EOLNormalized)
-            {
-                for (int line = fromLineNumber; line < toLineNumber; line++)
-                    result += GetEOLLengthAtLineBreak(line);
-            }
-            else
-            {
-                result += GetEndOfLine(eol).Length * (toLineNumber - fromLineNumber);
-            }
-
-            return result;
-        }
-
-        return GetValueLengthInRange(range, eol);
-    }
-
-    public int GetLineMinColumn(int lineNumber) => 1;
-
-    public int GetLineMaxColumn(int lineNumber) => GetLineLength(lineNumber) + 1;
 
     public int GetLineFirstNonWhitespaceColumn(int lineNumber)
     {
@@ -456,14 +322,6 @@ public class PieceTreeTextBuffer : ITextBuffer
         return result + 2;
     }
 
-    private string GetEndOfLine(EndOfLinePreference eol) => eol switch
-    {
-        EndOfLinePreference.LF => "\n",
-        EndOfLinePreference.CRLF => "\r\n",
-        EndOfLinePreference.TextDefined => GetEOL(),
-        _ => throw new Exception("Unknown EOL preference"),
-    };
-
     #endregion
 
     #region Editing (ITextBuffer Members)
@@ -476,9 +334,6 @@ public class PieceTreeTextBuffer : ITextBuffer
     // allows reverse edit computation to be lifted to TextModel.
     public ApplyEditsResult ApplyEdits(TextReplacement[] replacements, bool computeUndoEdits)
     {
-        bool mightContainRTL = _mightContainRTL;
-        bool mightContainUnusualLineTerminators = _mightContainUnusualLineTerminators;
-        bool mightContainNonBasicASCII = _mightContainNonBasicASCII;
         bool eolNormalized = _EOLNormalized;
 
         var operations = new ValidatedEditOperation[replacements.Length];
@@ -486,26 +341,6 @@ public class PieceTreeTextBuffer : ITextBuffer
         {
             TextReplacement replacement = replacements[i];
             TextRange validatedRange = replacement.Range;
-            if (!string.IsNullOrEmpty(replacement.Text))
-            {
-                bool textMightContainNonBasicASCII = true;
-                if (!mightContainNonBasicASCII)
-                {
-                    textMightContainNonBasicASCII = !replacement.Text.IsBasicASCII();
-                    mightContainNonBasicASCII = textMightContainNonBasicASCII;
-                }
-                if (!mightContainRTL && textMightContainNonBasicASCII)
-                {
-                    // check if the new inserted text contains RTL
-                    mightContainRTL = replacement.Text.ContainsRTL();
-                }
-                if (!mightContainUnusualLineTerminators && textMightContainNonBasicASCII)
-                {
-                    // check if the new inserted text contains unusual line terminators
-                    mightContainUnusualLineTerminators = replacement.Text.ContainsUnusualLineTerminators();
-                }
-            }
-
             string validText = "";
             int eolCount = 0;
             int firstLineLength = 0;
@@ -532,12 +367,28 @@ public class PieceTreeTextBuffer : ITextBuffer
                 SortIndex = i,
                 Range = validatedRange,
                 RangeOffset = GetOffsetAt(validatedRange.StartLineNumber, validatedRange.StartColumn),
-                RangeLength = GetValueLengthInRange(validatedRange),
+                RangeLength = GetTextLengthInRange(validatedRange),
                 Text = validText,
                 EOLCount = eolCount,
                 FirstLineLength = firstLineLength,
                 LastLineLength = lastLineLength
             };
+        }
+
+        // A whole-buffer replacement is also the model's mechanism for changing
+        // EOL policy. Re-establish the fast normalized path from the new raw text.
+        if (operations.Length == 1 && operations[0].RangeOffset == 0 && operations[0].RangeLength == Length)
+        {
+            var (_, _, _, replacementEOL) = EOLCounter.CountEOL(operations[0].Text);
+            if (replacementEOL is StringEndOfLine.LF or StringEndOfLine.CRLF)
+            {
+                _EOL = replacementEOL == StringEndOfLine.CRLF ? "\r\n" : "\n";
+                eolNormalized = true;
+            }
+            else if (!operations[0].Text.Contains('\r') && !operations[0].Text.Contains('\n'))
+            {
+                eolNormalized = true;
+            }
         }
 
         // Sort operations ascending
@@ -599,7 +450,7 @@ public class PieceTreeTextBuffer : ITextBuffer
             {
                 ValidatedEditOperation op = operations[i];
                 TextRange reverseRange = reverseRanges[i];
-                string bufferText = GetValueInRange(op.Range);
+                string bufferText = GetTextInRange(op.Range);
                 int reverseRangeOffset = op.RangeOffset + reverseRangeDeltaOffset;
                 reverseRangeDeltaOffset += op.Text.Length - bufferText.Length;
 
@@ -619,9 +470,6 @@ public class PieceTreeTextBuffer : ITextBuffer
             }
         }
 
-        _mightContainRTL = mightContainRTL;
-        _mightContainUnusualLineTerminators = mightContainUnusualLineTerminators;
-        _mightContainNonBasicASCII = mightContainNonBasicASCII;
         _EOLNormalized = eolNormalized;
 
         var contentChanges = DoApplyEdits(operations);
@@ -761,22 +609,9 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     #region Buffer API
 
-    /// <summary>
-    /// The preferred/majority EOL of the buffer. Informational only — the stored
-    /// content may contain foreign or mixed breaks; use <see cref="NormalizeEOL"/>
-    /// to rewrite all breaks to a single sequence.
-    /// </summary>
-    public string EOL => _EOL;
-
     public bool Equals(PieceTreeTextBuffer? other)
     {
         if (other is null)
-            return false;
-
-        if (_BOM != other._BOM)
-            return false;
-
-        if (EOL != other.EOL)
             return false;
 
         if (Length != other.Length || LineCount != other.LineCount)
@@ -796,7 +631,10 @@ public class PieceTreeTextBuffer : ITextBuffer
         });
     }
 
-    public int GetOffsetAt(int lineNumber, int column)
+    public int GetOffsetAt(TextPosition position)
+        => GetOffsetAt(position.LineNumber, position.Column);
+
+    private int GetOffsetAt(int lineNumber, int column)
     {
         int leftLen = 0; // inorder
         TreeNode x = _pieceTree.Root;
@@ -872,30 +710,6 @@ public class PieceTreeTextBuffer : ITextBuffer
         }
 
         return new TextPosition(1, 1);
-    }
-
-    public string GetValueInRange(TextRange range, string? eol)
-    {
-        if (range.StartLineNumber == range.EndLineNumber && range.StartColumn == range.EndColumn)
-        {
-            return "";
-        }
-
-        NodePosition startPosition = NodeAt2(range.StartLineNumber, range.StartColumn);
-        NodePosition endPosition = NodeAt2(range.EndLineNumber, range.EndColumn);
-
-        string value = GetValueInRange2(startPosition, endPosition);
-        if (eol is not null)
-        {
-            if (eol != _EOL || !_EOLNormalized)
-                return StringExtensions.EndOfLinesRegex.Replace(value, eol);
-
-            if (eol == _EOL && _EOLNormalized)
-                return value;
-
-            return StringExtensions.EndOfLinesRegex.Replace(value, eol);
-        }
-        return value;
     }
 
     internal string GetValueInRange2(NodePosition startPosition, NodePosition endPosition)
@@ -1043,7 +857,19 @@ public class PieceTreeTextBuffer : ITextBuffer
         return _lastVisitedLine.Value;
     }
 
-    private char GetCharCode(NodePosition nodePos)
+    public string GetLineEOL(int lineNumber)
+    {
+        int eolLength = GetEOLLengthAtLineBreak(lineNumber);
+        if (eolLength == 0)
+            return string.Empty;
+        int nextLineOffset = GetOffsetAt(lineNumber + 1, 1);
+        int eolOffset = nextLineOffset - eolLength;
+        return GetValueInRange2(
+            NodeAt(eolOffset),
+            NodeAt(nextLineOffset));
+    }
+
+    private char GetChar(NodePosition nodePos)
     {
         if (nodePos.Remainder == nodePos.Node.Piece.Length)
         {
@@ -1064,11 +890,8 @@ public class PieceTreeTextBuffer : ITextBuffer
         }
     }
 
-    public char GetLineCharCode(int lineNumber, int index)
-    {
-        var nodePos = NodeAt2(lineNumber, index + 1);
-        return GetCharCode(nodePos);
-    }
+    public char GetChar(TextPosition position)
+        => GetChar(NodeAt2(position.LineNumber, position.Column));
 
     public int GetLineLength(int lineNumber)
     {
@@ -1094,20 +917,20 @@ public class PieceTreeTextBuffer : ITextBuffer
 
         int currentStart = GetOffsetAt(lineNumber, 1);
         int nextStart = GetOffsetAt(lineNumber + 1, 1);
-        char lastChar = GetCharCode(nextStart - 1);
+        char lastChar = GetChar(nextStart - 1);
         if (lastChar == '\n')
         {
-            if (nextStart - currentStart >= 2 && GetCharCode(nextStart - 2) == '\r')
+            if (nextStart - currentStart >= 2 && GetChar(nextStart - 2) == '\r')
                 return 2; // \r\n
             return 1; // \n
         }
         return 1; // bare \r
     }
 
-    public char GetCharCode(int offset)
+    public char GetChar(int offset)
     {
         var nodePos = NodeAt(offset);
-        return GetCharCode(nodePos);
+        return GetChar(nodePos);
     }
 
     public string GetNearestChunk(int offset)
@@ -1313,8 +1136,7 @@ public class PieceTreeTextBuffer : ITextBuffer
     /// <summary>
     /// Evaluates the EOL kind of <paramref name="value"/> and degrades
     /// <see cref="_EOLNormalized"/> when the text introduces breaks that do not
-    /// match the buffer's preferred EOL. Never upgrades the flag — that requires
-    /// a full rewrite via <see cref="NormalizeEOL"/>.
+    /// match the buffer's fast-path EOL. Whole-buffer replacements can upgrade it.
     /// </summary>
     private void UpdateEOLNormalized(string value)
     {
@@ -1333,7 +1155,7 @@ public class PieceTreeTextBuffer : ITextBuffer
     /// <summary>
     /// Inserts raw text. If the text contains line breaks that do not match the
     /// buffer's preferred EOL, the buffer degrades to non-normalized mode and
-    /// slower read paths apply until <see cref="NormalizeEOL"/> is called.
+    /// slower read paths apply until a normalized whole-buffer replacement is applied.
     /// </summary>
     public void Insert(int offset, string value)
     {
