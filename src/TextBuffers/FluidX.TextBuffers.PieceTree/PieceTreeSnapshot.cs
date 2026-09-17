@@ -14,20 +14,16 @@ public class PieceTreeSnapshot : ITextSnapshot
 {
     private readonly List<Piece> _pieces;
     private readonly PieceTreeTextBuffer _tree;
-    private readonly string _BOM;
-
     private int _index;
 
     /// <summary>
     /// Creates a snapshot of the given piece tree.
     /// </summary>
     /// <param name="tree">Piece tree to snapshot</param>
-    /// <param name="BOM">Byte order mark added to the start of this snapshot</param>
-    public PieceTreeSnapshot(PieceTreeTextBuffer tree, string BOM)
+    public PieceTreeSnapshot(PieceTreeTextBuffer tree)
     {
         _pieces = [];
         _tree = tree;
-        _BOM = BOM;
         _index = 0;
         if (!tree._pieceTree.Root.IsSentinel)
         {
@@ -47,7 +43,7 @@ public class PieceTreeSnapshot : ITextSnapshot
             if (_index == 0)
             {
                 _index++;
-                return _BOM;
+                return string.Empty;
             }
             else
             {
@@ -57,9 +53,6 @@ public class PieceTreeSnapshot : ITextSnapshot
 
         if (_index > _pieces.Count - 1)
             return null;
-
-        if (_index == 0)
-            return _BOM + _tree.GetPieceContent(_pieces[_index++]);
 
         return _tree.GetPieceContent(_pieces[_index++]);
     }

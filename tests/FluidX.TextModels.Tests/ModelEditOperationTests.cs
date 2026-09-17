@@ -10,6 +10,44 @@ namespace FluidX.TextModels.Tests;
 public class ModelEditOperationTests
 {
     [TestMethod]
+    public void PlainTextModelOwnsDocumentPolicyWhileBufferPreservesRawEOLs()
+    {
+        var model = new PlainTextModel("\uFEFFone\r\ntwo\nthree\rfour", DefaultEndOfLine.LF);
+
+        Assert.AreEqual("\uFEFF", model.BOM);
+        Assert.AreEqual(EndOfLineSequence.CRLF, model.EOL);
+        Assert.AreEqual("one\r\ntwo\nthree\rfour", model.TextBuffer.GetTextInRange(model.GetFullModelRange()));
+        Assert.AreEqual("one\r\ntwo\r\nthree\r\nfour", model.GetValue());
+        Assert.AreEqual(21, model.GetValueLengthInRange(model.GetFullModelRange()));
+        Assert.AreEqual(18, model.GetValueLengthInRange(model.GetFullModelRange(), EndOfLinePreference.LF));
+        Assert.AreEqual("\uFEFFone\r\ntwo\r\nthree\r\nfour", model.GetValue(preserveBOM: true));
+
+        model.SetEOL(EndOfLineSequence.LF);
+
+        Assert.AreEqual("one\ntwo\nthree\nfour", model.TextBuffer.GetTextInRange(model.GetFullModelRange()));
+    }
+
+    [TestMethod]
+    public void PlainTextModelSupportsEditUndoAndRedo()
+    {
+        var model = new PlainTextModel("hello", DefaultEndOfLine.LF);
+        model.Edit(new TextEdit([new TextReplacement(new TextRange(1, 6, 1, 6), " world")]));
+
+        Assert.AreEqual("hello world", model.GetValue());
+        model.Undo();
+        Assert.AreEqual("hello", model.GetValue());
+        model.Redo();
+        Assert.AreEqual("hello world", model.GetValue());
+    }
+
+    [TestMethod]
+    public void TextModelInheritsPlainTextModel()
+    {
+        PlainTextModel model = CreateModel("text");
+        Assert.AreEqual("text", model.GetValue());
+    }
+
+    [TestMethod]
     public void TrackedBatchPreservesIndividualInverseOperations()
     {
         const int operationCount = 1000;
