@@ -6,9 +6,9 @@ namespace FluidX.TextBuffers.PieceTree;
 /// <summary>
 /// Represents the position of a character in an <see cref="InlineStringBuffer"/>.
 /// </summary>
-/// <param name="Line">0-based index into the buffer's <see cref="InlineStringBuffer.LineStarts"/>.</param>
-/// <param name="Column">0-based character offset from the start of the line.</param>
-internal readonly record struct BufferCursor(int Line, int Column);
+/// <param name="LineIndex">0-based index into the buffer's <see cref="InlineStringBuffer.LineStarts"/>.</param>
+/// <param name="ColumnIndex">0-based character offset from the start of the line.</param>
+internal readonly record struct BufferCursor(int LineIndex, int ColumnIndex);
 
 /// <summary>
 /// A piece of text in a text buffer.
@@ -55,28 +55,40 @@ internal sealed class PieceTree : RedBlackTree<PieceNodeData>
         oldParent.LfLeft -= newParent.LfLeft + newParent.Piece.LineFeedCount;
     }
 
-    protected override void OnAfterInsert(TreeNode z)
+    protected override void OnBeforeInsertFixup(TreeNode z)
     {
         RecomputeTreeMetadata(z);
     }
 
-    protected override void OnBeforeRemoval(TreeNode z, TreeNode x, TreeNode y)
-    {
-        if (y != z)
-        {
-            y.SizeLeft = z.SizeLeft;
-            y.LfLeft = z.LfLeft;
-        }
-    }
-
-    protected override void OnAfterRemoval(TreeNode z, TreeNode x, TreeNode y)
+    protected override void OnAfterRemovalFromOriginalPosition(TreeNode z, TreeNode x, TreeNode y)
     {
         RecomputeTreeMetadata(x);
+    }
 
-        if (y != z)
+    protected override void OnAfterRemovalRelink(TreeNode z, TreeNode x, TreeNode y)
+    {
+        y.SizeLeft = z.SizeLeft;
+        y.LfLeft = z.LfLeft;
+        RecomputeTreeMetadata(y);
+    }
+
+    protected override void OnBeforeRemovalFixup(TreeNode z, TreeNode x, TreeNode y)
+    {
+        if (x.Parent.Left == x)
         {
-            RecomputeTreeMetadata(y);
+            int newSizeLeft = CalculateSize(x);
+            int newLfLeft = CalculateLF(x);
+            if (newSizeLeft != x.Parent.SizeLeft || newLfLeft != x.Parent.LfLeft)
+            {
+                int delta = newSizeLeft - x.Parent.SizeLeft;
+                int lfDelta = newLfLeft - x.Parent.LfLeft;
+                x.Parent.SizeLeft = newSizeLeft;
+                x.Parent.LfLeft = newLfLeft;
+                UpdateTreeMetadata(x.Parent, delta, lfDelta);
+            }
         }
+
+        RecomputeTreeMetadata(x.Parent);
     }
 
     private static int CalculateSize(TreeNode node)
@@ -133,14 +145,14 @@ internal sealed class PieceTree : RedBlackTree<PieceNodeData>
         if (x == Root)
             return;
 
-        // Go upwards till the node whose left subtree is changed.
+        // Go upwards to the first node whose left subtree changed.
         while (x != Root && x == x.Parent.Right)
         {
             x = x.Parent;
         }
 
         if (x == Root)
-            return; // This means a node is added to the end.
+            return; // The changed node is at the end of the in-order traversal.
 
         // x is the node whose right subtree is changed.
         x = x.Parent;
@@ -161,6 +173,7 @@ internal sealed class PieceTree : RedBlackTree<PieceNodeData>
             x = x.Parent;
         }
     }
+
 }
 
 internal static class PieceTreeNodeDataExtensions

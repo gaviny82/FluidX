@@ -1,4 +1,4 @@
-﻿using FluidX.TextModels;
+using FluidX.TextModels;
 using FluidX.Tokenization.TokenStores;
 
 namespace FluidX.Tokenization;
@@ -25,23 +25,23 @@ public abstract class SyntaxTokenBackendBase : IDisposable
 
     public abstract void HandleDidChangeContent(ModelContentChangedEventArgs e);
 
-    public abstract void ForceTokenization(int lineNumber);
+    public abstract void ForceTokenization(int lineIndex);
 
-    public abstract bool HasAccurateTokensForLine(int lineNumber);
+    public abstract bool HasAccurateTokensForLine(int lineIndex);
 
-    public abstract bool IsCheapToTokenize(int lineNumber);
+    public abstract bool IsCheapToTokenize(int lineIndex);
 
-    public void TokenizeIfCheap(int lineNumber)
+    public void TokenizeIfCheap(int lineIndex)
     {
-        if (IsCheapToTokenize(lineNumber))
-            ForceTokenization(lineNumber);
+        if (IsCheapToTokenize(lineIndex))
+            ForceTokenization(lineIndex);
     }
 
-    public abstract LineTokens GetLineTokens(int lineNumber);
+    public abstract LineTokens GetLineTokens(int lineIndex);
 
-    public abstract StandardTokenType GetTokenTypeIfInsertingCharacter(int lineNumber, int column, string character);
+    public abstract StandardTokenType GetTokenTypeIfInsertingCharacter(int lineIndex, int columnIndex, string character);
 
-    public abstract LineTokens[]? TokenizeLinesAt(int lineNumber, ReadOnlySpan<string> lines);
+    public abstract LineTokens[]? TokenizeLinesAt(int lineIndex, ReadOnlySpan<string> lines);
 
     public virtual void Dispose() { }
 }

@@ -1,4 +1,4 @@
-﻿using FluidX;
+using FluidX;
 using FluidX.TextBuffers;
 using FluidX.TextBuffers.PieceTree;
 
@@ -6,37 +6,37 @@ var buffer = PieceTreeTextBuffer.Create("Hello\nworld!");
 
 // Read text from the buffer
 Console.WriteLine(buffer.LineCount); // 2
-Console.WriteLine(buffer.GetLineContent(1)); // Hello
-Console.WriteLine(buffer.GetLineContent(2)); // world!
-Console.WriteLine(buffer.GetTextInRange(new TextRange(1, 2, 2, 2))); // ello\nw
+Console.WriteLine(buffer.GetLineContent(0)); // Hello
+Console.WriteLine(buffer.GetLineContent(1)); // world!
+Console.WriteLine(buffer.GetTextInRange(new TextRange(0, 1, 1, 1))); // ello\nw
 
 // Writing to the buffer
 
-// INSERT a character 'a' at (line 2, column 4)
-buffer.ApplyEdits([new TextReplacement(new TextRange(2, 4, 2, 4), "a")], false);
+// INSERT a character 'a' at (line index 1, column index 3)
+buffer.ApplyEdits([new TextReplacement(new TextRange(1, 3, 1, 3), "a")], false);
 PrintAllLines();
 
-// DELETE a character at (line 1, column 4)
-buffer.ApplyEdits([new TextReplacement(new TextRange(1, 4, 1, 5), "")], false);
+// DELETE a character at (line index 0, column index 3)
+buffer.ApplyEdits([new TextReplacement(new TextRange(0, 3, 0, 4), "")], false);
 PrintAllLines();
 
 // === More complex tests ===
 
 // Test 1: Insert multi-line text
 Console.WriteLine("=== Test 1: Insert multi-line text ===");
-buffer.ApplyEdits([new TextReplacement(new TextRange(2, 6, 2, 6), "\nfoo\nbar")], false);
+buffer.ApplyEdits([new TextReplacement(new TextRange(1, 5, 1, 5), "\nfoo\nbar")], false);
 PrintAllLines();
 Console.WriteLine($"Total lines: {buffer.LineCount}");
 Console.WriteLine($"Total length: {buffer.Length}");
 
 // Test 2: Delete across lines
 Console.WriteLine("=== Test 2: Delete across lines ===");
-buffer.ApplyEdits([new TextReplacement(new TextRange(1, 4, 3, 3), "")], false);
+buffer.ApplyEdits([new TextReplacement(new TextRange(0, 3, 2, 2), "")], false);
 PrintAllLines();
 
 // Test 3: Replace text
 Console.WriteLine("=== Test 3: Replace text ===");
-buffer.ApplyEdits([new TextReplacement(new TextRange(1, 1, 1, 4), "Goodbye")], false);
+buffer.ApplyEdits([new TextReplacement(new TextRange(0, 0, 0, 3), "Goodbye")], false);
 PrintAllLines();
 
 // Test 4: Snapshot
@@ -53,31 +53,31 @@ Console.WriteLine();
 Console.WriteLine("=== Test 5: Multiple edits ===");
 var buffer2 = PieceTreeTextBuffer.Create("line1\nline2\nline3\nline4\nline5");
 Console.WriteLine($"Initial lines: {buffer2.LineCount}");
-for (int i = 1; i <= buffer2.LineCount; i++)
+for (int i = 0; i < buffer2.LineCount; i++)
 {
     Console.WriteLine($"  {i}: {buffer2.GetLineContent(i)}");
 }
 
-// Delete line 3
-buffer2.ApplyEdits([new TextReplacement(new TextRange(3, 1, 4, 1), "")], false);
-Console.WriteLine($"After deleting line 3: {buffer2.LineCount} lines");
-for (int i = 1; i <= buffer2.LineCount; i++)
+// Delete the line at index 2
+buffer2.ApplyEdits([new TextReplacement(new TextRange(2, 0, 3, 0), "")], false);
+Console.WriteLine($"After deleting line index 2: {buffer2.LineCount} lines");
+for (int i = 0; i < buffer2.LineCount; i++)
 {
     Console.WriteLine($"  {i}: {buffer2.GetLineContent(i)}");
 }
 
 // Insert at beginning
-buffer2.ApplyEdits([new TextReplacement(new TextRange(1, 1, 1, 1), "NEW ")], false);
+buffer2.ApplyEdits([new TextReplacement(new TextRange(0, 0, 0, 0), "NEW ")], false);
 Console.WriteLine($"After insert at beginning:");
-for (int i = 1; i <= buffer2.LineCount; i++)
+for (int i = 0; i < buffer2.LineCount; i++)
 {
     Console.WriteLine($"  {i}: {buffer2.GetLineContent(i)}");
 }
 
 // Append to end
-buffer2.ApplyEdits([new TextReplacement(new TextRange(4, 6, 4, 6), " added")], false);
+buffer2.ApplyEdits([new TextReplacement(new TextRange(3, 5, 3, 5), " added")], false);
 Console.WriteLine($"After append:");
-for (int i = 1; i <= buffer2.LineCount; i++)
+for (int i = 0; i < buffer2.LineCount; i++)
 {
     Console.WriteLine($"  {i}: {buffer2.GetLineContent(i)}");
 }
@@ -97,7 +97,7 @@ Console.WriteLine("Position/Offset roundtrip complete.");
 
 // Test 7: GetTextInRange consistency
 Console.WriteLine("=== Test 7: GetTextInRange consistency ===");
-var fullText = buffer2.GetTextInRange(new TextRange(1, 1, 4, buffer2.GetLineLength(4) + 1));
+var fullText = buffer2.GetTextInRange(new TextRange(0, 0, 3, buffer2.GetLineLength(3)));
 Console.WriteLine($"Full text: [{fullText}]");
 
 // Test 8: Stress test - many inserts
@@ -106,19 +106,19 @@ var buffer3 = PieceTreeTextBuffer.Create("");
 for (int i = 0; i < 100; i++)
 {
     buffer3.ApplyEdits([new TextReplacement(
-        new TextRange(buffer3.LineCount, buffer3.GetLineLength(buffer3.LineCount) + 1, buffer3.LineCount, buffer3.GetLineLength(buffer3.LineCount) + 1),
+        new TextRange(buffer3.LineCount - 1, buffer3.GetLineLength(buffer3.LineCount - 1), buffer3.LineCount - 1, buffer3.GetLineLength(buffer3.LineCount - 1)),
         $"item{i}\n")], false);
 }
 Console.WriteLine($"After 100 inserts: {buffer3.LineCount} lines");
-Console.WriteLine($"  First: {buffer3.GetLineContent(1)}");
-Console.WriteLine($"  Last: {buffer3.GetLineContent(buffer3.LineCount)}");
+Console.WriteLine($"  First: {buffer3.GetLineContent(0)}");
+Console.WriteLine($"  Last: {buffer3.GetLineContent(buffer3.LineCount - 1)}");
 
 Console.WriteLine("\nAll tests passed!");
 
 void PrintAllLines()
 {
     Console.WriteLine(new string('-', 20));
-    for (int i = 1; i <= buffer.LineCount; i++)
+    for (int i = 0; i < buffer.LineCount; i++)
     {
         Console.WriteLine($"{i}:\t{buffer.GetLineContent(i)}");
     }

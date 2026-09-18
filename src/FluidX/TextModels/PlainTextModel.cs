@@ -52,7 +52,7 @@ public class PlainTextModel
 
 
     private readonly UndoRedoStack _undoRedoStack = new();
-    private int[]? _trimAutoWhitespaceLineNumbers;
+    private int[]? _trimAutoWhitespaceLineIndices;
 
     public PlainTextModel(
         string source,
@@ -177,7 +177,7 @@ public class PlainTextModel
         int newLineCount = TextBuffer.LineCount;
 
         var contentChanges = result.Changes;
-        _trimAutoWhitespaceLineNumbers = ComputeAutoWhitespaceLineNumbers(operations, autoWhitespaceEdits, result.ReverseEdits);
+        _trimAutoWhitespaceLineIndices = ComputeAutoWhitespaceLineIndices(operations, autoWhitespaceEdits, result.ReverseEdits);
 
         if (contentChanges.Count != 0)
         {
@@ -209,23 +209,23 @@ public class PlainTextModel
                 int eolCount = EOLCounter.CountEOL(change.Text).eolCount;
                 //this._onDidChangeDecorations.fire();
 
-                int startLineNumber = change.Range.StartLineNumber;
-                int endLineNumber = change.Range.EndLineNumber;
+                int startLineIndex = change.Range.StartLineIndex;
+                int endLineIndex = change.Range.EndLineIndex;
 
-                int deletingLinesCnt = endLineNumber - startLineNumber;
+                int deletingLinesCnt = endLineIndex - startLineIndex;
                 int insertingLinesCnt = eolCount;
                 int editingLinesCnt = Math.Min(deletingLinesCnt, insertingLinesCnt);
 
                 int changeLineCountDelta = (insertingLinesCnt - deletingLinesCnt);
 
-                int currentEditStartLineNumber = newLineCount - lineCount - changeLineCountDelta + startLineNumber;
-                int firstEditLineNumber = currentEditStartLineNumber;
-                int lastInsertedLineNumber = currentEditStartLineNumber + insertingLinesCnt;
+                int currentEditStartLineIndex = newLineCount - lineCount - changeLineCountDelta + startLineIndex;
+                int firstEditLineIndex = currentEditStartLineIndex;
+                int lastInsertedLineIndex = currentEditStartLineIndex + insertingLinesCnt;
 
                 //var decorationsWithInjectedTextInEditedRange = this._decorationsTree.getInjectedTextInInterval(
                 //    this,
-                //    TextBuffer.GetOffsetAt(new TextPosition(firstEditLineNumber, 1)),
-                //    TextBuffer.GetOffsetAt(new TextPosition(lastInsertedLineNumber, TextBuffer.GetLineMaxColumn(lastInsertedLineNumber))),
+                //    TextBuffer.GetOffsetAt(new TextPosition(firstEditLineIndex, 0)),
+                //    TextBuffer.GetOffsetAt(new TextPosition(lastInsertedLineIndex, TextBuffer.GetLineMaxColumnIndex(lastInsertedLineIndex))),
                 //    0
                 //);
 
@@ -234,16 +234,16 @@ public class PlainTextModel
 
                 for (int j = editingLinesCnt; j >= 0; j--)
                 {
-                    int editLineNumber = startLineNumber + j;
-                    int currentEditLineNumber = currentEditStartLineNumber + j;
+                    int editLineIndex = startLineIndex + j;
+                    int currentEditLineIndex = currentEditStartLineIndex + j;
 
-                    //injectedTextInEditedRangeQueue.takeFromEndWhile(r => r.lineNumber > currentEditLineNumber);
-                    //var decorationsInCurrentLine = injectedTextInEditedRangeQueue.takeFromEndWhile(r => r.lineNumber === currentEditLineNumber);
+                    //injectedTextInEditedRangeQueue.takeFromEndWhile(r => r.lineIndex > currentEditLineIndex);
+                    //var decorationsInCurrentLine = injectedTextInEditedRangeQueue.takeFromEndWhile(r => r.lineIndex === currentEditLineIndex);
 
                     rawContentChanges.Add(
                         new ModelRawLineChanged(
-                            editLineNumber,
-                            TextBuffer.GetLineContent(currentEditLineNumber)
+                            editLineIndex,
+                            TextBuffer.GetLineContent(currentEditLineIndex)
                         //decorationsInCurrentLine // Not implemented yet
                         ));
                 }
@@ -251,8 +251,8 @@ public class PlainTextModel
                 if (editingLinesCnt < deletingLinesCnt)
                 {
                     // Must delete some lines
-                    int spliceStartLineNumber = startLineNumber + editingLinesCnt;
-                    rawContentChanges.Add(new ModelRawLinesDeleted(spliceStartLineNumber + 1, endLineNumber));
+                    int spliceStartLineIndex = startLineIndex + editingLinesCnt;
+                    rawContentChanges.Add(new ModelRawLinesDeleted(spliceStartLineIndex + 1, endLineIndex));
                 }
 
                 if (editingLinesCnt < insertingLinesCnt)
@@ -260,24 +260,24 @@ public class PlainTextModel
                     //var injectedTextInEditedRangeQueue = new ArrayQueue(injectedTextInEditedRange);
 
                     // Must insert some lines
-                    int spliceLineNumber = startLineNumber + editingLinesCnt;
+                    int spliceLineIndex = startLineIndex + editingLinesCnt;
                     int cnt = insertingLinesCnt - editingLinesCnt;
-                    int fromLineNumber = newLineCount - lineCount - cnt + spliceLineNumber + 1;
+                    int fromLineIndex = newLineCount - lineCount - cnt + spliceLineIndex + 1;
                     //LineInjectedText[]?[] injectedTexts = [];
                     string[] newLines = new string[cnt];
                     for (int j = 0; j < cnt; j++)
                     {
-                        int lineNumber = fromLineNumber + i;
-                        newLines[j] = TextBuffer.GetLineContent(lineNumber);
+                        int lineIndex = fromLineIndex + j;
+                        newLines[j] = TextBuffer.GetLineContent(lineIndex);
 
-                        //injectedTextInEditedRangeQueue.takeWhile(r => r.lineNumber < lineNumber);
-                        //injectedTexts[i] = injectedTextInEditedRangeQueue.takeWhile(r => r.lineNumber === lineNumber);
+                        //injectedTextInEditedRangeQueue.takeWhile(r => r.lineIndex < lineIndex);
+                        //injectedTexts[i] = injectedTextInEditedRangeQueue.takeWhile(r => r.lineIndex === lineIndex);
                     }
 
                     rawContentChanges.Add(
                         new ModelRawLinesInserted(
-                            spliceLineNumber + 1,
-                            startLineNumber + insertingLinesCnt,
+                            spliceLineIndex + 1,
+                            startLineIndex + insertingLinesCnt,
                             newLines
                         //injectedTexts // Not implemented yet
                         )
@@ -322,22 +322,22 @@ public class PlainTextModel
         ModelEditOperation[] editOperations,
         Selection[]? beforeCursorState)
     {
-        if (!Options.TrimAutoWhitespace || _trimAutoWhitespaceLineNumbers is null)
+        if (!Options.TrimAutoWhitespace || _trimAutoWhitespaceLineIndices is null)
             return editOperations;
 
-        int[] trimLineNumbers = _trimAutoWhitespaceLineNumbers;
-        _trimAutoWhitespaceLineNumbers = null;
+        int[] trimLineIndices = _trimAutoWhitespaceLineIndices;
+        _trimAutoWhitespaceLineIndices = null;
 
         bool editsAreNearCursors = true;
         if (beforeCursorState is not null)
         {
             foreach (var selection in beforeCursorState)
             {
-                int selectionStartLine = Math.Min(selection.SelectionStartLineNumber, selection.PositionLineNumber);
-                int selectionEndLine = Math.Max(selection.SelectionStartLineNumber, selection.PositionLineNumber);
+                int selectionStartLine = Math.Min(selection.SelectionStartLineIndex, selection.PositionLineIndex);
+                int selectionEndLine = Math.Max(selection.SelectionStartLineIndex, selection.PositionLineIndex);
                 bool foundNearbyEdit = editOperations.Any(operation =>
-                    operation.Range.StartLineNumber <= selectionEndLine
-                    && operation.Range.EndLineNumber >= selectionStartLine);
+                    operation.Range.StartLineIndex <= selectionEndLine
+                    && operation.Range.EndLineIndex >= selectionStartLine);
                 if (!foundNearbyEdit)
                 {
                     editsAreNearCursors = false;
@@ -351,24 +351,24 @@ public class PlainTextModel
             return editOperations;
 
         List<ModelEditOperation> result = [.. editOperations];
-        foreach (int trimLineNumber in trimLineNumbers)
+        foreach (int trimLineIndex in trimLineIndices)
         {
-            int maxLineColumn = TextBuffer.GetLineLength(trimLineNumber) + 1;
+            int maxLineColumnIndex = TextBuffer.GetLineLength(trimLineIndex);
             bool allowTrimLine = true;
 
             foreach (var operation in editOperations)
             {
                 TextRange editRange = operation.Range;
-                if (trimLineNumber < editRange.StartLineNumber || trimLineNumber > editRange.EndLineNumber)
+                if (trimLineIndex < editRange.StartLineIndex || trimLineIndex > editRange.EndLineIndex)
                     continue;
 
                 bool insertsLineAfter = editRange.IsEmpty
-                    && editRange.StartLineNumber == trimLineNumber
-                    && editRange.StartColumn == maxLineColumn
+                    && editRange.StartLineIndex == trimLineIndex
+                    && editRange.StartColumnIndex == maxLineColumnIndex
                     && StartsWithLineBreak(operation.Text);
                 bool insertsLineBefore = editRange.IsEmpty
-                    && editRange.StartLineNumber == trimLineNumber
-                    && editRange.StartColumn == 1
+                    && editRange.StartLineIndex == trimLineIndex
+                    && editRange.StartColumnIndex == 0
                     && EndsWithLineBreak(operation.Text);
                 if (insertsLineAfter || insertsLineBefore)
                     continue;
@@ -380,7 +380,7 @@ public class PlainTextModel
             if (allowTrimLine)
             {
                 result.Add(new ModelEditOperation(
-                    new TextRange(trimLineNumber, 1, trimLineNumber, maxLineColumn),
+                    new TextRange(trimLineIndex, 0, trimLineIndex, maxLineColumnIndex),
                     ""));
             }
         }
@@ -406,12 +406,12 @@ public class PlainTextModel
         TextRange firstRange = operations[0].Range;
         TextRange lastRange = operations[^1].Range;
         TextRange combinedRange = new(
-            firstRange.StartLineNumber,
-            firstRange.StartColumn,
-            lastRange.EndLineNumber,
-            lastRange.EndColumn);
-        int lastEndLineNumber = firstRange.StartLineNumber;
-        int lastEndColumn = firstRange.StartColumn;
+            firstRange.StartLineIndex,
+            firstRange.StartColumnIndex,
+            lastRange.EndLineIndex,
+            lastRange.EndColumnIndex);
+        int lastEndLineIndex = firstRange.StartLineIndex;
+        int lastEndColumnIndex = firstRange.StartColumnIndex;
         bool forceMoveMarkers = false;
         StringBuilder text = new();
 
@@ -421,14 +421,14 @@ public class PlainTextModel
             forceMoveMarkers |= operation.ForceMoveMarkers;
             text.Append(GetValueInRange(
                 new TextRange(
-                    lastEndLineNumber,
-                    lastEndColumn,
-                    range.StartLineNumber,
-                    range.StartColumn),
+                    lastEndLineIndex,
+                    lastEndColumnIndex,
+                    range.StartLineIndex,
+                    range.StartColumnIndex),
                 EndOfLinePreference.TextDefined));
             text.Append(operation.Text);
-            lastEndLineNumber = range.EndLineNumber;
-            lastEndColumn = range.EndColumn;
+            lastEndLineIndex = range.EndLineIndex;
+            lastEndColumnIndex = range.EndColumnIndex;
         }
 
         // At one point, due to how events are emitted and how each operation is handled,
@@ -454,14 +454,14 @@ public class PlainTextModel
             var operation = operations[i];
             if (operation.IsAutowhitespaceEdit && operation.Range.IsEmpty)
             {
-                result.Add(new AutoWhitespaceEdit(i, TextBuffer.GetLineContent(operation.Range.StartLineNumber)));
+                result.Add(new AutoWhitespaceEdit(i, TextBuffer.GetLineContent(operation.Range.StartLineIndex)));
             }
         }
 
         return result;
     }
 
-    private int[]? ComputeAutoWhitespaceLineNumbers(
+    private int[]? ComputeAutoWhitespaceLineIndices(
         ModelEditOperation[] operations,
         List<AutoWhitespaceEdit> autoWhitespaceEdits,
         ReverseSingleEditOperation[]? reverseOperations)
@@ -471,42 +471,42 @@ public class PlainTextModel
 
         Dictionary<int, ReverseSingleEditOperation> reverseOperationsByIndex =
             reverseOperations.ToDictionary(op => op.SortIndex);
-        List<(int LineNumber, string OldContent)> candidates = [];
+        List<(int LineIndex, string OldContent)> candidates = [];
 
         foreach (var edit in autoWhitespaceEdits)
         {
             if (!reverseOperationsByIndex.TryGetValue(edit.SortIndex, out var reverseOperation))
                 continue;
 
-            for (int lineNumber = reverseOperation.Range.StartLineNumber;
-                lineNumber <= reverseOperation.Range.EndLineNumber;
-                lineNumber++)
+            for (int lineIndex = reverseOperation.Range.StartLineIndex;
+                lineIndex <= reverseOperation.Range.EndLineIndex;
+                lineIndex++)
             {
-                string oldContent = lineNumber == reverseOperation.Range.StartLineNumber
+                string oldContent = lineIndex == reverseOperation.Range.StartLineIndex
                     ? edit.OldLineContent
                     : "";
-                if (lineNumber == reverseOperation.Range.StartLineNumber && ContainsNonWhitespace(oldContent))
+                if (lineIndex == reverseOperation.Range.StartLineIndex && ContainsNonWhitespace(oldContent))
                     continue;
-                candidates.Add((lineNumber, oldContent));
+                candidates.Add((lineIndex, oldContent));
             }
         }
 
-        candidates.Sort((a, b) => b.LineNumber - a.LineNumber);
+        candidates.Sort((a, b) => b.LineIndex - a.LineIndex);
         List<int> result = [];
         for (int i = 0; i < candidates.Count; i++)
         {
             var candidate = candidates[i];
-            if (i > 0 && candidates[i - 1].LineNumber == candidate.LineNumber)
+            if (i > 0 && candidates[i - 1].LineIndex == candidate.LineIndex)
                 continue;
 
-            string lineContent = TextBuffer.GetLineContent(candidate.LineNumber);
+            string lineContent = TextBuffer.GetLineContent(candidate.LineIndex);
             if (lineContent.Length == 0
                 || lineContent == candidate.OldContent
                 || ContainsNonWhitespace(lineContent))
             {
                 continue;
             }
-            result.Add(candidate.LineNumber);
+            result.Add(candidate.LineIndex);
         }
 
         return result.Count == 0 ? null : result.ToArray();
@@ -539,10 +539,10 @@ public class PlainTextModel
             var rangeEnd = TextBuffer.GetPositionAt(change.NewEnd);
             return new ModelEditOperation(
                 new TextRange(
-                    rangeStart.LineNumber,
-                    rangeStart.Column,
-                    rangeEnd.LineNumber,
-                    rangeEnd.Column
+                    rangeStart.LineIndex,
+                    rangeStart.ColumnIndex,
+                    rangeEnd.LineIndex,
+                    rangeEnd.ColumnIndex
                 ),
                 change.OldText);
         }).ToArray();
@@ -562,10 +562,10 @@ public class PlainTextModel
             var rangeEnd = TextBuffer.GetPositionAt(change.OldEnd);
             return new ModelEditOperation(
                 new TextRange(
-                    rangeStart.LineNumber,
-                    rangeStart.Column,
-                    rangeEnd.LineNumber,
-                    rangeEnd.Column
+                    rangeStart.LineIndex,
+                    rangeStart.ColumnIndex,
+                    rangeEnd.LineIndex,
+                    rangeEnd.ColumnIndex
                 ),
                 change.NewText);
         }).ToArray();
@@ -598,8 +598,8 @@ public class PlainTextModel
 
         var oldFullModelRange = GetFullModelRange();
         int oldModelValueLength = TextBuffer.GetTextLengthInRange(oldFullModelRange);
-        int endLineNumber = TextBuffer.LineCount;
-        int endColumn = TextBuffer.GetLineLength(endLineNumber) + 1;
+        int endLineIndex = TextBuffer.LineCount - 1;
+        int endColumnIndex = TextBuffer.GetLineLength(endLineIndex);
 
         // TODO: OnEOLChanging
         string normalizedText = StringExtensions.EndOfLinesRegex.Replace(
@@ -621,7 +621,7 @@ public class PlainTextModel
                 Changes: [
                     new ModelContentChange
                     {
-                        Range = new TextRange(1, 1, endLineNumber, endColumn),
+                        Range = new TextRange(0, 0, endLineIndex, endColumnIndex),
                         RangeOffset = 0,
                         RangeLength = oldModelValueLength,
                         Text = GetValue()
@@ -642,33 +642,33 @@ public class PlainTextModel
     public TextRange GetFullModelRange()
     {
         int lineCount = TextBuffer.LineCount;
-        int endColumn = TextBuffer.GetLineLength(lineCount) + 1;
-        return new(1, 1, lineCount, endColumn);
+        int endColumnIndex = TextBuffer.GetLineLength(lineCount - 1);
+        return new(0, 0, lineCount - 1, endColumnIndex);
     }
 
     public TextPosition ValidatePosition(TextPosition position, bool allowInSurrogatePairs = false)
     {
-        int lineNumber = position.LineNumber;
-        int column = position.Column;
+        int lineIndex = position.LineIndex;
+        int columnIndex = position.ColumnIndex;
         int lineCount = TextBuffer.LineCount;
 
-        if (lineNumber < 1)
-            return new TextPosition(1, 1);
-        if (lineNumber > lineCount)
-            return new TextPosition(lineCount, TextBuffer.GetLineLength(lineCount) + 1);
-        if (column <= 1)
-            return new TextPosition(lineNumber, 1);
-        int maxColumn = TextBuffer.GetLineLength(lineNumber) + 1;
-        if (column > maxColumn)
-            return new TextPosition(lineNumber, maxColumn);
+        if (lineIndex < 0)
+            return new TextPosition(0, 0);
+        if (lineIndex >= lineCount)
+            return new TextPosition(lineCount - 1, TextBuffer.GetLineLength(lineCount - 1));
+        if (columnIndex <= 0)
+            return new TextPosition(lineIndex, 0);
+        int maxColumnIndex = TextBuffer.GetLineLength(lineIndex);
+        if (columnIndex > maxColumnIndex)
+            return new TextPosition(lineIndex, maxColumnIndex);
 
         if (!allowInSurrogatePairs)
         {
             // If the position would end up in the middle of a high-low surrogate pair,
-            // we move it to before the pair. At this point, column > 1 is requried.
-            char charCodeBefore = TextBuffer.GetChar(new TextPosition(lineNumber, column - 1));
+            // we move it to before the pair. At this point, columnIndex > 0 is required.
+            char charCodeBefore = TextBuffer.GetChar(new TextPosition(lineIndex, columnIndex - 1));
             if (char.IsHighSurrogate(charCodeBefore))
-                return new TextPosition(lineNumber, column - 1);
+                return new TextPosition(lineIndex, columnIndex - 1);
         }
 
         return position;
@@ -703,8 +703,8 @@ public class PlainTextModel
         if (range.IsEmpty)
             return 0;
 
-        if (range.StartLineNumber == range.EndLineNumber)
-            return range.EndColumn - range.StartColumn;
+        if (range.StartLineIndex == range.EndLineIndex)
+            return range.EndColumnIndex - range.StartColumnIndex;
 
         int rawLength = TextBuffer.GetTextLengthInRange(range);
         string desiredEOL = eol switch
@@ -717,12 +717,12 @@ public class PlainTextModel
 
         if (_isEOLNormalized)
         {
-            int eolCount = range.EndLineNumber - range.StartLineNumber;
+            int eolCount = range.EndLineIndex - range.StartLineIndex;
             return rawLength + (desiredEOL.Length - _eol.Length) * eolCount;
         }
 
         int eolOffsetCompensation = 0;
-        for (int line = range.StartLineNumber; line < range.EndLineNumber; line++)
+        for (int line = range.StartLineIndex; line < range.EndLineIndex; line++)
             eolOffsetCompensation += desiredEOL.Length - TextBuffer.GetLineEOL(line).Length;
 
         return rawLength + eolOffsetCompensation;

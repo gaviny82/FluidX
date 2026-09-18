@@ -1,4 +1,4 @@
-﻿using FluidX.TextBuffers;
+using FluidX.TextBuffers;
 using System.Runtime.InteropServices;
 
 namespace FluidX.Tokenization.TokenStores;
@@ -11,29 +11,29 @@ public class SparseMultilineTokens
     private readonly SparseMultilineTokenStorage _tokens;
 
     /// <summary>
-    /// (Inclusive) start line number for these tokens.
+    /// (Inclusive) start line index for these tokens.
     /// </summary>
-    public int StartLineNumber { get; private set; }
+    public int StartLineIndex { get; private set; }
 
     /// <summary>
-    /// (Inclusive) end line number for these tokens.
+    /// (Inclusive) end line index for these tokens.
     /// </summary>
-    public int EndLineNumber => StartLineNumber + _tokens.MaxDeltaLine;
+    public int EndLineIndex => StartLineIndex + _tokens.MaxDeltaLine;
     public bool IsEmpty => _tokens.IsEmpty;
 
-    public SparseMultilineTokens(int startLineNumber, SparseMultilineTokenStorage tokens)
+    public SparseMultilineTokens(int startLineIndex, SparseMultilineTokenStorage tokens)
     {
-        StartLineNumber = startLineNumber;
+        StartLineIndex = startLineIndex;
         _tokens = tokens;
     }
 
     public override string ToString()
-        => _tokens.ToString(StartLineNumber);
+        => _tokens.ToString(StartLineIndex);
 
-    public SparseLineToken[]? GetLineTokens(int lineNumber)
+    public SparseLineToken[]? GetLineTokens(int lineIndex)
     {
-        if (StartLineNumber <= lineNumber && lineNumber <= EndLineNumber)
-            return _tokens.GetLineTokens(lineNumber - StartLineNumber);
+        if (StartLineIndex <= lineIndex && lineIndex <= EndLineIndex)
+            return _tokens.GetLineTokens(lineIndex - StartLineIndex);
         return null;
     }
 
@@ -42,23 +42,23 @@ public class SparseMultilineTokens
         if (_tokens.Range is not TextRange deltaRange)
             return null;
         return new(
-            StartLineNumber + deltaRange.StartLineNumber,
-            deltaRange.StartColumn,
-            StartLineNumber + deltaRange.EndLineNumber,
-            deltaRange.EndColumn
+            StartLineIndex + deltaRange.StartLineIndex,
+            deltaRange.StartColumnIndex,
+            StartLineIndex + deltaRange.EndLineIndex,
+            deltaRange.EndColumnIndex
         );
     }
 
     public void RemoveTokens(TextRange range)
     {
-        int startLineIndex = range.StartLineNumber - StartLineNumber;
-        int endLineIndex = range.EndLineNumber - StartLineNumber;
+        int startLineIndex = range.StartLineIndex - StartLineIndex;
+        int endLineIndex = range.EndLineIndex - StartLineIndex;
 
-        StartLineNumber += _tokens.RemoveTokens(
+        StartLineIndex += _tokens.RemoveTokens(
             startLineIndex,
-            range.StartColumn - 1,
+            range.StartColumnIndex,
             endLineIndex,
-            range.EndColumn - 1
+            range.EndColumnIndex
         );
     }
 
@@ -67,18 +67,18 @@ public class SparseMultilineTokens
         // split tokens to two:
         // a) all the tokens before `range`
         // b) all the tokens after `range`
-        int startLineIndex = range.StartLineNumber - StartLineNumber;
-        int endLineIndex = range.EndLineNumber - StartLineNumber;
+        int startLineIndex = range.StartLineIndex - StartLineIndex;
+        int endLineIndex = range.EndLineIndex - StartLineIndex;
 
         var (a, b, bDeltaLine) = _tokens.Split(
             startLineIndex,
-            range.StartColumn - 1,
+            range.StartColumnIndex,
             endLineIndex,
-            range.EndColumn - 1
+            range.EndColumnIndex
         );
         return (
-            new SparseMultilineTokens(StartLineNumber, a),
-            new SparseMultilineTokens(StartLineNumber + bDeltaLine, b)
+            new SparseMultilineTokens(StartLineIndex, a),
+            new SparseMultilineTokens(StartLineIndex + bDeltaLine, b)
         );
     }
 
@@ -92,7 +92,7 @@ public class SparseMultilineTokens
     {
         AcceptDeleteRange(range);
         AcceptInsertText(
-            new TextPosition(range.StartLineNumber, range.StartColumn),
+            new TextPosition(range.StartLineIndex, range.StartColumnIndex),
             eolCount,
             firstLineLength,
             lastLineLength,
@@ -105,14 +105,14 @@ public class SparseMultilineTokens
         if (range.IsEmpty)
             return; // Nothing to delete
 
-        int firstLineIndex = range.StartLineNumber - StartLineNumber;
-        int lastLineIndex = range.EndLineNumber - StartLineNumber;
+        int firstLineIndex = range.StartLineIndex - StartLineIndex;
+        int lastLineIndex = range.EndLineIndex - StartLineIndex;
 
         if (lastLineIndex < 0)
         {
-            // this deletion occurs entirely before this block, so we only need to adjust line numbers
+            // this deletion occurs entirely before this block, so we only need to adjust line indices
             int deletedLinesCount = lastLineIndex - firstLineIndex;
-            StartLineNumber -= deletedLinesCount;
+            StartLineIndex -= deletedLinesCount;
             return;
         }
 
@@ -124,7 +124,7 @@ public class SparseMultilineTokens
         if (firstLineIndex < 0 && lastLineIndex >= tokenMaxDeltaLine + 1)
         {
             // this deletion completely encompasses this block
-            StartLineNumber = 0;
+            StartLineIndex = 0;
             _tokens.Clear();
             return;
         }
@@ -132,13 +132,13 @@ public class SparseMultilineTokens
         if (firstLineIndex < 0)
         {
             int deletedBefore = -firstLineIndex;
-            StartLineNumber -= deletedBefore;
+            StartLineIndex -= deletedBefore;
 
-            _tokens.AcceptDeleteRange(range.StartColumn - 1, 0, 0, lastLineIndex, range.EndColumn - 1);
+            _tokens.AcceptDeleteRange(range.StartColumnIndex, 0, 0, lastLineIndex, range.EndColumnIndex);
         }
         else
         {
-            _tokens.AcceptDeleteRange(0, firstLineIndex, range.StartColumn - 1, lastLineIndex, range.EndColumn - 1);
+            _tokens.AcceptDeleteRange(0, firstLineIndex, range.StartColumnIndex, lastLineIndex, range.EndColumnIndex);
         }
     }
 
@@ -147,12 +147,12 @@ public class SparseMultilineTokens
         if (eolCount == 0 && firstLineLength == 0)
             return; // Nothing to insert
 
-        int lineIndex = position.LineNumber - StartLineNumber;
+        int lineIndex = position.LineIndex - StartLineIndex;
 
         if (lineIndex < 0)
         {
-            // this insertion occurs before this block, so we only need to adjust line numbers
-            StartLineNumber += eolCount;
+            // this insertion occurs before this block, so we only need to adjust line indices
+            StartLineIndex += eolCount;
             return;
         }
 
@@ -164,7 +164,7 @@ public class SparseMultilineTokens
             return;
         }
 
-        _tokens.AcceptInsertText(lineIndex, position.Column - 1, eolCount, firstLineLength, lastLineLength, firstCharCode);
+        _tokens.AcceptInsertText(lineIndex, position.ColumnIndex, eolCount, firstLineLength, lastLineLength, firstCharCode);
     }
 }
 
@@ -178,9 +178,9 @@ public class SparseMultilineTokenStorage
     public int MaxDeltaLine => TokenCount == 0 ? -1 : _tokens[^1].DeltaLine;
     public TextRange? Range => TokenCount == 0 ? null : new(
         0,
-        _tokens[0].StartIndex + 1,
+        _tokens[0].StartIndex,
         MaxDeltaLine,
-        _tokens[^1].EndIndex + 1
+        _tokens[^1].EndIndex
     );
 
     public SparseMultilineTokenStorage(List<SparseLineToken> tokens)
@@ -188,12 +188,12 @@ public class SparseMultilineTokenStorage
         _tokens = tokens;
     }
 
-    public string ToString(int startLineNumber)
+    public string ToString(int startLineIndex)
     {
         List<string> pieces = new(TokenCount);
         foreach (var token in _tokens)
         {
-            pieces.Add($"{token.DeltaLine + startLineNumber},{token.StartIndex}-{token.EndIndex}");
+            pieces.Add($"{token.DeltaLine + startLineIndex},{token.StartIndex}-{token.EndIndex}");
         }
         return $"[{string.Join(",", pieces)}]";
     }

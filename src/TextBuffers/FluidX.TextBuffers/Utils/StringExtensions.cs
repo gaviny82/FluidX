@@ -57,7 +57,7 @@ public static partial class StringExtensions
     /// <param name="str"></param>
     /// <returns>Index of the first non-whitespace character, or -1 if the string is empty or contains only whitespaces.</returns>
     /// <remarks>Whitespace characters are ' ' and '\t'.</remarks>
-    public static int FirstNonWhitespaceIndex(this string str) => str.IndexOfAny([' ', '\t']);
+    public static int FirstNonWhitespaceIndex(this string str) => str.AsSpan().IndexOfAnyExcept(' ', '\t');
 
     /// <summary>
     /// Returns last index of the string that is not whitespace.
@@ -65,5 +65,5 @@ public static partial class StringExtensions
     /// <param name="str"></param>
     /// <returns>Index of the last non-whitespace character, or -1 if the string is empty or contains only whitespaces.</returns>
     /// <remarks>Whitespace characters are ' ' and '\t'.</remarks>
-    public static int LastNonWhitespaceIndex(this string str) => str.LastIndexOfAny([' ', '\t']);
+    public static int LastNonWhitespaceIndex(this string str) => str.AsSpan().LastIndexOfAnyExcept(' ', '\t');
 }

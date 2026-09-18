@@ -1,4 +1,4 @@
-﻿namespace FluidX.Decorations;
+namespace FluidX.Decorations;
 
 public class ModelDecorationOptions
 {
@@ -26,8 +26,8 @@ public class ModelDecorationOptions
     public ModelDecorationGlyphMarginOptions? GlyphMargin { get; init; }
     public string? GlyphMarginClassName { get; init; }
     public string? LinesDecorationsClassName { get; init; }
-    public string? LineNumberClassName { get; init; }
-    public string[]? LineNumberHoverMessage { get; init; } // MarkdownString[]
+    public string? LineIndexClassName { get; init; }
+    public string[]? LineIndexHoverMessage { get; init; } // MarkdownString[]
     public string? LinesDecorationsTooltip { get; init; }
     public string? FirstLineDecorationClassName { get; init; }
     public string? MarginClassName { get; init; }

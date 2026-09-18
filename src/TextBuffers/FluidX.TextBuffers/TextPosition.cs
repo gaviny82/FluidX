@@ -1,23 +1,23 @@
-﻿namespace FluidX.TextBuffers;
+namespace FluidX.TextBuffers;
 
 /// <summary>
 /// A position in a text document.
 /// </summary>
-/// <param name="LineNumber">Line number (starts at 1)</param>
-/// <param name="Column">Column (the first character in a line is between column 1 and column 2)</param>
-public readonly record struct TextPosition(int LineNumber, int Column)
-    : ITextPosition, IComparable<TextPosition>, IEquatable<TextPosition>
+/// <param name="LineIndex">Line index from the start of the document. The first line in a document has index 0.</param>
+/// <param name="ColumnIndex">Zero-based UTF-16 offset from the start of the line; the line end is its length.</param>
+public readonly record struct TextPosition(int LineIndex, int ColumnIndex)
+    : IComparable<TextPosition>, IEquatable<TextPosition>
 {
     /// <summary>
     /// Derive a new position from this position.
     /// </summary>
-    /// <param name="deltaLineNumber">Line number delta</param>
-    /// <param name="deltaColumn">Column delta</param>
+    /// <param name="deltaLineIndex">Line index delta</param>
+    /// <param name="deltaColumnIndex">Column index delta</param>
     /// <returns></returns>
-    public TextPosition Delta(int deltaLineNumber = 0, int deltaColumn = 0) => this with
+    public TextPosition Delta(int deltaLineIndex = 0, int deltaColumnIndex = 0) => this with
     {
-        LineNumber = LineNumber + deltaLineNumber,
-        Column = Column + deltaColumn
+        LineIndex = LineIndex + deltaLineIndex,
+        ColumnIndex = ColumnIndex + deltaColumnIndex
     };
 
     /// <summary>
@@ -27,11 +27,11 @@ public readonly record struct TextPosition(int LineNumber, int Column)
     /// <returns>If the two positions are equal, the result will be <see langword="false"/>.</returns>
     public bool IsBefore(TextPosition other)
     {
-        if (LineNumber < other.LineNumber)
+        if (LineIndex < other.LineIndex)
             return true;
-        if (LineNumber > other.LineNumber)
+        if (LineIndex > other.LineIndex)
             return false;
-        return Column < other.Column;
+        return ColumnIndex < other.ColumnIndex;
     }
 
     /// <summary>
@@ -40,11 +40,11 @@ public readonly record struct TextPosition(int LineNumber, int Column)
     /// <returns>If the two positions are equal, the result will be <see langword="true"/>.</returns>
     public bool IsBeforeOrEqual(TextPosition other)
     {
-        if (LineNumber < other.LineNumber)
+        if (LineIndex < other.LineIndex)
             return true;
-        if (LineNumber > other.LineNumber)
+        if (LineIndex > other.LineIndex)
             return false;
-        return Column <= other.Column;
+        return ColumnIndex <= other.ColumnIndex;
     }
 
     /// <summary>
@@ -54,14 +54,14 @@ public readonly record struct TextPosition(int LineNumber, int Column)
     /// <returns>A value indicating the comparison between <see langword="this"/> and <paramref name="other"/>.</returns>
     public int CompareTo(TextPosition other)
     {
-        if (LineNumber == other.LineNumber)
-            return Column - other.Column;
+        if (LineIndex == other.LineIndex)
+            return ColumnIndex.CompareTo(other.ColumnIndex);
 
-        return LineNumber - LineNumber;
+        return LineIndex.CompareTo(other.LineIndex);
     }
 
     /// <summary>
     /// Convert to a human-readable representation.
     /// </summary>
-    public override string ToString() => $"({LineNumber}, {Column})";
+    public override string ToString() => $"({LineIndex}, {ColumnIndex})";
 }

@@ -1,4 +1,4 @@
-﻿namespace FluidX.TextBuffers;
+namespace FluidX.TextBuffers;
 
 /// <summary>
 /// Represents a read-only view of a text buffer that provides access to the raw text content of a document.
@@ -8,10 +8,10 @@ public interface IReadOnlyTextBuffer : IEquatable<IReadOnlyTextBuffer>
     /**
      * Definitions:
      * - Length: string length of a piece of text (Unicode characters outside the BMP have a length of 2).
-     * - Line number: number of lines from the start of the document (the first line in the document has line number 1).
-     * - Column number: length of characters from the start of the line (the first character in a line has column number 1),
+     * - Line index: number of lines from the start of the document (the first line in the document has line index 0).
+     * - Column index: length of characters from the start of the line (the first character in a line has column index 0),
      *                  including line break characters ("\r\n" has length 2, "\n" and "\r" have length 1),
-     *                  high surrogate characters occupy 2 columns.
+     *                  a surrogate pair occupies two UTF-16 column indices.
      * - Offset: length of characters from the first character in the document (the first character in the document has offset 0),
      *           including end-of-line sequences in previous lines ("\r\n" has length 2, "\n" and "\r" have length 1).
      * - Character count: number of Unicode characters in a piece of text (Unicode characters outside the BMP have a count of 1).
@@ -20,7 +20,7 @@ public interface IReadOnlyTextBuffer : IEquatable<IReadOnlyTextBuffer>
     #region Document properties
 
     /// <summary>
-    /// Total number of characters in the document, including end-of-line sequences. High surrogate characters occupy a length of 2.
+    /// Total number of characters in the document, including end-of-line sequences. A surrogate pair has length 2.
     /// </summary>
     int Length { get; }
 
@@ -63,7 +63,7 @@ public interface IReadOnlyTextBuffer : IEquatable<IReadOnlyTextBuffer>
     #region Text operations
 
     // TODO: Consider adding a general API that iterates over a range of text with zero allocation and compute a property from the text range.
-    // This replaces GetCharacterCountInRange, GetLineFirstNonWhitespaceColumn, GetLineLastNonWhitespaceColumn, etc.
+    // This replaces GetCharacterCountInRange, GetLineFirstNonWhitespaceColumnIndex, GetLineLastNonWhitespaceColumnIndex, etc.
 
     /// <summary>
     /// Get the text in a <see cref="TextRange"/>.
@@ -89,37 +89,37 @@ public interface IReadOnlyTextBuffer : IEquatable<IReadOnlyTextBuffer>
     /// <summary>
     /// Get the content of a line, excluding the end-of-line sequence.
     /// </summary>
-    /// <param name="lineNumber">Line number of the line.</param>
-    /// <returns>Content of the line at <paramref name="lineNumber"/>.</returns>
-    string GetLineContent(int lineNumber);
+    /// <param name="lineIndex">Line index of the line.</param>
+    /// <returns>Content of the line at <paramref name="lineIndex"/>.</returns>
+    string GetLineContent(int lineIndex);
 
     /// <summary>
     /// Get the end-of-line sequence of a line.
     /// </summary>
-    /// <param name="lineNumber">Line number of the line.</param>
-    /// <returns>The end-of-line sequence of the line at <paramref name="lineNumber"/>, either CR, LF, CRLF, or empty for the final line.</returns>
-    string GetLineEOL(int lineNumber);
+    /// <param name="lineIndex">Line index of the line.</param>
+    /// <returns>The end-of-line sequence of the line at <paramref name="lineIndex"/>, either CR, LF, CRLF, or empty for the final line.</returns>
+    string GetLineEOL(int lineIndex);
 
     /// <summary>
     /// Get the length of characters in a line, excluding the end-of-line sequence.
     /// </summary>
-    /// <param name="lineNumber">Line number of the line.</param>
-    /// <returns>Length of characters in line <paramref name="lineNumber"/>.</returns>
-    int GetLineLength(int lineNumber);
+    /// <param name="lineIndex">Line index of the line.</param>
+    /// <returns>Length of characters in line <paramref name="lineIndex"/>.</returns>
+    int GetLineLength(int lineIndex);
 
     /// <summary>
-    /// Get the first non-whitespace column number in a line.
+    /// Get the first non-whitespace column index in a line.
     /// </summary>
-    /// <param name="lineNumber">Line number of the line</param>
-    /// <returns>Column number of the first non-whitespace character</returns>
-    int GetLineFirstNonWhitespaceColumn(int lineNumber);
+    /// <param name="lineIndex">Line index of the line</param>
+    /// <returns>Zero-based index of the first non-whitespace character, or -1 if none exists.</returns>
+    int GetLineFirstNonWhitespaceColumnIndex(int lineIndex);
 
     /// <summary>
-    /// Get the last non-whitespace column number in a line.
+    /// Get the exclusive end column index of the last non-whitespace character in a line.
     /// </summary>
-    /// <param name="lineNumber">Line number of the line</param>
-    /// <returns>Column number of the last non-whitespace character</returns>
-    int GetLineLastNonWhitespaceColumn(int lineNumber);
+    /// <param name="lineIndex">Line index of the line</param>
+    /// <returns>Exclusive zero-based end index of the last non-whitespace character, or -1 if none exists.</returns>
+    int GetLineLastNonWhitespaceColumnIndex(int lineIndex);
 
     /// <summary>
     /// Get the <see langword="char"/> at a given <see cref="TextPosition"/>.

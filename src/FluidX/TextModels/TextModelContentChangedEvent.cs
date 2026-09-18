@@ -1,4 +1,4 @@
-﻿using FluidX.TextBuffers;
+using FluidX.TextBuffers;
 
 namespace FluidX.TextModels;
 
@@ -32,9 +32,9 @@ public class ModelRawLineChanged : ModelRawChange
     public override RawContentChangedType Type => RawContentChangedType.LineChanged;
 
     /// <summary>
-    /// The line that has changed (1-based)
+    /// The line that has changed (0-based)
     /// </summary>
-    public int LineNumber { get; }
+    public int LineIndex { get; }
     /// <summary>
     /// The new value of the line.
     /// </summary>
@@ -42,9 +42,9 @@ public class ModelRawLineChanged : ModelRawChange
 
     // TODO: InjectedText
 
-    public ModelRawLineChanged(int lineNumber, string detail)
+    public ModelRawLineChanged(int lineIndex, string detail)
     {
-        LineNumber = lineNumber;
+        LineIndex = lineIndex;
         Detail = detail;
     }
 }
@@ -52,28 +52,28 @@ public class ModelRawLineChanged : ModelRawChange
 public class ModelRawLinesDeleted : ModelRawChange
 {
     public override RawContentChangedType Type => RawContentChangedType.LinesDeleted;
-    public int FromLineNumber { get; }
-    public int ToLineNumber { get; }
-    public ModelRawLinesDeleted(int fromLineNumber, int toLineNumber)
+    public int FromLineIndex { get; }
+    public int ToLineIndex { get; }
+    public ModelRawLinesDeleted(int fromLineIndex, int toLineIndex)
     {
-        FromLineNumber = fromLineNumber;
-        ToLineNumber = toLineNumber;
+        FromLineIndex = fromLineIndex;
+        ToLineIndex = toLineIndex;
     }
 }
 
 public class ModelRawLinesInserted : ModelRawChange
 {
     public override RawContentChangedType Type => RawContentChangedType.LinesInserted;
-    public int FromLineNumber { get; }
-    public int ToLineNumber { get; }
+    public int FromLineIndex { get; }
+    public int ToLineIndex { get; }
     public string[] Details { get; }
 
     // TODO: InjectedText
 
-    public ModelRawLinesInserted(int fromLineNumber, int toLineNumber, string[] details)
+    public ModelRawLinesInserted(int fromLineIndex, int toLineIndex, string[] details)
     {
-        FromLineNumber = fromLineNumber;
-        ToLineNumber = toLineNumber;
+        FromLineIndex = fromLineIndex;
+        ToLineIndex = toLineIndex;
         Details = details;
     }
 }

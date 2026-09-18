@@ -179,74 +179,38 @@ public class Searcher
 {
     public readonly WordCharacterClassifier? _wordSeparators;
     private readonly Regex _searchRegex;
-    private int _prevMatchStartIndex;
-    private int _prevMatchLength;
+    private int _nextIndex;
 
     public Searcher(WordCharacterClassifier? wordSeparators, Regex searchRegex)
     {
         _wordSeparators = wordSeparators;
         _searchRegex = searchRegex;
-        _prevMatchStartIndex = -1;
-        _prevMatchLength = 0;
     }
 
-    public void Reset(int lastIndex)
+    public void Reset(int startIndex)
     {
-        _prevMatchStartIndex = -1;
-        _prevMatchLength = 0;
+        _nextIndex = startIndex;
     }
 
     public Match? Next(string text)
     {
-        int textLength = text.Length;
-        Match? match = null;
-
-        do
+        while (_nextIndex <= text.Length)
         {
-            if (_prevMatchStartIndex + _prevMatchLength == textLength)
-            {
-                // Reached end of string
-                return null;
-            }
-
-            match = _searchRegex.Match(text, _prevMatchStartIndex + Math.Max(_prevMatchLength, 0));
+            Match match = _searchRegex.Match(text, _nextIndex);
             if (!match.Success)
                 return null;
 
-            int matchStartIndex = match.Index;
-            int matchLength = match.Length;
-
-            // Prevent infinite loop if regex matches the same span repeatedly
-            if (matchStartIndex == _prevMatchStartIndex && matchLength == _prevMatchLength)
+            _nextIndex = match.Index + match.Length;
+            if (match.Length == 0)
             {
-                if (matchLength == 0)
-                {
-                    // the search result is an empty string and won't advance `regex.lastIndex`, so `regex.exec` will stuck here
-                    // we attempt to recover from that by advancing by two if surrogate pair found and by one otherwise
-
-                    // Advance by 1 (or 2 if surrogate pair)
-                    if (char.IsSurrogatePair(text, matchStartIndex))
-                        _prevMatchStartIndex += 2;
-                    else
-                        _prevMatchStartIndex += 1;
-                    continue;
-                }
-                // Exit early if the regex matches the same range twice
-                return null;
+                // Advance past empty matches, preserving surrogate pairs.
+                _nextIndex += match.Index < text.Length && char.IsSurrogatePair(text, match.Index) ? 2 : 1;
             }
-
-            _prevMatchStartIndex = matchStartIndex;
-            _prevMatchLength = matchLength;
 
             if (_wordSeparators is null ||
-                SearchUtils.IsValidMatch(_wordSeparators, text, textLength, matchStartIndex, matchLength))
-            {
+                SearchUtils.IsValidMatch(_wordSeparators, text, text.Length, match.Index, match.Length))
                 return match;
-            }
-
-            // Otherwise, keep searching
-        } while (match is null);
-
+        }
         return null;
     }
 }

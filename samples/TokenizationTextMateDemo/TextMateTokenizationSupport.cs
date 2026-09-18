@@ -73,7 +73,7 @@ internal sealed class TextMateTokenizationSupport : ITokenizationSupport
 
     private sealed class NoOpBackgroundTokenizer : IBackgroundTokenizer
     {
-        public void RequestTokens(int startLineNumber, int endLineNumberExclusive)
+        public void RequestTokens(int startLineIndex, int endLineIndexExclusive)
         {
         }
 

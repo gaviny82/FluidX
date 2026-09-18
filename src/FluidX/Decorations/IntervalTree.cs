@@ -1,4 +1,4 @@
-﻿namespace FluidX.Decorations;
+namespace FluidX.Decorations;
 
 public class IntervalTree
 {
@@ -107,7 +107,7 @@ public class IntervalTree
         initialNode.SetCachedOffsets(nodeStart, nodeEnd, cachedVersionId);
     }
 
-    private static bool adjustMarkerBeforeColumn(
+    private static bool adjustMarkerBeforeColumnIndex(
         int markerOffset,
         bool markerStickToPreviousCharacter,
         int checkOffset,
@@ -166,10 +166,10 @@ public class IntervalTree
             var moveSemantics = forceMoveMarkers
                 ? MarkerMoveSemantics.ForceMove
                 : (deletingCnt > 0 ? MarkerMoveSemantics.ForceStay : MarkerMoveSemantics.MarkerDefined);
-            if (!startDone && adjustMarkerBeforeColumn(nodeStart, startStickToPreviousCharacter, start, moveSemantics)) {
+            if (!startDone && adjustMarkerBeforeColumnIndex(nodeStart, startStickToPreviousCharacter, start, moveSemantics)) {
                 startDone = true;
             }
-            if (!endDone && adjustMarkerBeforeColumn(nodeEnd, endStickToPreviousCharacter, start, moveSemantics))
+            if (!endDone && adjustMarkerBeforeColumnIndex(nodeEnd, endStickToPreviousCharacter, start, moveSemantics))
             {
                 endDone = true;
             }
@@ -180,11 +180,11 @@ public class IntervalTree
             var moveSemantics = deletingCnt > insertingCnt
                 ? MarkerMoveSemantics.ForceStay
                 : MarkerMoveSemantics.MarkerDefined;
-            if (!startDone && adjustMarkerBeforeColumn(nodeStart, startStickToPreviousCharacter, start + commonLength, moveSemantics))
+            if (!startDone && adjustMarkerBeforeColumnIndex(nodeStart, startStickToPreviousCharacter, start + commonLength, moveSemantics))
             {
                 startDone = true;
             }
-            if (!endDone && adjustMarkerBeforeColumn(nodeEnd, endStickToPreviousCharacter, start + commonLength, moveSemantics))
+            if (!endDone && adjustMarkerBeforeColumnIndex(nodeEnd, endStickToPreviousCharacter, start + commonLength, moveSemantics))
             {
                 endDone = true;
             }
@@ -194,12 +194,12 @@ public class IntervalTree
             var moveSemantics = forceMoveMarkers
                 ? MarkerMoveSemantics.ForceMove
                 : MarkerMoveSemantics.MarkerDefined;
-            if (!startDone && adjustMarkerBeforeColumn(nodeStart, startStickToPreviousCharacter, end, moveSemantics))
+            if (!startDone && adjustMarkerBeforeColumnIndex(nodeStart, startStickToPreviousCharacter, end, moveSemantics))
             {
                 node.Start = start + insertingCnt;
                 startDone = true;
             }
-            if (!endDone && adjustMarkerBeforeColumn(nodeEnd, endStickToPreviousCharacter, end, moveSemantics))
+            if (!endDone && adjustMarkerBeforeColumnIndex(nodeEnd, endStickToPreviousCharacter, end, moveSemantics))
             {
                 node.End = start + insertingCnt;
                 endDone = true;
@@ -207,14 +207,14 @@ public class IntervalTree
         }
 
         // Finish
-        int deltaColumn = (insertingCnt - deletingCnt);
+        int deltaColumnIndex = (insertingCnt - deletingCnt);
         if (!startDone)
         {
-            node.Start = Math.Max(0, nodeStart + deltaColumn);
+            node.Start = Math.Max(0, nodeStart + deltaColumnIndex);
         }
         if (!endDone)
         {
-            node.End = Math.Max(0, nodeEnd + deltaColumn);
+            node.End = Math.Max(0, nodeEnd + deltaColumnIndex);
         }
 
         if (node.Start > node.End)
