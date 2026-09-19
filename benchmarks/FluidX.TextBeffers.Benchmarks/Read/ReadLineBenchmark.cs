@@ -23,7 +23,7 @@ public class ReadLineBenchmark
     private PreGeneratedEdit[] _randomEdits = null!;
     private PreGeneratedEdit[] _sequentialEdits = null!;
     private ITextBuffer _buffer = null!;
-    private int _lineNumber;
+    private int _lineIndex;
 
     // Cache of line array implementation to avoid re-creating it for each benchmark iteration, as it is slow to create.
     private static LineArrayTextBuffer s_lineArrayBufferCacheSingleEdit = null!;
@@ -81,7 +81,7 @@ public class ReadLineBenchmark
     public void IterationSetupRead()
     {
         _buffer = BufferFactory.CreateBuffer(Implementation, _fileText);
-        _lineNumber = Math.Max(1, _buffer.LineCount / 2);
+        _lineIndex = _buffer.LineCount / 2;
     }
 
     [IterationSetup(Target = nameof(ReadLineAfterSingleEdit))]
@@ -90,12 +90,12 @@ public class ReadLineBenchmark
         if (Implementation == BufferImplementation.LineArray)
         {
             _buffer = s_lineArrayBufferCacheSingleEdit;
-            _lineNumber = Math.Max(1, _buffer.LineCount / 2);
+            _lineIndex = _buffer.LineCount / 2;
             return;
         }
         _buffer = BufferFactory.CreateBuffer(Implementation, _fileText);
         EditHelper.ApplyEdits(_buffer, [_randomEdits[0]]);
-        _lineNumber = _buffer.LineCount / 2;
+        _lineIndex = _buffer.LineCount / 2;
     }
 
     [IterationSetup(Target = nameof(ReadLineAfter1000RandomEdits))]
@@ -104,12 +104,12 @@ public class ReadLineBenchmark
         if (Implementation == BufferImplementation.LineArray)
         {
             _buffer = s_lineArrayBufferCache1000RandomEdits;
-            _lineNumber = Math.Max(1, _buffer.LineCount / 2);
+            _lineIndex = _buffer.LineCount / 2;
             return;
         }
         _buffer = BufferFactory.CreateBuffer(Implementation, _fileText);
         EditHelper.ApplyEdits(_buffer, _randomEdits);
-        _lineNumber = _buffer.LineCount / 2;
+        _lineIndex = _buffer.LineCount / 2;
     }
 
     [IterationSetup(Target = nameof(ReadLineAfter1000SequentialEdits))]
@@ -118,35 +118,35 @@ public class ReadLineBenchmark
         if (Implementation == BufferImplementation.LineArray)
         {
             _buffer = s_lineArrayBufferCache1000SequentialEdits;
-            _lineNumber = Math.Max(1, _buffer.LineCount / 2);
+            _lineIndex = _buffer.LineCount / 2;
             return;
         }
         _buffer = BufferFactory.CreateBuffer(Implementation, _fileText);
         EditHelper.ApplyEdits(_buffer, _sequentialEdits);
-        _lineNumber = _buffer.LineCount / 2;
+        _lineIndex = _buffer.LineCount / 2;
     }
 
     [Benchmark]
     public string ReadLine()
     {
-        return _buffer.GetLineContent(_lineNumber);
+        return _buffer.GetLineContent(_lineIndex);
     }
 
     [Benchmark]
     public string ReadLineAfterSingleEdit()
     {
-        return _buffer.GetLineContent(_lineNumber);
+        return _buffer.GetLineContent(_lineIndex);
     }
 
     [Benchmark]
     public string ReadLineAfter1000RandomEdits()
     {
-        return _buffer.GetLineContent(_lineNumber);
+        return _buffer.GetLineContent(_lineIndex);
     }
 
     [Benchmark]
     public string ReadLineAfter1000SequentialEdits()
     {
-        return _buffer.GetLineContent(_lineNumber);
+        return _buffer.GetLineContent(_lineIndex);
     }
 }

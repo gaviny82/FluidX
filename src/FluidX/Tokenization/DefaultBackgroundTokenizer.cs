@@ -1,4 +1,4 @@
-﻿using FluidX.Tokenization.TokenStores;
+using FluidX.Tokenization.TokenStores;
 using System.Diagnostics;
 
 namespace FluidX.Tokenization;
@@ -153,18 +153,18 @@ public class DefaultBackgroundTokenizer : IDisposable, IBackgroundTokenizer
 
     /// <summary>
     /// Tokenizes the next invalid line (if any) and appends the result to the builder.
-    /// Returns the tokenized line number or lineCount+1 if none were processed.
+    /// Returns the tokenized line index or lineCount if none were processed.
     /// </summary>
     private int TokenizeOneInvalidLine(ContiguousMultilineTokensBuilder builder)
     {
         var firstInvalid = _tokenizerWithStateStore.GetFirstInvalidLine();
         if (firstInvalid == null)
         {
-            return _tokenizerWithStateStore.TextModel.TextBuffer.LineCount + 1;
+            return _tokenizerWithStateStore.TextModel.TextBuffer.LineCount;
         }
 
-        _tokenizerWithStateStore.UpdateTokensUntilLine(builder, firstInvalid.Value.lineNumber);
-        return firstInvalid.Value.lineNumber;
+        _tokenizerWithStateStore.UpdateTokensUntilLine(builder, firstInvalid.Value.lineIndex);
+        return firstInvalid.Value.lineIndex;
     }
 
     /// <summary>
@@ -194,8 +194,8 @@ public class DefaultBackgroundTokenizer : IDisposable, IBackgroundTokenizer
         GC.SuppressFinalize(this);
     }
 
-    public void RequestTokens(int startLineNumber, int endLineNumberExclusive)
+    public void RequestTokens(int startLineIndex, int endLineIndexExclusive)
     {
-        _tokenizerWithStateStore.Store.InvalidateEndStateRange(new Range(startLineNumber, endLineNumberExclusive));
+        _tokenizerWithStateStore.Store.InvalidateEndStateRange(new Range(startLineIndex, endLineIndexExclusive));
     }
 }

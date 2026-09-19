@@ -71,15 +71,15 @@ namespace FluidX.TextBuffers.Tests
         public void MixedEOL_ReadsUseActualLineBreakLengths()
         {
             var buffer = CreateBuffer("one\r\ntwo\nthree\rfour");
-            var fullRange = new TextRange(1, 1, 4, 5);
+            var fullRange = new TextRange(0, 0, 3, 4);
 
             CollectionAssert.AreEqual(new[] { "one", "two", "three", "four" }, buffer.GetLinesContent().ToArray());
             Assert.AreEqual("one\r\ntwo\nthree\rfour", buffer.GetTextInRange(fullRange));
             Assert.AreEqual(19, buffer.GetTextLengthInRange(fullRange));
-            Assert.AreEqual("\r\n", buffer.GetLineEOL(1));
-            Assert.AreEqual("\n", buffer.GetLineEOL(2));
-            Assert.AreEqual("\r", buffer.GetLineEOL(3));
-            Assert.AreEqual("", buffer.GetLineEOL(4));
+            Assert.AreEqual("\r\n", buffer.GetLineEOL(0));
+            Assert.AreEqual("\n", buffer.GetLineEOL(1));
+            Assert.AreEqual("\r", buffer.GetLineEOL(2));
+            Assert.AreEqual("", buffer.GetLineEOL(3));
         }
 
         [TestMethod]
@@ -89,7 +89,7 @@ namespace FluidX.TextBuffers.Tests
 
             Assert.AreEqual(5, buffer.Length);
             Assert.AreEqual('\uFEFF', buffer.GetChar(0));
-            Assert.AreEqual("\uFEFFtext", buffer.GetTextInRange(new TextRange(1, 1, 1, 6)));
+            Assert.AreEqual("\uFEFFtext", buffer.GetTextInRange(new TextRange(0, 0, 0, 5)));
 
             var snapshot = buffer.CreateSnapshot(preserveBOM: false);
             Assert.AreEqual("\uFEFFtext", snapshot.Read());
@@ -100,7 +100,7 @@ namespace FluidX.TextBuffers.Tests
         {
             var buffer = CreateBuffer("one\ntwo");
             buffer.ApplyEdits(
-                [new TextReplacement(new TextRange(1, 4, 1, 4), "\r\ninserted")],
+                [new TextReplacement(new TextRange(0, 3, 0, 3), "\r\ninserted")],
                 false);
 
             CollectionAssert.AreEqual(new[] { "one", "inserted", "two" }, buffer.GetLinesContent().ToArray());
@@ -112,7 +112,7 @@ namespace FluidX.TextBuffers.Tests
         {
             var buffer = CreateBuffer("one\r\ntwo\nthree\rfour");
 
-            var fullRange = new TextRange(1, 1, 4, 5);
+            var fullRange = new TextRange(0, 0, 3, 4);
             Assert.AreEqual("one\r\ntwo\nthree\rfour", buffer.GetTextInRange(fullRange));
             Assert.AreEqual(buffer.Length, buffer.GetTextLengthInRange(fullRange));
         }
@@ -123,9 +123,9 @@ namespace FluidX.TextBuffers.Tests
             var buffer = new LineArrayTextBuffer("one\rtwo\r\nthree\nfour");
 
             CollectionAssert.AreEqual(new[] { "one", "two", "three", "four" }, buffer.GetLinesContent().ToArray());
-            Assert.AreEqual("one\rtwo\r\nthree\nfour", buffer.GetTextInRange(new TextRange(1, 1, 4, 5)));
-            Assert.AreEqual("\r", buffer.GetLineEOL(1));
-            Assert.AreEqual("\r\n", buffer.GetLineEOL(2));
+            Assert.AreEqual("one\rtwo\r\nthree\nfour", buffer.GetTextInRange(new TextRange(0, 0, 3, 4)));
+            Assert.AreEqual("\r", buffer.GetLineEOL(0));
+            Assert.AreEqual("\r\n", buffer.GetLineEOL(1));
         }
 
         [TestMethod]
@@ -180,7 +180,7 @@ namespace FluidX.TextBuffers.Tests
             Assert.AreEqual("one\r\ntwo\r\nthree\r\nfour", buffer.CreateSnapshot(false).Read());
             CollectionAssert.AreEqual(
                 new[] { "\r\n", "\r\n", "\r\n", "" },
-                Enumerable.Range(1, buffer.LineCount).Select(buffer.GetLineEOL).ToArray());
+                Enumerable.Range(0, buffer.LineCount).Select(buffer.GetLineEOL).ToArray());
         }
 
         [TestMethod]

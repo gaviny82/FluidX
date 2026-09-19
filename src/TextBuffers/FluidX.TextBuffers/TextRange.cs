@@ -1,92 +1,93 @@
-﻿namespace FluidX.TextBuffers;
+namespace FluidX.TextBuffers;
 
 /// <summary>
-/// A range in a text document.
+/// A range in a text document with zero-based line and UTF-16 column indices.
+/// The start is inclusive and the end is exclusive.
 /// </summary>
-public readonly record struct TextRange : ITextRange, IEquatable<TextRange>
+public readonly record struct TextRange : IEquatable<TextRange>
 {
-    public int StartLineNumber { get; }
-    public int StartColumn { get; }
-    public int EndLineNumber { get; }
-    public int EndColumn { get; }
+    public int StartLineIndex { get; }
+    public int StartColumnIndex { get; }
+    public int EndLineIndex { get; }
+    public int EndColumnIndex { get; }
 
-    public TextPosition StartPosition => new(StartLineNumber, StartColumn);
-    public TextPosition EndPosition => new(EndLineNumber, EndColumn);
-    public bool IsEmpty => StartLineNumber == EndLineNumber && StartColumn == EndColumn;
-    public bool SpansMultipleLines => EndLineNumber > StartLineNumber;
+    public TextPosition StartPosition => new(StartLineIndex, StartColumnIndex);
+    public TextPosition EndPosition => new(EndLineIndex, EndColumnIndex);
+    public bool IsEmpty => StartLineIndex == EndLineIndex && StartColumnIndex == EndColumnIndex;
+    public bool SpansMultipleLines => EndLineIndex > StartLineIndex;
 
-    public TextRange(int startLineNumber, int startColumn, int endLineNumber, int endColumn)
+    public TextRange(int startLineIndex, int startColumnIndex, int endLineIndex, int endColumnIndex)
     {
         // When the start position is after the end position, set the start position to the end position
-        if (startLineNumber > endLineNumber || (startLineNumber == endLineNumber && startColumn > endColumn))
+        if (startLineIndex > endLineIndex || (startLineIndex == endLineIndex && startColumnIndex > endColumnIndex))
         {
-            StartLineNumber = endLineNumber;
-            StartColumn = endColumn;
-            EndLineNumber = startLineNumber;
-            EndColumn = startColumn;
+            StartLineIndex = endLineIndex;
+            StartColumnIndex = endColumnIndex;
+            EndLineIndex = startLineIndex;
+            EndColumnIndex = startColumnIndex;
         }
         else
         {
-            StartLineNumber = startLineNumber;
-            StartColumn = startColumn;
-            EndLineNumber = endLineNumber;
-            EndColumn = endColumn;
+            StartLineIndex = startLineIndex;
+            StartColumnIndex = startColumnIndex;
+            EndLineIndex = endLineIndex;
+            EndColumnIndex = endColumnIndex;
         }
     }
 
     public TextRange(TextPosition start, TextPosition end) : this(
-        start.LineNumber,
-        start.Column,
-        end.LineNumber,
-        end.Column)
+        start.LineIndex,
+        start.ColumnIndex,
+        end.LineIndex,
+        end.ColumnIndex)
     { }
 
     #region Overlapping Checks
 
     public bool ContainsPosition(TextPosition position)
     {
-        if (position.LineNumber < StartLineNumber || position.LineNumber > EndLineNumber)
+        if (position.LineIndex < StartLineIndex || position.LineIndex > EndLineIndex)
             return false;
-        if (position.LineNumber == StartLineNumber && position.Column < StartColumn)
+        if (position.LineIndex == StartLineIndex && position.ColumnIndex < StartColumnIndex)
             return false;
-        if (position.LineNumber == EndLineNumber && position.Column > EndColumn)
+        if (position.LineIndex == EndLineIndex && position.ColumnIndex > EndColumnIndex)
             return false;
         return true;
     }
 
     public bool StrictContainsPosition(TextPosition position)
     {
-        if (position.LineNumber < StartLineNumber || position.LineNumber > EndLineNumber)
+        if (position.LineIndex < StartLineIndex || position.LineIndex > EndLineIndex)
             return false;
-        if (position.LineNumber == StartLineNumber && position.Column <= StartColumn)
+        if (position.LineIndex == StartLineIndex && position.ColumnIndex <= StartColumnIndex)
             return false;
-        if (position.LineNumber == EndLineNumber && position.Column >= EndColumn)
+        if (position.LineIndex == EndLineIndex && position.ColumnIndex >= EndColumnIndex)
             return false;
         return true;
     }
 
     public bool ContainsRange(TextRange range)
     {
-        if (range.StartLineNumber < StartLineNumber || range.EndLineNumber < StartLineNumber)
+        if (range.StartLineIndex < StartLineIndex || range.EndLineIndex < StartLineIndex)
             return false;
-        if (range.StartLineNumber > EndLineNumber || range.EndLineNumber > EndLineNumber)
+        if (range.StartLineIndex > EndLineIndex || range.EndLineIndex > EndLineIndex)
             return false;
-        if (range.StartLineNumber == StartLineNumber && range.StartColumn < StartColumn)
+        if (range.StartLineIndex == StartLineIndex && range.StartColumnIndex < StartColumnIndex)
             return false;
-        if (range.EndLineNumber == EndLineNumber && range.EndColumn > EndColumn)
+        if (range.EndLineIndex == EndLineIndex && range.EndColumnIndex > EndColumnIndex)
             return false;
         return true;
     }
 
     public bool StrictContainsRange(TextRange range)
     {
-        if (range.StartLineNumber < StartLineNumber || range.EndLineNumber < StartLineNumber)
+        if (range.StartLineIndex < StartLineIndex || range.EndLineIndex < StartLineIndex)
             return false;
-        if (range.StartLineNumber > EndLineNumber || range.EndLineNumber > EndLineNumber)
+        if (range.StartLineIndex > EndLineIndex || range.EndLineIndex > EndLineIndex)
             return false;
-        if (range.StartLineNumber == StartLineNumber && range.StartColumn <= StartColumn)
+        if (range.StartLineIndex == StartLineIndex && range.StartColumnIndex <= StartColumnIndex)
             return false;
-        if (range.EndLineNumber == EndLineNumber && range.EndColumn >= EndColumn)
+        if (range.EndLineIndex == EndLineIndex && range.EndColumnIndex >= EndColumnIndex)
             return false;
         return true;
     }
@@ -94,10 +95,10 @@ public readonly record struct TextRange : ITextRange, IEquatable<TextRange>
     public bool IsIntersectingOrTouching(TextRange range)
     {
         // Check if `this` is before `range`
-        if (EndLineNumber < range.StartLineNumber || (EndLineNumber == range.StartLineNumber && EndColumn < range.StartColumn))
+        if (EndLineIndex < range.StartLineIndex || (EndLineIndex == range.StartLineIndex && EndColumnIndex < range.StartColumnIndex))
             return false;
         // Check if `range` is before `this`
-        if (range.EndLineNumber < StartLineNumber || (range.EndLineNumber == StartLineNumber && range.EndColumn < StartColumn))
+        if (range.EndLineIndex < StartLineIndex || (range.EndLineIndex == StartLineIndex && range.EndColumnIndex < StartColumnIndex))
             return false;
         // These ranges must intersect
         return true;
@@ -106,10 +107,10 @@ public readonly record struct TextRange : ITextRange, IEquatable<TextRange>
     public bool IsIntersecting(TextRange range)
     {
         // Check if `this` is before `range`
-        if (EndLineNumber < range.StartLineNumber || (EndLineNumber == range.StartLineNumber && EndColumn <= range.StartColumn))
+        if (EndLineIndex < range.StartLineIndex || (EndLineIndex == range.StartLineIndex && EndColumnIndex <= range.StartColumnIndex))
             return false;
         // Check if `range` is before `this`
-        if (range.EndLineNumber < StartLineNumber || (range.EndLineNumber == StartLineNumber && range.EndColumn <= StartColumn))
+        if (range.EndLineIndex < StartLineIndex || (range.EndLineIndex == StartLineIndex && range.EndColumnIndex <= StartColumnIndex))
             return false;
         // These ranges must intersect
         return true;
@@ -121,98 +122,98 @@ public readonly record struct TextRange : ITextRange, IEquatable<TextRange>
 
     public TextRange PlusRange(TextRange range)
     {
-        int startLineNumber, startColumn, endLineNumber, endColumn;
+        int startLineIndex, startColumnIndex, endLineIndex, endColumnIndex;
 
-        if (range.StartLineNumber < StartLineNumber)
+        if (range.StartLineIndex < StartLineIndex)
         {
-            startLineNumber = range.StartLineNumber;
-            startColumn = range.StartColumn;
+            startLineIndex = range.StartLineIndex;
+            startColumnIndex = range.StartColumnIndex;
         }
-        else if (range.StartLineNumber == StartLineNumber)
+        else if (range.StartLineIndex == StartLineIndex)
         {
-            startLineNumber = range.StartLineNumber;
-            startColumn = Math.Min(range.StartColumn, StartColumn);
+            startLineIndex = range.StartLineIndex;
+            startColumnIndex = Math.Min(range.StartColumnIndex, StartColumnIndex);
         }
         else
         {
-            startLineNumber = StartLineNumber;
-            startColumn = StartColumn;
+            startLineIndex = StartLineIndex;
+            startColumnIndex = StartColumnIndex;
         }
 
-        if (range.EndLineNumber > EndLineNumber)
+        if (range.EndLineIndex > EndLineIndex)
         {
-            endLineNumber = range.EndLineNumber;
-            endColumn = range.EndColumn;
+            endLineIndex = range.EndLineIndex;
+            endColumnIndex = range.EndColumnIndex;
         }
-        else if (range.EndLineNumber == EndLineNumber)
+        else if (range.EndLineIndex == EndLineIndex)
         {
-            endLineNumber = range.EndLineNumber;
-            endColumn = Math.Max(range.EndColumn, EndColumn);
+            endLineIndex = range.EndLineIndex;
+            endColumnIndex = Math.Max(range.EndColumnIndex, EndColumnIndex);
         }
         else
         {
-            endLineNumber = EndLineNumber;
-            endColumn = EndColumn;
+            endLineIndex = EndLineIndex;
+            endColumnIndex = EndColumnIndex;
         }
 
-        return new TextRange(startLineNumber, startColumn, endLineNumber, endColumn);
+        return new TextRange(startLineIndex, startColumnIndex, endLineIndex, endColumnIndex);
     }
 
     public TextRange? Intersection(TextRange range)
     {
-        int resultStartLineNumber = StartLineNumber;
-        int resultStartColumn = StartColumn;
-        int resultEndLineNumber = EndLineNumber;
-        int resultEndColumn = EndColumn;
+        int resultStartLineIndex = StartLineIndex;
+        int resultStartColumnIndex = StartColumnIndex;
+        int resultEndLineIndex = EndLineIndex;
+        int resultEndColumnIndex = EndColumnIndex;
 
-        int otherStartLineNumber = range.StartLineNumber;
-        int otherStartColumn = range.StartColumn;
-        int otherEndLineNumber = range.EndLineNumber;
-        int otherEndColumn = range.EndColumn;
+        int otherStartLineIndex = range.StartLineIndex;
+        int otherStartColumnIndex = range.StartColumnIndex;
+        int otherEndLineIndex = range.EndLineIndex;
+        int otherEndColumnIndex = range.EndColumnIndex;
 
-        if (resultStartLineNumber < otherStartLineNumber)
+        if (resultStartLineIndex < otherStartLineIndex)
         {
-            resultStartLineNumber = otherStartLineNumber;
-            resultStartColumn = otherStartColumn;
+            resultStartLineIndex = otherStartLineIndex;
+            resultStartColumnIndex = otherStartColumnIndex;
         }
-        else if (resultStartLineNumber == otherStartLineNumber)
+        else if (resultStartLineIndex == otherStartLineIndex)
         {
-            resultStartColumn = Math.Max(resultStartColumn, otherStartColumn);
+            resultStartColumnIndex = Math.Max(resultStartColumnIndex, otherStartColumnIndex);
         }
 
-        if (resultEndLineNumber > otherEndLineNumber)
+        if (resultEndLineIndex > otherEndLineIndex)
         {
-            resultEndLineNumber = otherEndLineNumber;
-            resultEndColumn = otherEndColumn;
+            resultEndLineIndex = otherEndLineIndex;
+            resultEndColumnIndex = otherEndColumnIndex;
         }
-        else if (resultEndLineNumber == otherEndLineNumber)
+        else if (resultEndLineIndex == otherEndLineIndex)
         {
-            resultEndColumn = Math.Min(resultEndColumn, otherEndColumn);
+            resultEndColumnIndex = Math.Min(resultEndColumnIndex, otherEndColumnIndex);
         }
 
         // Check if selection is now empty
-        if (resultStartLineNumber > resultEndLineNumber)
+        if (resultStartLineIndex > resultEndLineIndex)
             return null;
-        if (resultStartLineNumber == resultEndLineNumber && resultStartColumn > resultEndColumn)
+        if (resultStartLineIndex == resultEndLineIndex && resultStartColumnIndex > resultEndColumnIndex)
             return null;
 
-        return new TextRange(resultStartLineNumber, resultStartColumn, resultEndLineNumber, resultEndColumn);
+        return new TextRange(resultStartLineIndex, resultStartColumnIndex, resultEndLineIndex, resultEndColumnIndex);
     }
 
-    public TextRange WithNewEndPosition(int endLineNumber, int endColumn)
-        => new(StartLineNumber, StartColumn, endLineNumber, endColumn);
+    public TextRange WithNewEndPosition(int endLineIndex, int endColumnIndex)
+        => new(StartLineIndex, StartColumnIndex, endLineIndex, endColumnIndex);
 
-    public TextRange WithNewStartPosition(int startLineNumber, int startColumn)
-        => new(startLineNumber, startColumn, EndLineNumber, EndColumn);
+    public TextRange WithNewStartPosition(int startLineIndex, int startColumnIndex)
+        => new(startLineIndex, startColumnIndex, EndLineIndex, EndColumnIndex);
 
     public TextRange CollapseToStart()
-        => new(StartLineNumber, StartColumn, StartLineNumber, StartColumn);
+        => new(StartLineIndex, StartColumnIndex, StartLineIndex, StartColumnIndex);
 
     public TextRange CollapseToEnd()
-        => new(EndLineNumber, EndColumn, EndLineNumber, EndColumn);
+        => new(EndLineIndex, EndColumnIndex, EndLineIndex, EndColumnIndex);
 
     public TextRange WithLineDelta(int lineCount)
-        => new(StartLineNumber + lineCount, StartColumn, EndLineNumber + lineCount, EndColumn);
+        => new(StartLineIndex + lineCount, StartColumnIndex, EndLineIndex + lineCount, EndColumnIndex);
 
     #endregion
 
@@ -220,51 +221,51 @@ public readonly record struct TextRange : ITextRange, IEquatable<TextRange>
 
     public static int CompareRangesUsingStarts(TextRange a, TextRange b)
     {
-        int aStartLineNumber = a.StartLineNumber;
-        int bStartLineNumber = b.StartLineNumber;
+        int aStartLineIndex = a.StartLineIndex;
+        int bStartLineIndex = b.StartLineIndex;
 
-        if (aStartLineNumber == bStartLineNumber)
+        if (aStartLineIndex == bStartLineIndex)
         {
-            int aStartColumn = a.StartColumn;
-            int bStartColumn = b.StartColumn;
+            int aStartColumnIndex = a.StartColumnIndex;
+            int bStartColumnIndex = b.StartColumnIndex;
 
-            if (aStartColumn == bStartColumn)
+            if (aStartColumnIndex == bStartColumnIndex)
             {
-                int aEndLineNumber = a.EndLineNumber;
-                int bEndLineNumber = b.EndLineNumber;
+                int aEndLineIndex = a.EndLineIndex;
+                int bEndLineIndex = b.EndLineIndex;
 
-                if (aEndLineNumber == bEndLineNumber)
+                if (aEndLineIndex == bEndLineIndex)
                 {
-                    int aEndColumn = a.EndColumn;
-                    int bEndColumn = b.EndColumn;
-                    return aEndColumn - bEndColumn;
+                    int aEndColumnIndex = a.EndColumnIndex;
+                    int bEndColumnIndex = b.EndColumnIndex;
+                    return aEndColumnIndex - bEndColumnIndex;
                 }
-                return aEndLineNumber - bEndLineNumber;
+                return aEndLineIndex - bEndLineIndex;
             }
-            return aStartColumn - bStartColumn;
+            return aStartColumnIndex - bStartColumnIndex;
         }
-        return aStartLineNumber - bStartLineNumber;
+        return aStartLineIndex - bStartLineIndex;
     }
 
     public static int CompareRangesUsingEnds(TextRange a, TextRange b)
     {
-        if (a.EndLineNumber == b.EndLineNumber)
+        if (a.EndLineIndex == b.EndLineIndex)
         {
-            if (a.EndColumn == b.EndColumn)
+            if (a.EndColumnIndex == b.EndColumnIndex)
             {
-                if (a.StartLineNumber == b.StartLineNumber)
+                if (a.StartLineIndex == b.StartLineIndex)
                 {
-                    return a.StartColumn - b.StartColumn;
+                    return a.StartColumnIndex - b.StartColumnIndex;
                 }
-                return a.StartLineNumber - b.StartLineNumber;
+                return a.StartLineIndex - b.StartLineIndex;
             }
-            return a.EndColumn - b.EndColumn;
+            return a.EndColumnIndex - b.EndColumnIndex;
         }
-        return a.EndLineNumber - b.EndLineNumber;
+        return a.EndLineIndex - b.EndLineIndex;
     }
 
     #endregion
 
     public override string ToString()
-        => $"[{StartLineNumber},{StartColumn} -> {EndLineNumber},{EndColumn}]";
+        => $"[{StartLineIndex},{StartColumnIndex} -> {EndLineIndex},{EndColumnIndex}]";
 }

@@ -1,4 +1,4 @@
-﻿using FluidX.TextModels;
+using FluidX.TextModels;
 using System.Runtime.InteropServices;
 
 namespace FluidX.Tokenization;
@@ -6,28 +6,28 @@ namespace FluidX.Tokenization;
 public class TrackingTokenizationStateStore
 {
     private readonly List<ITokenizerState?> _tokenizationStateStore = [];
-    private readonly RangePriorityQueue _invalidEndStatesLineNumbers = new();
+    private readonly RangePriorityQueue _invalidEndStatesLineIndices = new();
     private int _lineCount;
 
     public TrackingTokenizationStateStore(int lineCount)
     {
-        _tokenizationStateStore.AddRange(Enumerable.Repeat<ITokenizerState?>(null, lineCount + 1));
-        _invalidEndStatesLineNumbers.AddRange(new Range(1, lineCount + 1));
+        _tokenizationStateStore.AddRange(Enumerable.Repeat<ITokenizerState?>(null, lineCount));
+        _invalidEndStatesLineIndices.AddRange(new Range(0, lineCount));
         _lineCount = lineCount;
     }
 
     #region TokenizationStateStore Operations
 
-    public ITokenizerState? GetEndState(int lineNumber)
-        => _tokenizationStateStore[lineNumber];
+    public ITokenizerState? GetEndState(int lineIndex)
+        => _tokenizationStateStore[lineIndex];
 
-    private bool SetEndStateInternal(int lineNumber, ITokenizerState state)
+    private bool SetEndStateInternal(int lineIndex, ITokenizerState state)
     {
-        var oldState = _tokenizationStateStore[lineNumber];
+        var oldState = _tokenizationStateStore[lineIndex];
         if (oldState == state)
             return false;
 
-        _tokenizationStateStore[lineNumber] = state;
+        _tokenizationStateStore[lineIndex] = state;
         return true;
     }
 
@@ -41,26 +41,26 @@ public class TrackingTokenizationStateStore
             length--;
             newLineCount--;
         }
-        int startLineNumber = lineRange.Start.Value;
+        int startLineIndex = lineRange.Start.Value;
 
-        // Replace [startLineNumber, startLineNumber + length) with [startLineNumber, startLineNumber + newLineCount) of null
+        // Replace [startLineIndex, startLineIndex + length) with [startLineIndex, startLineIndex + newLineCount) of null
         if (newLineCount > length)
         {
             CollectionsMarshal.AsSpan(_tokenizationStateStore)
-                .Slice(startLineNumber, length)
+                .Slice(startLineIndex, length)
                 .Clear();
             _tokenizationStateStore.InsertRange(
-                startLineNumber + length,
+                startLineIndex + length,
                 Enumerable.Repeat<ITokenizerState?>(null, newLineCount - length)
             );
         }
         else
         {
             CollectionsMarshal.AsSpan(_tokenizationStateStore)
-                .Slice(startLineNumber, newLineCount)
+                .Slice(startLineIndex, newLineCount)
                 .Clear();
             if (length > newLineCount)
-                _tokenizationStateStore.RemoveRange(startLineNumber + newLineCount, length - newLineCount);
+                _tokenizationStateStore.RemoveRange(startLineIndex + newLineCount, length - newLineCount);
         }
     }
 
@@ -70,7 +70,7 @@ public class TrackingTokenizationStateStore
         {
             int eolCount = FluidX.TextBuffers.EOLCounter.CountEOL(c.Text).eolCount;
             AcceptChangeInternal(
-                new(c.Range.StartLineNumber, c.Range.EndLineNumber + 1),
+                new(c.Range.StartLineIndex, c.Range.EndLineIndex + 1),
                 eolCount + 1
             );
         }
@@ -81,17 +81,17 @@ public class TrackingTokenizationStateStore
     /// <summary>
     /// Set the end state of a line.
     /// </summary>
-    /// <param name="lineNumber">Line number of the line</param>
+    /// <param name="lineIndex">Line index of the line</param>
     /// <param name="state">New end state of the line</param>
     /// <returns>If the end state has changed.</returns>
-    public bool SetEndState(int lineNumber, ITokenizerState state)
+    public bool SetEndState(int lineIndex, ITokenizerState state)
     {
-        _invalidEndStatesLineNumbers.Delete(lineNumber);
-        bool changed = SetEndStateInternal(lineNumber, state);
-        if (changed && lineNumber < _lineCount)
+        _invalidEndStatesLineIndices.Delete(lineIndex);
+        bool changed = SetEndStateInternal(lineIndex, state);
+        if (changed && lineIndex < _lineCount - 1)
         {
             // because the state changed, we cannot trust the next state anymore and have to invalidate it.
-            _invalidEndStatesLineNumbers.AddRange(new(lineNumber + 1, lineNumber + 2));
+            _invalidEndStatesLineIndices.AddRange(new(lineIndex + 1, lineIndex + 2));
         }
         return changed;
     }
@@ -100,7 +100,7 @@ public class TrackingTokenizationStateStore
     {
         _lineCount += newLineCount - lineRange.Length;
         AcceptChangeInternal(lineRange, newLineCount);
-        _invalidEndStatesLineNumbers.AddRangeAndResize(lineRange, newLineCount);
+        _invalidEndStatesLineIndices.AddRangeAndResize(lineRange, newLineCount);
     }
 
     public void AcceptChanges(ReadOnlySpan<ModelContentChange> changes)
@@ -108,33 +108,33 @@ public class TrackingTokenizationStateStore
         foreach (var c in changes)
         {
             int eolCount = FluidX.TextBuffers.EOLCounter.CountEOL(c.Text).eolCount;
-            AcceptChange(new(c.Range.StartLineNumber, c.Range.EndLineNumber + 1), eolCount + 1);
+            AcceptChange(new(c.Range.StartLineIndex, c.Range.EndLineIndex + 1), eolCount + 1);
         }
     }
 
     public void InvalidateEndStateRange(Range lineRange)
     {
-        _invalidEndStatesLineNumbers.AddRange(lineRange);
+        _invalidEndStatesLineIndices.AddRange(lineRange);
     }
 
-    public int? FirstInvalidEndStateLineNumber => _invalidEndStatesLineNumbers.Min;
-    public int FirstInvalidEndStateLineNumberOrMax => FirstInvalidEndStateLineNumber ?? int.MaxValue;
-    public bool AllStatesValid => _invalidEndStatesLineNumbers.Min is null;
+    public int? FirstInvalidEndStateLineIndex => _invalidEndStatesLineIndices.Min;
+    public int FirstInvalidEndStateLineIndexOrMax => FirstInvalidEndStateLineIndex ?? int.MaxValue;
+    public bool AllStatesValid => _invalidEndStatesLineIndices.Min is null;
 
-    public ITokenizerState? GetStartState(int lineNumber, ITokenizerState initialState)
+    public ITokenizerState? GetStartState(int lineIndex, ITokenizerState initialState)
     {
-        if (lineNumber == 1)
+        if (lineIndex == 0)
             return initialState;
-        return GetEndState(lineNumber - 1);
+        return GetEndState(lineIndex - 1);
     }
 
-    public (int lineNumber, ITokenizerState startState)? GetFirstInvalidLine(ITokenizerState initialState)
+    public (int lineIndex, ITokenizerState startState)? GetFirstInvalidLine(ITokenizerState initialState)
     {
-        if (FirstInvalidEndStateLineNumber is not int lineNumber)
+        if (FirstInvalidEndStateLineIndex is not int lineIndex)
             return null;
-        var startState = GetStartState(lineNumber, initialState)
+        var startState = GetStartState(lineIndex, initialState)
             ?? throw new Exception("Start state must be defined");
-        return (lineNumber, startState);
+        return (lineIndex, startState);
     }
 }
 

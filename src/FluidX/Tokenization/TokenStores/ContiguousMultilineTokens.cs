@@ -1,4 +1,4 @@
-﻿using FluidX.TextBuffers;
+using FluidX.TextBuffers;
 using System.Buffers.Binary;
 using System.Runtime.InteropServices;
 
@@ -6,21 +6,21 @@ namespace FluidX.Tokenization.TokenStores;
 
 public class ContiguousMultilineTokens
 {
-    private int _startLineNumber;
+    private int _startLineIndex;
     private List<LineToken[]> _tokens;
 
-    public int StartLineNumber => _startLineNumber;
-    public int EndLineNumber => _startLineNumber + _tokens.Count - 1;
-    public Range LineRange => new(_startLineNumber, _startLineNumber + _tokens.Count);
+    public int StartLineIndex => _startLineIndex;
+    public int EndLineIndex => _startLineIndex + _tokens.Count - 1;
+    public Range LineRange => new(_startLineIndex, _startLineIndex + _tokens.Count);
 
-    public ContiguousMultilineTokens(int startLineNumber, List<LineToken[]> tokens)
+    public ContiguousMultilineTokens(int startLineIndex, List<LineToken[]> tokens)
     {
-        _startLineNumber = startLineNumber;
+        _startLineIndex = startLineIndex;
         _tokens = tokens;
     }
 
-    public LineToken[] GetLineTokens(int lineNumber)
-        => _tokens[lineNumber - _startLineNumber];
+    public LineToken[] GetLineTokens(int lineIndex)
+        => _tokens[lineIndex - _startLineIndex];
 
     public void AppendLineTokens(LineToken[] lineTokens)
         => _tokens.Add(lineTokens);
@@ -39,14 +39,14 @@ public class ContiguousMultilineTokens
         if (range.IsEmpty)
             return; // Nothing to delete
 
-        int firstLineIndex = range.StartLineNumber - _startLineNumber;
-        int lastLineIndex = range.EndLineNumber - _startLineNumber;
+        int firstLineIndex = range.StartLineIndex - _startLineIndex;
+        int lastLineIndex = range.EndLineIndex - _startLineIndex;
 
         if (lastLineIndex < 0)
         {
-            // this deletion occurs entirely before this block, so we only need to adjust line numbers
+            // this deletion occurs entirely before this block, so we only need to adjust line indices
             int deletedLinesCount = lastLineIndex - firstLineIndex;
-            _startLineNumber -= deletedLinesCount;
+            _startLineIndex -= deletedLinesCount;
             return;
         }
 
@@ -56,7 +56,7 @@ public class ContiguousMultilineTokens
         if (firstLineIndex < 0 && lastLineIndex >= _tokens.Count)
         {
             // this deletion completely encompasses this block
-            _startLineNumber = 0;
+            _startLineIndex = 0;
             _tokens.Clear();
             return;
         }
@@ -64,19 +64,19 @@ public class ContiguousMultilineTokens
         if (firstLineIndex == lastLineIndex)
         {
             // a delete on a single line
-            _tokens[firstLineIndex] = ContiguousTokensEditing.Delete(_tokens[firstLineIndex], range.StartColumn - 1, range.EndColumn - 1);
+            _tokens[firstLineIndex] = ContiguousTokensEditing.Delete(_tokens[firstLineIndex], range.StartColumnIndex, range.EndColumnIndex);
             return;
         }
 
         if (firstLineIndex >= 0)
         {
             // The first line survives
-            _tokens[firstLineIndex] = ContiguousTokensEditing.DeleteEnding(_tokens[firstLineIndex], range.StartColumn - 1);
+            _tokens[firstLineIndex] = ContiguousTokensEditing.DeleteEnding(_tokens[firstLineIndex], range.StartColumnIndex);
 
             if (lastLineIndex < _tokens.Count)
             {
                 // The last line survives
-                var lastLineTokens = ContiguousTokensEditing.DeleteBeginning(_tokens[lastLineIndex], range.EndColumn - 1);
+                var lastLineTokens = ContiguousTokensEditing.DeleteBeginning(_tokens[lastLineIndex], range.EndColumnIndex);
 
                 // Take remaining text on last line and append it to remaining text on first line
                 _tokens[firstLineIndex] = ContiguousTokensEditing.Append(_tokens[firstLineIndex], lastLineTokens);
@@ -100,10 +100,10 @@ public class ContiguousMultilineTokens
             // The first line does not survive
 
             int deletedBefore = -firstLineIndex;
-            _startLineNumber -= deletedBefore;
+            _startLineIndex -= deletedBefore;
 
             // Remove beginning from last line
-            _tokens[lastLineIndex] = ContiguousTokensEditing.DeleteBeginning(_tokens[lastLineIndex], range.EndColumn - 1);
+            _tokens[lastLineIndex] = ContiguousTokensEditing.DeleteBeginning(_tokens[lastLineIndex], range.EndColumnIndex);
 
             // Delete lines
             _tokens = _tokens[lastLineIndex..];
@@ -115,11 +115,11 @@ public class ContiguousMultilineTokens
         if (eolCount == 0 && firstLineLength == 0)
             return; // Noting to insert
 
-        int lineIndex = position.LineNumber - _startLineNumber;
+        int lineIndex = position.LineIndex - _startLineIndex;
         if (lineIndex < 0)
         {
-            // this insertion occurs before this block, so we only need to adjust line numbers
-            _startLineNumber += eolCount;
+            // this insertion occurs before this block, so we only need to adjust line indices
+            _startLineIndex += eolCount;
             return;
         }
         if (lineIndex >= _tokens.Count)
@@ -131,14 +131,14 @@ public class ContiguousMultilineTokens
         if (eolCount == 0)
         {
             // Inserting text on one line
-            _tokens[lineIndex] = ContiguousTokensEditing.Insert(_tokens[lineIndex], position.Column - 1, firstLineLength);
+            _tokens[lineIndex] = ContiguousTokensEditing.Insert(_tokens[lineIndex], position.ColumnIndex, firstLineLength);
             return;
         }
 
-        _tokens[lineIndex] = ContiguousTokensEditing.DeleteEnding(_tokens[lineIndex], position.Column - 1);
-        _tokens[lineIndex] = ContiguousTokensEditing.Insert(_tokens[lineIndex], position.Column - 1, firstLineLength);
+        _tokens[lineIndex] = ContiguousTokensEditing.DeleteEnding(_tokens[lineIndex], position.ColumnIndex);
+        _tokens[lineIndex] = ContiguousTokensEditing.Insert(_tokens[lineIndex], position.ColumnIndex, firstLineLength);
 
-        InsertLines(position.LineNumber, eolCount);
+        InsertLines(lineIndex + 1, eolCount);
     }
 
     private void InsertLines(int insertIndex, int insertCount)
@@ -156,7 +156,7 @@ public class ContiguousMultilineTokens
     internal int SerializeSize()
     {
         int result = 0;
-        result += 4; // 4 bytes for the start line number
+        result += 4; // 4 bytes for the start line index
         result += 4; // 4 bytes for the line count
         foreach (var lineTokens in _tokens)
         {
@@ -169,7 +169,7 @@ public class ContiguousMultilineTokens
     internal int Serialize(Span<byte> destination)
     {
         int offset = 0;
-        BinaryPrimitives.WriteUInt32BigEndian(destination[offset..], (uint)_startLineNumber); offset += 4;
+        BinaryPrimitives.WriteUInt32BigEndian(destination[offset..], (uint)_startLineIndex); offset += 4;
         BinaryPrimitives.WriteUInt32BigEndian(destination[offset..], (uint)_tokens.Count); offset += 4;
         foreach (var lineTokens in _tokens)
         {
@@ -183,7 +183,7 @@ public class ContiguousMultilineTokens
     internal static int Deserialize(ReadOnlySpan<byte> buff, out ContiguousMultilineTokens result)
     {
         int offset = 0;
-        int startLineNumber = (int)BinaryPrimitives.ReadUInt32BigEndian(buff[offset..]); offset += 4;
+        int startLineIndex = (int)BinaryPrimitives.ReadUInt32BigEndian(buff[offset..]); offset += 4;
         int lineCount = (int)BinaryPrimitives.ReadUInt32BigEndian(buff[offset..]); offset += 4;
         List<LineToken[]> tokens = new List<LineToken[]>(lineCount);
         for (int i = 0; i < lineCount; i++)
@@ -194,7 +194,7 @@ public class ContiguousMultilineTokens
             offset += byteCount;
             tokens.Add(lineTokens);
         }
-        result = new ContiguousMultilineTokens(startLineNumber, tokens);
+        result = new ContiguousMultilineTokens(startLineIndex, tokens);
         return offset;
     }
 
@@ -218,18 +218,18 @@ public class ContiguousMultilineTokensBuilder
 
     private readonly List<ContiguousMultilineTokens> _tokens = [];
 
-    public void Add(int lineNumber, LineToken[] lineTokens)
+    public void Add(int lineIndex, LineToken[] lineTokens)
     {
         if (_tokens.Count > 0)
         {
             var last = _tokens[^1];
-            if (last.EndLineNumber + 1 == lineNumber)
+            if (last.EndLineIndex + 1 == lineIndex)
             {
                 last.AppendLineTokens(lineTokens);
                 return;
             }
         }
-        _tokens.Add(new ContiguousMultilineTokens(lineNumber, [lineTokens]));
+        _tokens.Add(new ContiguousMultilineTokens(lineIndex, [lineTokens]));
     }
 
     public List<ContiguousMultilineTokens> Finalize()

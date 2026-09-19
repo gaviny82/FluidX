@@ -61,11 +61,11 @@ Console.WriteLine($"Language: {languageName}");
 Console.WriteLine($"Scope: {scopeName}");
 Console.WriteLine(new string('=', 80));
 
-for (int lineNumber = 1; lineNumber <= model.TextBuffer.LineCount; lineNumber++)
+for (int lineIndex = 0; lineIndex < model.TextBuffer.LineCount; lineIndex++)
 {
-    model.Tokenization.ForceTokenization(lineNumber);
-    var lineTokens = model.Tokenization.GetLineTokens(lineNumber);
-    PrintLine(lineNumber, lineTokens, theme);
+    model.Tokenization.ForceTokenization(lineIndex);
+    var lineTokens = model.Tokenization.GetLineTokens(lineIndex);
+    PrintLine(lineIndex, lineTokens, theme);
 }
 
 model.Tokenization.Dispose();
@@ -104,9 +104,9 @@ static void PrintUsage()
     Console.WriteLine("  dotnet run --project samples/TokenizationTextMateDemo -- <path-to-source-file>");
 }
 
-static void PrintLine(int lineNumber, FluidX.Tokenization.TokenStores.LineTokens lineTokens, Theme theme)
+static void PrintLine(int lineIndex, FluidX.Tokenization.TokenStores.LineTokens lineTokens, Theme theme)
 {
-    Console.Write($"{lineNumber,4}: ");
+    Console.Write($"{lineIndex,4}: ");
     for (int i = 0; i < lineTokens.Count; i++)
     {
         var textSpan = lineTokens.GetTokenText(i);

@@ -30,6 +30,6 @@ public static class BufferFactory
 
     public static LineArrayTextBuffer CreateLineArrayBuffer(string text)
     {
-        return new LineArrayTextBuffer(text, eol: "\n");
+        return new LineArrayTextBuffer(text);
     }
 }

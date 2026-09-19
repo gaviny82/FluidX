@@ -1,4 +1,4 @@
-﻿using FluidX.TextBuffers;
+using FluidX.TextBuffers;
 
 using FluidX.TextModels;
 using System.Diagnostics.CodeAnalysis;
@@ -133,35 +133,35 @@ public class ContiguousTokensStore
 
     private void AcceptDeleteRange(TextRange range)
     {
-        int firstLineIndex = range.StartLineNumber - 1;
+        int firstLineIndex = range.StartLineIndex;
         if (firstLineIndex >= _lineTokens.Count)
             return;
 
-        if (range.StartLineNumber == range.EndLineNumber)
+        if (range.StartLineIndex == range.EndLineIndex)
         {
-            if (range.StartColumn == range.EndColumn)
+            if (range.StartColumnIndex == range.EndColumnIndex)
                 return; // Nothing to delete
 
             _lineTokens[firstLineIndex] = ContiguousTokensEditing.Delete(
                 _lineTokens[firstLineIndex],
-                range.StartColumn - 1,
-                range.EndColumn - 1
+                range.StartColumnIndex,
+                range.EndColumnIndex
             );
             return;
         }
 
-        _lineTokens[firstLineIndex] = ContiguousTokensEditing.DeleteEnding(_lineTokens[firstLineIndex], range.StartColumn - 1);
+        _lineTokens[firstLineIndex] = ContiguousTokensEditing.DeleteEnding(_lineTokens[firstLineIndex], range.StartColumnIndex);
 
-        int lastLineIndex = range.EndLineNumber - 1;
+        int lastLineIndex = range.EndLineIndex;
         LineToken[]? lastLineTokens = null;
         if (lastLineIndex < _lineTokens.Count)
-            lastLineTokens = ContiguousTokensEditing.DeleteBeginning(_lineTokens[lastLineIndex], range.EndColumn - 1);
+            lastLineTokens = ContiguousTokensEditing.DeleteBeginning(_lineTokens[lastLineIndex], range.EndColumnIndex);
 
         // Take remaining text on last line and append it to remaining text on first line
         _lineTokens[firstLineIndex] = ContiguousTokensEditing.Append(_lineTokens[firstLineIndex], lastLineTokens);
 
         // Delete middle lines
-        DeleteLines(range.StartLineNumber, range.EndLineNumber - range.StartLineNumber);
+        DeleteLines(range.StartLineIndex + 1, range.EndLineIndex - range.StartLineIndex);
     }
 
     private void AcceptInsertText(TextPosition position, int eolCount, int firstLineLength)
@@ -169,21 +169,21 @@ public class ContiguousTokensStore
         if (eolCount == 0 && firstLineLength == 0)
             return; // Nothing to insert
 
-        int lineIndex = position.LineNumber - 1;
+        int lineIndex = position.LineIndex;
         if (lineIndex >= _lineTokens.Count)
             return;
 
         if (eolCount == 0)
         {
             // Inserting text on one line
-            _lineTokens[lineIndex] = ContiguousTokensEditing.Insert(_lineTokens[lineIndex], position.Column - 1, firstLineLength);
+            _lineTokens[lineIndex] = ContiguousTokensEditing.Insert(_lineTokens[lineIndex], position.ColumnIndex, firstLineLength);
             return;
         }
 
-        _lineTokens[lineIndex] = ContiguousTokensEditing.DeleteEnding(_lineTokens[lineIndex], position.Column - 1);
-        _lineTokens[lineIndex] = ContiguousTokensEditing.Insert(_lineTokens[lineIndex], position.Column - 1, firstLineLength);
+        _lineTokens[lineIndex] = ContiguousTokensEditing.DeleteEnding(_lineTokens[lineIndex], position.ColumnIndex);
+        _lineTokens[lineIndex] = ContiguousTokensEditing.Insert(_lineTokens[lineIndex], position.ColumnIndex, firstLineLength);
 
-        InsertLines(position.LineNumber, eolCount);
+        InsertLines(position.LineIndex + 1, eolCount);
     }
 
     // TODO: Use ITextModel
@@ -196,40 +196,40 @@ public class ContiguousTokensStore
         for (int i = 0; i < tokens.Length; i++)
         {
             var element = tokens[i];
-            int minChangedLineNumber = 0;
-            int maxChangedLineNumber = 0;
+            int minChangedLineIndex = 0;
+            int maxChangedLineIndex = 0;
             bool hasChange = false;
-            for (int lineNumber = element.StartLineNumber; lineNumber <= element.EndLineNumber; lineNumber++)
+            for (int lineIndex = element.StartLineIndex; lineIndex <= element.EndLineIndex; lineIndex++)
             {
                 if (hasChange)
                 {
                     SetTokens(
                         textModel.Tokenization.LocalLanguageId,
-                        lineNumber - 1,
-                        textModel.TextBuffer.GetLineLength(lineNumber),
-                        element.GetLineTokens(lineNumber),
+                        lineIndex,
+                        textModel.TextBuffer.GetLineLength(lineIndex),
+                        element.GetLineTokens(lineIndex),
                         false);
-                    maxChangedLineNumber = lineNumber;
+                    maxChangedLineIndex = lineIndex;
                 }
                 else
                 {
                     bool lineHasChange = SetTokens(
                         textModel.Tokenization.LocalLanguageId,
-                        lineNumber - 1,
-                        textModel.TextBuffer.GetLineLength(lineNumber),
-                        element.GetLineTokens(lineNumber),
+                        lineIndex,
+                        textModel.TextBuffer.GetLineLength(lineIndex),
+                        element.GetLineTokens(lineIndex),
                         true);
                     if (lineHasChange)
                     {
                         hasChange = true;
-                        minChangedLineNumber = lineNumber;
-                        maxChangedLineNumber= lineNumber;
+                        minChangedLineIndex = lineIndex;
+                        maxChangedLineIndex= lineIndex;
                     }
                 }
             }
             if (hasChange)
             {
-                ranges.Add(new(minChangedLineNumber, maxChangedLineNumber));
+                ranges.Add(new(minChangedLineIndex, maxChangedLineIndex));
             }
         }
         return ranges.ToArray();
@@ -246,7 +246,7 @@ public class ContiguousTokensStore
     };
 }
 
-public record struct LineTokenChangeRange(int FromLineNumber, int ToLineNumber);
+public record struct LineTokenChangeRange(int FromLineIndex, int ToLineIndex);
 
 internal static class ContiguousTokensEditing
 {

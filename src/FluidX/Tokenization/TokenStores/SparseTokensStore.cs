@@ -1,4 +1,4 @@
-﻿using FluidX.TextBuffers;
+using FluidX.TextBuffers;
 using FluidX.TextModels;
 
 namespace FluidX.Tokenization.TokenStores;
@@ -49,20 +49,20 @@ public class SparseTokensStore
             {
                 return _range;
             }
-            range = _range.PlusRange(_firstRange).PlusRange(_lastRange);
+            range = _range.PlusRange(_firstRange.Value).PlusRange(_lastRange.Value);
         }
 
         int? insertPosition = null;
         for (int i = 0, len = _pieces.Count; i < len; i++)
         {
             var piece = _pieces[i];
-            if (piece.EndLineNumber < range.StartLineNumber)
+            if (piece.EndLineIndex < range.StartLineIndex)
             {
                 // this piece is before the range
                 continue;
             }
 
-            if (piece.StartLineNumber > range.EndLineNumber)
+            if (piece.StartLineIndex > range.EndLineIndex)
             {
                 // this piece is after the range, so mark the spot before this piece
                 // as a good insertion position and stop looping
@@ -82,13 +82,13 @@ public class SparseTokensStore
                 continue;
             }
 
-            if (piece.EndLineNumber < range.StartLineNumber)
+            if (piece.EndLineIndex < range.StartLineIndex)
             {
                 // after removal, this piece is before the range
                 continue;
             }
 
-            if (piece.StartLineNumber > range.EndLineNumber)
+            if (piece.StartLineIndex > range.EndLineIndex)
             {
                 // after removal, this piece is after the range
                 insertPosition = insertPosition ?? i;
@@ -130,7 +130,7 @@ public class SparseTokensStore
         return range;
     }
 
-    public LineTokens AddSparseTokens(int lineNumber, LineTokens aTokens)
+    public LineTokens AddSparseTokens(int lineIndex, LineTokens aTokens)
     {
         if (aTokens.TextLength == 0)
             return aTokens; // Don't do anything for empty lines
@@ -140,8 +140,8 @@ public class SparseTokensStore
         if (pieces.Count == 0)
             return aTokens;
 
-        int pieceIndex = FindFirstPieceWithLine(pieces, lineNumber);
-        var bTokens = pieces[pieceIndex].GetLineTokens(lineNumber);
+        int pieceIndex = FindFirstPieceWithLine(pieces, lineIndex);
+        var bTokens = pieces[pieceIndex].GetLineTokens(lineIndex);
 
         if (bTokens is null)
             return aTokens;
@@ -226,26 +226,26 @@ public class SparseTokensStore
         return new LineTokens(result.ToArray(), aTokens.LineContent);
     }
 
-    private static int FindFirstPieceWithLine(List<SparseMultilineTokens> pieces, int lineNumber)
+    private static int FindFirstPieceWithLine(List<SparseMultilineTokens> pieces, int lineIndex)
     {
         int low = 0;
         int high = pieces.Count - 1;
         while (low < high)
         {
             int mid = low + (high - low) / 2;
-            if (pieces[mid].EndLineNumber < lineNumber)
+            if (pieces[mid].EndLineIndex < lineIndex)
             {
                 low = mid + 1;
             }
-            else if (pieces[mid].StartLineNumber > lineNumber)
+            else if (pieces[mid].StartLineIndex > lineIndex)
             {
                 high = mid - 1;
             }
             else
             {
                 while (mid > low
-                    && pieces[mid - 1].StartLineNumber <= lineNumber
-                    && lineNumber <= pieces[mid - 1].EndLineNumber)
+                    && pieces[mid - 1].StartLineIndex <= lineIndex
+                    && lineIndex <= pieces[mid - 1].EndLineIndex)
                 {
                     mid--;
                 }

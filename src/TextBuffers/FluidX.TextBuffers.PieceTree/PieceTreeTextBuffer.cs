@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using System.Text.RegularExpressions;
 using FluidX.Common.DataStructures.RbTrees;
 using FluidX.TextBuffers.PieceTree.Buffers;
@@ -21,7 +21,7 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     private BufferCursor _lastChangeBufferPos;
     private PieceTreeSearchCache _searchCache = null!;
-    private (int LineNumber, string Value) _lastVisitedLine;
+    private (int LineIndex, string Value) _lastVisitedLine = (-1, string.Empty);
 
     private PieceTreeTextBuffer(
         IList<InlineStringBuffer> chunks,
@@ -40,7 +40,7 @@ public class PieceTreeTextBuffer : ITextBuffer
     {
         _buffers = new StringBufferCollection();
         _buffers.Add(new InlineStringBuffer());
-        _lastChangeBufferPos = new BufferCursor { Line = 0, Column = 0 };
+        _lastChangeBufferPos = new BufferCursor { LineIndex = 0, ColumnIndex = 0 };
         _lineCount = 1;
         _length = 0;
         _EOL = eol;
@@ -57,11 +57,11 @@ public class PieceTreeTextBuffer : ITextBuffer
 
                 var piece = new Piece(
                     i + 1,
-                    new BufferCursor { Line = 0, Column = 0 },
+                    new BufferCursor { LineIndex = 0, ColumnIndex = 0 },
                     new BufferCursor
                     {
-                        Line = ithChunkLineStarts.Length - 1,
-                        Column = chunks[i].Text.Length - ithChunkLineStarts[^1]
+                        LineIndex = ithChunkLineStarts.Length - 1,
+                        ColumnIndex = chunks[i].Text.Length - ithChunkLineStarts[^1]
                     },
                     ithChunkLineStarts.Length - 1,
                     chunks[i].Text.Length
@@ -72,7 +72,7 @@ public class PieceTreeTextBuffer : ITextBuffer
         }
 
         _searchCache = new PieceTreeSearchCache(1);
-        _lastVisitedLine = (0, "");
+        _lastVisitedLine = (-1, "");
         ComputeBufferMetadata();
     }
 
@@ -278,7 +278,7 @@ public class PieceTreeTextBuffer : ITextBuffer
         int end = start + length;
         var startPosition = GetPositionAt(start);
         var endPosition = GetPositionAt(end);
-        return new TextRange(startPosition.LineNumber, startPosition.Column, endPosition.LineNumber, endPosition.Column);
+        return new TextRange(startPosition.LineIndex, startPosition.ColumnIndex, endPosition.LineIndex, endPosition.ColumnIndex);
     }
 
     public string GetTextInRange(TextRange range)
@@ -286,8 +286,8 @@ public class PieceTreeTextBuffer : ITextBuffer
         if (range.IsEmpty)
             return "";
         return GetValueInRange2(
-            NodeAt2(range.StartLineNumber, range.StartColumn),
-            NodeAt2(range.EndLineNumber, range.EndColumn));
+            NodeAt2(range.StartLineIndex, range.StartColumnIndex),
+            NodeAt2(range.EndLineIndex, range.EndColumnIndex));
     }
 
     public int GetTextLengthInRange(TextRange range)
@@ -295,31 +295,31 @@ public class PieceTreeTextBuffer : ITextBuffer
         if (range.IsEmpty)
             return 0;
 
-        if (range.StartLineNumber == range.EndLineNumber)
+        if (range.StartLineIndex == range.EndLineIndex)
         {
-            return (range.EndColumn - range.StartColumn);
+            return (range.EndColumnIndex - range.StartColumnIndex);
         }
 
-        int startOffset = GetOffsetAt(range.StartLineNumber, range.StartColumn);
-        int endOffset = GetOffsetAt(range.EndLineNumber, range.EndColumn);
+        int startOffset = GetOffsetAt(range.StartLineIndex, range.StartColumnIndex);
+        int endOffset = GetOffsetAt(range.EndLineIndex, range.EndColumnIndex);
 
         return endOffset - startOffset;
     }
 
-    public int GetLineFirstNonWhitespaceColumn(int lineNumber)
+    public int GetLineFirstNonWhitespaceColumnIndex(int lineIndex)
     {
-        int result = GetLineContent(lineNumber).FirstNonWhitespaceIndex();
+        int result = GetLineContent(lineIndex).FirstNonWhitespaceIndex();
         if (result == -1)
-            return 0;
-        return result + 1;
+            return -1;
+        return result;
     }
 
-    public int GetLineLastNonWhitespaceColumn(int lineNumber)
+    public int GetLineLastNonWhitespaceColumnIndex(int lineIndex)
     {
-        int result = GetLineContent(lineNumber).LastNonWhitespaceIndex();
+        int result = GetLineContent(lineIndex).LastNonWhitespaceIndex();
         if (result == -1)
-            return 0;
-        return result + 2;
+            return -1;
+        return result + 1;
     }
 
     #endregion
@@ -366,7 +366,7 @@ public class PieceTreeTextBuffer : ITextBuffer
             {
                 SortIndex = i,
                 Range = validatedRange,
-                RangeOffset = GetOffsetAt(validatedRange.StartLineNumber, validatedRange.StartColumn),
+                RangeOffset = GetOffsetAt(validatedRange.StartLineIndex, validatedRange.StartColumnIndex),
                 RangeLength = GetTextLengthInRange(validatedRange),
                 Text = validText,
                 EOLCount = eolCount,
@@ -415,7 +415,7 @@ public class PieceTreeTextBuffer : ITextBuffer
         TextRange[] reverseRanges = computeUndoEdits
             ? GetInverseEditRanges(operations)
             : [];
-        //List<(int lineNumber, string oldContent)> newTrimAutoWhitespaceCandidates = [];
+        //List<(int lineIndex, string oldContent)> newTrimAutoWhitespaceCandidates = [];
         //if (recordTrimAutoWhitespace)
         //{
         //    for (int i = 0; i < operations.Length; i++)
@@ -425,17 +425,17 @@ public class PieceTreeTextBuffer : ITextBuffer
 
         //        if (op.IsAutoWhitespaceEdit && op.Range.IsEmpty)
         //        {
-        //            // Record already the future line numbers that might be auto whitespace removal candidates on next edit
-        //            for (int lineNumber = reverseRange.StartLineNumber; lineNumber < reverseRange.EndLineNumber; lineNumber++)
+        //            // Record already the future line indices that might be auto whitespace removal candidates on next edit
+        //            for (int lineIndex = reverseRange.StartLineIndex; lineIndex < reverseRange.EndLineIndex; lineIndex++)
         //            {
         //                string currentLineContent = "";
-        //                if (lineNumber == reverseRange.StartLineNumber)
+        //                if (lineIndex == reverseRange.StartLineIndex)
         //                {
-        //                    currentLineContent = GetLineContent(op.Range.StartLineNumber);
+        //                    currentLineContent = GetLineContent(op.Range.StartLineIndex);
         //                    if (currentLineContent.FirstNonWhitespaceIndex() != -1)
         //                        continue;
         //                }
-        //                newTrimAutoWhitespaceCandidates.Add((lineNumber, currentLineContent));
+        //                newTrimAutoWhitespaceCandidates.Add((lineIndex, currentLineContent));
         //            }
         //        }
         //    }
@@ -474,26 +474,26 @@ public class PieceTreeTextBuffer : ITextBuffer
 
         var contentChanges = DoApplyEdits(operations);
 
-        //List<int>? trimAutoWhitespaceLineNumbers = null;
+        //List<int>? trimAutoWhitespaceLineIndices = null;
         //if (recordTrimAutoWhitespace && newTrimAutoWhitespaceCandidates.Count > 0)
         //{
-        //    // sort line numbers auto whitespace removal candidates for next edit descending
-        //    newTrimAutoWhitespaceCandidates.Sort((a, b) => b.lineNumber - a.lineNumber);
+        //    // sort line indices auto whitespace removal candidates for next edit descending
+        //    newTrimAutoWhitespaceCandidates.Sort((a, b) => b.lineIndex - a.lineIndex);
 
-        //    trimAutoWhitespaceLineNumbers = [];
+        //    trimAutoWhitespaceLineIndices = [];
         //    for (int i = 0, len = newTrimAutoWhitespaceCandidates.Count; i < len; i++)
         //    {
-        //        int lineNumber = newTrimAutoWhitespaceCandidates[i].lineNumber;
-        //        if (i > 0 && newTrimAutoWhitespaceCandidates[i - 1].lineNumber == lineNumber)
-        //            continue; // Do not have the same line number twice
+        //        int lineIndex = newTrimAutoWhitespaceCandidates[i].lineIndex;
+        //        if (i > 0 && newTrimAutoWhitespaceCandidates[i - 1].lineIndex == lineIndex)
+        //            continue; // Do not have the same line index twice
 
         //        string prevContent = newTrimAutoWhitespaceCandidates[i].oldContent;
-        //        string lineContent = GetLineContent(lineNumber);
+        //        string lineContent = GetLineContent(lineIndex);
 
         //        if (lineContent.Length == 0 || lineContent == prevContent || lineContent.FirstNonWhitespaceIndex() != -1)
         //            continue;
 
-        //        trimAutoWhitespaceLineNumbers.Add(lineNumber);
+        //        trimAutoWhitespaceLineIndices.Add(lineIndex);
         //    }
         //}
 
@@ -518,9 +518,9 @@ public class PieceTreeTextBuffer : ITextBuffer
     //    bool forceMoveMarkers = false;
     //    TextRange firstEditRange = operations[0].Range;
     //    TextRange lastEditRange = operations[^1].Range;
-    //    TextRange entireEditRange = new(firstEditRange.StartLineNumber, firstEditRange.StartColumn, lastEditRange.EndLineNumber, lastEditRange.EndColumn);
-    //    int lastEndLineNumber = firstEditRange.StartLineNumber;
-    //    int lastEndColumn = firstEditRange.StartColumn;
+    //    TextRange entireEditRange = new(firstEditRange.StartLineIndex, firstEditRange.StartColumnIndex, lastEditRange.EndLineIndex, lastEditRange.EndColumnIndex);
+    //    int lastEndLineIndex = firstEditRange.StartLineIndex;
+    //    int lastEndColumnIndex = firstEditRange.StartColumnIndex;
     //    List<string> result = [];
 
     //    for (int i = 0, len = operations.Length; i < len; i++)
@@ -531,14 +531,14 @@ public class PieceTreeTextBuffer : ITextBuffer
     //        forceMoveMarkers = forceMoveMarkers || operation.ForceMoveMarkers;
 
     //        // (1) -- Push old text
-    //        result.Add(GetValueInRange(new TextRange(lastEndLineNumber, lastEndColumn, range.StartLineNumber, range.StartColumn)));
+    //        result.Add(GetValueInRange(new TextRange(lastEndLineIndex, lastEndColumnIndex, range.StartLineIndex, range.StartColumnIndex)));
 
     //        // (2) -- Push new text
     //        if (operation.Text.Length > 0)
     //            result.Add(operation.Text);
 
-    //        lastEndLineNumber = range.EndLineNumber;
-    //        lastEndColumn = range.EndColumn;
+    //        lastEndLineIndex = range.EndLineIndex;
+    //        lastEndColumnIndex = range.EndColumnIndex;
     //    }
 
     //    string text = string.Concat(result);
@@ -548,7 +548,7 @@ public class PieceTreeTextBuffer : ITextBuffer
     //    {
     //        SortIndex = 0,
     //        Range = entireEditRange,
-    //        RangeOffset = GetOffsetAt(entireEditRange.StartLineNumber, entireEditRange.StartColumn),
+    //        RangeOffset = GetOffsetAt(entireEditRange.StartLineIndex, entireEditRange.StartColumnIndex),
     //        RangeLength = GetValueLengthInRange(entireEditRange, EndOfLinePreference.TextDefined),
     //        Text = text,
     //        EOLCount = eolCount,
@@ -576,8 +576,8 @@ public class PieceTreeTextBuffer : ITextBuffer
         {
             ValidatedEditOperation op = operations[i];
 
-            if (op.Range.StartLineNumber == op.Range.EndLineNumber
-                && op.Range.StartColumn == op.Range.EndColumn
+            if (op.Range.StartLineIndex == op.Range.EndLineIndex
+                && op.Range.StartColumnIndex == op.Range.EndColumnIndex
                 && op.Text.Length == 0)
                 continue; // no-op
 
@@ -632,29 +632,29 @@ public class PieceTreeTextBuffer : ITextBuffer
     }
 
     public int GetOffsetAt(TextPosition position)
-        => GetOffsetAt(position.LineNumber, position.Column);
+        => GetOffsetAt(position.LineIndex, position.ColumnIndex);
 
-    private int GetOffsetAt(int lineNumber, int column)
+    private int GetOffsetAt(int lineIndex, int columnIndex)
     {
         int leftLen = 0; // inorder
         TreeNode x = _pieceTree.Root;
 
         while (!x.IsSentinel)
         {
-            if (!x.Left.IsSentinel && x.LfLeft + 1 >= lineNumber)
+            if (!x.Left.IsSentinel && x.LfLeft >= lineIndex)
             {
                 x = x.Left;
             }
-            else if (x.LfLeft + x.Piece.LineFeedCount + 1 >= lineNumber)
+            else if (x.LfLeft + x.Piece.LineFeedCount >= lineIndex)
             {
                 leftLen += x.SizeLeft;
-                // lineNumber >= 2
-                int accumulatedValInCurrentIndex = GetAccumulatedValue(x, lineNumber - x.LfLeft - 2);
-                return leftLen + accumulatedValInCurrentIndex + column - 1;
+                // Locate the preceding line break within this piece.
+                int accumulatedValInCurrentIndex = GetAccumulatedValue(x, lineIndex - x.LfLeft - 1);
+                return leftLen + accumulatedValInCurrentIndex + columnIndex;
             }
             else
             {
-                lineNumber -= x.LfLeft + x.Piece.LineFeedCount;
+                lineIndex -= x.LfLeft + x.Piece.LineFeedCount;
                 leftLen += x.SizeLeft + x.Piece.Length;
                 x = x.Right;
             }
@@ -682,13 +682,13 @@ public class PieceTreeTextBuffer : ITextBuffer
                 (int index, int remainder) = GetIndexOf(x, offset - x.SizeLeft);
                 lfCnt += x.LfLeft + index;
 
-                if (index == 0) {
-                    int lineStartOffset = GetOffsetAt(lfCnt + 1, 1);
-                    int column = originalOffset - lineStartOffset;
-                    return new TextPosition(lfCnt + 1, column + 1);
+                if (index == 0)
+                {
+                    int lineStartOffset = GetOffsetAt(lfCnt, 0);
+                    return new TextPosition(lfCnt, originalOffset - lineStartOffset);
                 }
 
-                return new TextPosition(lfCnt + 1, remainder + 1);
+                return new TextPosition(lfCnt, remainder);
             }
             else
             {
@@ -698,9 +698,9 @@ public class PieceTreeTextBuffer : ITextBuffer
                 if (x.Right.IsSentinel)
                 {
                     // last node
-                    int lineStartOffset = GetOffsetAt(lfCnt + 1, 1);
-                    int column = originalOffset - offset - lineStartOffset;
-                    return new TextPosition(lfCnt + 1, column + 1);
+                    int lineStartOffset = GetOffsetAt(lfCnt, 0);
+                    int columnIndex = originalOffset - offset - lineStartOffset;
+                    return new TextPosition(lfCnt, columnIndex);
                 }
                 else
                 {
@@ -709,7 +709,7 @@ public class PieceTreeTextBuffer : ITextBuffer
             }
         }
 
-        return new TextPosition(1, 1);
+        return new TextPosition(0, 0);
     }
 
     internal string GetValueInRange2(NodePosition startPosition, NodePosition endPosition)
@@ -760,9 +760,9 @@ public class PieceTreeTextBuffer : ITextBuffer
             var buffer = _buffers[piece.BufferIndex];
             var lineStarts = buffer.LineStarts;
 
-            int pieceStartLine = piece.Start.Line;
-            int pieceEndLine = piece.End.Line;
-            int pieceStartOffset = lineStarts[pieceStartLine] + piece.Start.Column;
+            int pieceStartLine = piece.Start.LineIndex;
+            int pieceEndLine = piece.End.LineIndex;
+            int pieceStartOffset = lineStarts[pieceStartLine] + piece.Start.ColumnIndex;
 
             if (danglingCR)
             {
@@ -809,18 +809,18 @@ public class PieceTreeTextBuffer : ITextBuffer
                 lines.Add(currentLine);
             }
 
-            if (!_EOLNormalized && buffer.Text[lineStarts[pieceEndLine] + piece.End.Column - 1] == '\r')
+            if (!_EOLNormalized && buffer.Text[lineStarts[pieceEndLine] + piece.End.ColumnIndex - 1] == '\r')
             {
                 danglingCR = true;
-                if (piece.End.Column == 0)
+                if (piece.End.ColumnIndex == 0)
                     // The last line ended with a \r, let's undo the push, it will be pushed by next iteration
                     lines.RemoveAt(lines.Count - 1);
                 else
-                    currentLine = buffer.Text.Slice(lineStarts[pieceEndLine], piece.End.Column - 1).ToString();
+                    currentLine = buffer.Text.Slice(lineStarts[pieceEndLine], piece.End.ColumnIndex - 1).ToString();
             }
             else
             {
-                currentLine = buffer.Text.Slice(lineStarts[pieceEndLine], piece.End.Column).ToString();
+                currentLine = buffer.Text.Slice(lineStarts[pieceEndLine], piece.End.ColumnIndex).ToString();
             }
 
             return true;
@@ -840,29 +840,29 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     public int LineCount { get => _lineCount; }
 
-    public string GetLineContent(int lineNumber)
+    public string GetLineContent(int lineIndex)
     {
-        if (_lastVisitedLine.LineNumber == lineNumber)
+        if (_lastVisitedLine.LineIndex == lineIndex)
             return _lastVisitedLine.Value;
 
-        _lastVisitedLine.LineNumber = lineNumber;
+        _lastVisitedLine.LineIndex = lineIndex;
 
-        if (lineNumber == _lineCount)
-            _lastVisitedLine.Value = GetLineRawContent(lineNumber);
+        if (lineIndex == _lineCount - 1)
+            _lastVisitedLine.Value = GetLineRawContent(lineIndex);
         else if (_EOLNormalized)
-            _lastVisitedLine.Value = GetLineRawContent(lineNumber, _EOL.Length);
+            _lastVisitedLine.Value = GetLineRawContent(lineIndex, _EOL.Length);
         else
-            _lastVisitedLine.Value = StringExtensions.EndOfLinesRegex.Replace(GetLineRawContent(lineNumber), "");
+            _lastVisitedLine.Value = StringExtensions.EndOfLinesRegex.Replace(GetLineRawContent(lineIndex), "");
 
         return _lastVisitedLine.Value;
     }
 
-    public string GetLineEOL(int lineNumber)
+    public string GetLineEOL(int lineIndex)
     {
-        int eolLength = GetEOLLengthAtLineBreak(lineNumber);
+        int eolLength = GetEOLLengthAtLineBreak(lineIndex);
         if (eolLength == 0)
             return string.Empty;
-        int nextLineOffset = GetOffsetAt(lineNumber + 1, 1);
+        int nextLineOffset = GetOffsetAt(lineIndex + 1, 0);
         int eolOffset = nextLineOffset - eolLength;
         return GetValueInRange2(
             NodeAt(eolOffset),
@@ -891,32 +891,32 @@ public class PieceTreeTextBuffer : ITextBuffer
     }
 
     public char GetChar(TextPosition position)
-        => GetChar(NodeAt2(position.LineNumber, position.Column));
+        => GetChar(NodeAt2(position.LineIndex, position.ColumnIndex));
 
-    public int GetLineLength(int lineNumber)
+    public int GetLineLength(int lineIndex)
     {
-        if (lineNumber == LineCount)
+        if (lineIndex == LineCount - 1)
         {
-            int startOffset = GetOffsetAt(lineNumber, 1);
+            int startOffset = GetOffsetAt(lineIndex, 0);
             return Length - startOffset;
         }
         int eolLength = _EOLNormalized
             ? _EOL.Length
-            : GetEOLLengthAtLineBreak(lineNumber);
-        return GetOffsetAt(lineNumber + 1, 1) - GetOffsetAt(lineNumber, 1) - eolLength;
+            : GetEOLLengthAtLineBreak(lineIndex);
+        return GetOffsetAt(lineIndex + 1, 0) - GetOffsetAt(lineIndex, 0) - eolLength;
     }
 
     /// <summary>
     /// Determines the actual number of EOL characters at the end of a line.
     /// Used for mixed-EOL buffers where <see name="_EOLNormalized"/> is false.
     /// </summary>
-    private int GetEOLLengthAtLineBreak(int lineNumber)
+    private int GetEOLLengthAtLineBreak(int lineIndex)
     {
-        if (lineNumber >= LineCount)
+        if (lineIndex >= LineCount - 1)
             return 0; // last line has no trailing EOL
 
-        int currentStart = GetOffsetAt(lineNumber, 1);
-        int nextStart = GetOffsetAt(lineNumber + 1, 1);
+        int currentStart = GetOffsetAt(lineIndex, 0);
+        int nextStart = GetOffsetAt(lineIndex + 1, 0);
         char lastChar = GetChar(nextStart - 1);
         if (lastChar == '\n')
         {
@@ -964,10 +964,10 @@ public class PieceTreeTextBuffer : ITextBuffer
         List<FindMatch> result = [];
         var searcher = new Searcher(searchData.WordSeparators, searchData.Regex);
 
-        var startPosition = NodeAt2(searchRange.StartLineNumber, searchRange.StartColumn);
+        var startPosition = NodeAt2(searchRange.StartLineIndex, searchRange.StartColumnIndex);
         if (startPosition is null)
             return [];
-        var endPosition = NodeAt2(searchRange.EndLineNumber, searchRange.EndColumn);
+        var endPosition = NodeAt2(searchRange.EndLineIndex, searchRange.EndColumnIndex);
         if (endPosition is null)
             return [];
         var start = PositionInBuffer(startPosition.Node, startPosition.Remainder);
@@ -975,13 +975,13 @@ public class PieceTreeTextBuffer : ITextBuffer
 
         if (startPosition.Node == endPosition.Node)
         {
-            FindMatchesInNode(startPosition.Node, searcher, searchRange.StartLineNumber, searchRange.StartColumn, start, end, searchData, captureMatches, limitResultCount, result);
+            FindMatchesInNode(startPosition.Node, searcher, searchRange.StartLineIndex, searchRange.StartColumnIndex, start, end, searchData, captureMatches, limitResultCount, result);
             return result;
         }
 
-        int startLineNumber = searchRange.StartLineNumber;
+        int startLineIndex = searchRange.StartLineIndex;
         var currentNode = startPosition.Node;
-        int startColumn;
+        int startColumnIndex;
         while (currentNode != endPosition.Node)
         {
             int lineBreakCnt = GetLineFeedCnt(currentNode.Piece.BufferIndex, start, currentNode.Piece.End);
@@ -990,49 +990,49 @@ public class PieceTreeTextBuffer : ITextBuffer
                 // last line break position
                 var lineStarts = _buffers[currentNode.Piece.BufferIndex].LineStarts;
                 int startOffsetInBuffer = OffsetInBuffer(currentNode.Piece.BufferIndex, currentNode.Piece.Start);
-                int nextLineStartOffset = lineStarts[start.Line + lineBreakCnt];
-                startColumn = startLineNumber == searchRange.StartLineNumber ? searchRange.StartColumn : 1;
-                FindMatchesInNode(currentNode, searcher, startLineNumber, startColumn, start, PositionInBuffer(currentNode, nextLineStartOffset - startOffsetInBuffer), searchData, captureMatches, limitResultCount, result);
+                int nextLineStartOffset = lineStarts[start.LineIndex + lineBreakCnt];
+                startColumnIndex = startLineIndex == searchRange.StartLineIndex ? searchRange.StartColumnIndex : 0;
+                FindMatchesInNode(currentNode, searcher, startLineIndex, startColumnIndex, start, PositionInBuffer(currentNode, nextLineStartOffset - startOffsetInBuffer), searchData, captureMatches, limitResultCount, result);
                 if (result.Count >= limitResultCount)
                     return result;
-                startLineNumber += lineBreakCnt;
+                startLineIndex += lineBreakCnt;
             }
 
-            startColumn = startLineNumber == searchRange.StartLineNumber ? searchRange.StartColumn - 1 : 0;
+            startColumnIndex = startLineIndex == searchRange.StartLineIndex ? searchRange.StartColumnIndex : 0;
             // search for the remaining content
-            if (startLineNumber == searchRange.EndLineNumber)
+            if (startLineIndex == searchRange.EndLineIndex)
             {
-                string text = GetLineContent(startLineNumber).Substring(startColumn, searchRange.EndColumn - 1 - startColumn);
-                FindMatchesInLine(searchData, searcher, text, searchRange.EndLineNumber, startColumn, result, captureMatches, limitResultCount);
+                string text = GetLineContent(startLineIndex).Substring(startColumnIndex, searchRange.EndColumnIndex - startColumnIndex);
+                FindMatchesInLine(searchData, searcher, text, searchRange.EndLineIndex, startColumnIndex, result, captureMatches, limitResultCount);
                 return result;
             }
-            FindMatchesInLine(searchData, searcher, GetLineContent(startLineNumber).Substring(startColumn), startLineNumber, startColumn, result, captureMatches, limitResultCount);
+            FindMatchesInLine(searchData, searcher, GetLineContent(startLineIndex).Substring(startColumnIndex), startLineIndex, startColumnIndex, result, captureMatches, limitResultCount);
             if (result.Count >= limitResultCount)
                 return result;
-            startLineNumber++;
-            startPosition = NodeAt2(startLineNumber, 1);
+            startLineIndex++;
+            startPosition = NodeAt2(startLineIndex, 0);
             currentNode = startPosition.Node;
             start = PositionInBuffer(startPosition.Node, startPosition.Remainder);
         }
 
-        if (startLineNumber == searchRange.EndLineNumber)
+        if (startLineIndex == searchRange.EndLineIndex)
         {
-            startColumn = startLineNumber == searchRange.StartLineNumber ? searchRange.StartColumn - 1 : 0;
-            string text = GetLineContent(startLineNumber).Substring(startColumn, searchRange.EndColumn - 1 - startColumn);
-            FindMatchesInLine(searchData, searcher, text, searchRange.EndLineNumber, startColumn, result, captureMatches, limitResultCount);
+            startColumnIndex = startLineIndex == searchRange.StartLineIndex ? searchRange.StartColumnIndex : 0;
+            string text = GetLineContent(startLineIndex).Substring(startColumnIndex, searchRange.EndColumnIndex - startColumnIndex);
+            FindMatchesInLine(searchData, searcher, text, searchRange.EndLineIndex, startColumnIndex, result, captureMatches, limitResultCount);
             return result;
         }
 
-        startColumn = startLineNumber == searchRange.StartLineNumber ? searchRange.StartColumn : 1;
-        FindMatchesInNode(endPosition.Node, searcher, startLineNumber, startColumn, start, end, searchData, captureMatches, limitResultCount, result);
+        startColumnIndex = startLineIndex == searchRange.StartLineIndex ? searchRange.StartColumnIndex : 0;
+        FindMatchesInNode(endPosition.Node, searcher, startLineIndex, startColumnIndex, start, end, searchData, captureMatches, limitResultCount, result);
         return result;
     }
 
     private void FindMatchesInNode(
         TreeNode node,
         Searcher searcher,
-        int startLineNumber,
-        int startColumn,
+        int startLineIndex,
+        int startColumnIndex,
         BufferCursor startCursor,
         BufferCursor endCursor,
         SearchData searchData,
@@ -1073,9 +1073,9 @@ public class PieceTreeTextBuffer : ITextBuffer
                 PositionInBuffer(node, offsetInBuffer(m.Index) - startOffsetInBuffer, ref ret);
                 BufferCursor ret1 = (BufferCursor)ret!;
                 int lineFeedCnt = GetLineFeedCnt(node.Piece.BufferIndex, startCursor, ret1);
-                int retStartColumn = ret1.Line == startCursor.Line ? ret1.Column - startCursor.Column + startColumn : ret1.Column + 1;
-                int retEndColumn = retStartColumn + m.Length;
-                result.Add(SearchUtils.CreateFindMatch(new TextRange(startLineNumber + lineFeedCnt, retStartColumn, startLineNumber + lineFeedCnt, retEndColumn), [m], captureMatches));
+                int retStartColumnIndex = ret1.LineIndex == startCursor.LineIndex ? ret1.ColumnIndex - startCursor.ColumnIndex + startColumnIndex : ret1.ColumnIndex;
+                int retEndColumnIndex = retStartColumnIndex + m.Length;
+                result.Add(SearchUtils.CreateFindMatch(new TextRange(startLineIndex + lineFeedCnt, retStartColumnIndex, startLineIndex + lineFeedCnt, retEndColumnIndex), [m], captureMatches));
 
                 if (offsetInBuffer(m.Index) + m.Length >= end)
                     return;
@@ -1090,7 +1090,7 @@ public class PieceTreeTextBuffer : ITextBuffer
         SearchData searchData,
         Searcher searcher,
         string text,
-        int lineNumber,
+        int lineIndex,
         int deltaOffset,
         List<FindMatch> result,
         bool captureMatches,
@@ -1104,7 +1104,7 @@ public class PieceTreeTextBuffer : ITextBuffer
             {
                 if (wordSeparators is null || SearchUtils.IsValidMatch(wordSeparators, text, text.Length, lastMatchIndex, searchString.Length))
                 {
-                    result.Add(new FindMatch(new TextRange(lineNumber, lastMatchIndex + 1 + deltaOffset, lineNumber, lastMatchIndex + 1 + searchString.Length + deltaOffset), null));
+                    result.Add(new FindMatch(new TextRange(lineIndex, lastMatchIndex + deltaOffset, lineIndex, lastMatchIndex + searchString.Length + deltaOffset), null));
                     if (result.Count >= limitResultCount)
                         return;
                 }
@@ -1121,7 +1121,7 @@ public class PieceTreeTextBuffer : ITextBuffer
             if (m is not null)
             {
                 result.Add(SearchUtils.CreateFindMatch(
-                    new TextRange(lineNumber, m.Index + 1 + deltaOffset, lineNumber, m.Index + 1 + m.Length + deltaOffset),
+                    new TextRange(lineIndex, m.Index + deltaOffset, lineIndex, m.Index + m.Length + deltaOffset),
                     [m],
                     captureMatches)
                 );
@@ -1160,7 +1160,7 @@ public class PieceTreeTextBuffer : ITextBuffer
     public void Insert(int offset, string value)
     {
         UpdateEOLNormalized(value);
-        _lastVisitedLine.LineNumber = 0;
+        _lastVisitedLine.LineIndex = -1;
         _lastVisitedLine.Value = "";
 
         if (!_pieceTree.Root.IsSentinel)
@@ -1174,8 +1174,8 @@ public class PieceTreeTextBuffer : ITextBuffer
             int bufferIndex = piece.BufferIndex;
             var insertPosInBuffer = PositionInBuffer(node, remainder);
             if (node.Piece.BufferIndex == 0 &&
-                piece.End.Line == _lastChangeBufferPos.Line &&
-                piece.End.Column == _lastChangeBufferPos.Column &&
+                piece.End.LineIndex == _lastChangeBufferPos.LineIndex &&
+                piece.End.ColumnIndex == _lastChangeBufferPos.ColumnIndex &&
                 (nodeStartOffset + piece.Length == offset) &&
                 value.Length < AverageBufferSize
             )
@@ -1211,8 +1211,8 @@ public class PieceTreeTextBuffer : ITextBuffer
                     {
                         var newStart = new BufferCursor
                         {
-                            Line = newRightPiece.Start.Line + 1,
-                            Column = 0
+                            LineIndex = newRightPiece.Start.LineIndex + 1,
+                            ColumnIndex = 0
                         };
                         newRightPiece = new Piece(
                             newRightPiece.BufferIndex,
@@ -1287,7 +1287,7 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     public void Delete(int offset, int cnt)
     {
-        _lastVisitedLine.LineNumber = 0;
+        _lastVisitedLine.LineIndex = -1;
         _lastVisitedLine.Value = "";
 
         if (cnt <= 0 || _pieceTree.Root.IsSentinel)
@@ -1377,8 +1377,8 @@ public class PieceTreeTextBuffer : ITextBuffer
             var piece = node.Piece;
             var newStart = new BufferCursor
             {
-                Line = piece.Start.Line + 1,
-                Column = 0
+                LineIndex = piece.Start.LineIndex + 1,
+                ColumnIndex = 0
             };
             var nPiece = new Piece(
                 piece.BufferIndex,
@@ -1440,13 +1440,13 @@ public class PieceTreeTextBuffer : ITextBuffer
         int bufferIndex = node.Piece.BufferIndex;
         var lineStarts = _buffers[bufferIndex].LineStarts;
 
-        int startOffset = lineStarts[piece.Start.Line] + piece.Start.Column;
+        int startOffset = lineStarts[piece.Start.LineIndex] + piece.Start.ColumnIndex;
 
         int offset = startOffset + remainder;
 
         // binary search offset between startOffset and endOffset
-        int low = piece.Start.Line;
-        int high = piece.End.Line;
+        int low = piece.Start.LineIndex;
+        int high = piece.End.LineIndex;
 
         int mid = 0;
         int midStop = 0;
@@ -1478,8 +1478,8 @@ public class PieceTreeTextBuffer : ITextBuffer
 
         return new BufferCursor
         {
-            Line = mid,
-            Column = offset - midStart
+            LineIndex = mid,
+            ColumnIndex = offset - midStart
         };
     }
 
@@ -1487,38 +1487,38 @@ public class PieceTreeTextBuffer : ITextBuffer
     {
         // we don't need to worry about start: abc\r|\n, or abc|\r, or abc|\n, or abc|\r\n doesn't change the fact that, there is one line break after start.
         // now let's take care of end: abc\r|\n, if end is in between \r and \n, we need to add line feed count by 1
-        if (end.Column == 0)
-            return end.Line - start.Line;
+        if (end.ColumnIndex == 0)
+            return end.LineIndex - start.LineIndex;
 
         var lineStarts = _buffers[bufferIndex].LineStarts;
-        if (end.Line == lineStarts.Length - 1)
+        if (end.LineIndex == lineStarts.Length - 1)
         {
             // it means, there is no \n after end, otherwise, there will be one more lineStart.
-            return end.Line - start.Line;
+            return end.LineIndex - start.LineIndex;
         }
 
-        int nextLineStartOffset = lineStarts[end.Line + 1];
-        int endOffset = lineStarts[end.Line] + end.Column;
+        int nextLineStartOffset = lineStarts[end.LineIndex + 1];
+        int endOffset = lineStarts[end.LineIndex] + end.ColumnIndex;
         if (nextLineStartOffset > endOffset + 1)
         {
             // there are more than 1 character after end, which means it can't be \n
-            return end.Line - start.Line;
+            return end.LineIndex - start.LineIndex;
         }
         // endOffset + 1 === nextLineStartOffset
         // character at endOffset is \n, so we check the character before first
-        // if character at endOffset is \r, end.column is 0 and we can't get here.
-        int previousCharOffset = endOffset - 1; // end.column > 0 so it's okay.
+        // if character at endOffset is \r, end.columnIndex is 0 and we can't get here.
+        int previousCharOffset = endOffset - 1; // end.columnIndex > 0 so it's okay.
 
         if (_buffers[bufferIndex].Text[previousCharOffset] == 13)
-            return end.Line - start.Line + 1;
+            return end.LineIndex - start.LineIndex + 1;
         else
-            return end.Line - start.Line;
+            return end.LineIndex - start.LineIndex;
     }
 
     private int OffsetInBuffer(int bufferIndex, BufferCursor cursor)
     {
         var lineStarts = _buffers[bufferIndex].LineStarts;
-        return lineStarts[cursor.Line] + cursor.Column;
+        return lineStarts[cursor.LineIndex] + cursor.ColumnIndex;
     }
 
     private void DeleteNodes(IReadOnlyList<TreeNode> nodes)
@@ -1554,11 +1554,11 @@ public class PieceTreeTextBuffer : ITextBuffer
                 lineStarts = LineStarts.CreateFast(splitText);
                 newPieces.Add(new Piece(
                     _buffers.Count,
-                    new BufferCursor { Line = 0, Column = 0 },
+                    new BufferCursor { LineIndex = 0, ColumnIndex = 0 },
                     new BufferCursor
                     {
-                        Line = lineStarts.Count - 1,
-                        Column = splitText.Length - lineStarts[lineStarts.Count - 1]
+                        LineIndex = lineStarts.Count - 1,
+                        ColumnIndex = splitText.Length - lineStarts[lineStarts.Count - 1]
                     },
                     lineStarts.Count - 1,
                     splitText.Length
@@ -1569,11 +1569,11 @@ public class PieceTreeTextBuffer : ITextBuffer
             lineStarts = LineStarts.CreateFast(text);
             newPieces.Add(new Piece(
                 _buffers.Count, /* buffer index */
-                new BufferCursor { Line = 0, Column = 0 },
+                new BufferCursor { LineIndex = 0, ColumnIndex = 0 },
                 new BufferCursor
                 {
-                    Line = lineStarts.Count - 1,
-                    Column = text.Length - lineStarts[lineStarts.Count - 1]
+                    LineIndex = lineStarts.Count - 1,
+                    ColumnIndex = text.Length - lineStarts[lineStarts.Count - 1]
                 },
                 lineStarts.Count - 1,
                 text.Length
@@ -1591,13 +1591,13 @@ public class PieceTreeTextBuffer : ITextBuffer
         if (changeBuffer.LineStarts[changeBuffer.LineStarts.Length - 1] == startOffset
             && startOffset != 0
             && StartWithLF(text)
-            && EndWithCR(changeBuffer.Text) // TODO: we can check this._lastChangeBufferPos's column as it's the last one
+            && EndWithCR(changeBuffer.Text) // TODO: we can check this._lastChangeBufferPos's columnIndex as it's the last one
         )
         {
             _lastChangeBufferPos = new BufferCursor
             {
-                Line = _lastChangeBufferPos.Line,
-                Column = _lastChangeBufferPos.Column + 1
+                LineIndex = _lastChangeBufferPos.LineIndex,
+                ColumnIndex = _lastChangeBufferPos.ColumnIndex + 1
             };
             start = _lastChangeBufferPos;
 
@@ -1612,11 +1612,11 @@ public class PieceTreeTextBuffer : ITextBuffer
 
         var endOffset = changeBuffer.Text.Length;
         var endIndex = changeBuffer.LineStarts.Length - 1;
-        var endColumn = endOffset - changeBuffer.LineStarts[endIndex];
+        var endColumnIndex = endOffset - changeBuffer.LineStarts[endIndex];
         var endPos = new BufferCursor
         {
-            Line = endIndex,
-            Column = endColumn
+            LineIndex = endIndex,
+            ColumnIndex = endColumnIndex
         };
         var newPiece = new Piece(
             0, /** todo@peng */
@@ -1631,55 +1631,55 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     public string GetLinesRawContent() => GetContentOfSubTree(_pieceTree.Root);
 
-    public string GetLineRawContent(int lineNumber, int endOffset = 0)
+    public string GetLineRawContent(int lineIndex, int endOffset = 0)
     {
         var x = _pieceTree.Root;
 
         string ret = "";
-        var cacheRet = _searchCache.Get2(lineNumber);
-        if (cacheRet is (TreeNode cacheNode, int cacheNodeStartOffset, int cacheNodeStartLineNumber))
+        var cacheRet = _searchCache.Get2(lineIndex);
+        if (cacheRet is (TreeNode cacheNode, int cacheNodeStartOffset, int cacheNodeStartLineIndex))
         {
             x = cacheNode;
-            int prevAccumulatedValue = GetAccumulatedValue(x, lineNumber - cacheNodeStartLineNumber - 1);
+            int prevAccumulatedValue = GetAccumulatedValue(x, lineIndex - cacheNodeStartLineIndex - 1);
             int startOffset = OffsetInBuffer(x.Piece.BufferIndex, x.Piece.Start);
-            if (cacheNodeStartLineNumber + x.Piece.LineFeedCount == lineNumber)
+            if (cacheNodeStartLineIndex + x.Piece.LineFeedCount == lineIndex)
             {
                 ret = _buffers[x.Piece.BufferIndex].Text.Slice(startOffset + prevAccumulatedValue, x.Piece.Length - prevAccumulatedValue).ToString();
             }
             else
             {
-                int accumulatedValue = GetAccumulatedValue(x, lineNumber - cacheNodeStartLineNumber);
+                int accumulatedValue = GetAccumulatedValue(x, lineIndex - cacheNodeStartLineIndex);
                 return _buffers[x.Piece.BufferIndex].Text.Slice(startOffset + prevAccumulatedValue, accumulatedValue - endOffset - prevAccumulatedValue).ToString();
             }
         }
         else // cache is null
         {
             int nodeStartOffset = 0;
-            int originalLineNumber = lineNumber;
+            int originalLineIndex = lineIndex;
             while (!x.IsSentinel)
             {
-                if (!x.Left.IsSentinel && x.LfLeft >= lineNumber - 1)
+                if (!x.Left.IsSentinel && x.LfLeft >= lineIndex)
                 {
                     x = x.Left;
                 }
-                else if (x.LfLeft + x.Piece.LineFeedCount > lineNumber - 1)
+                else if (x.LfLeft + x.Piece.LineFeedCount > lineIndex)
                 {
-                    int prevAccumulatedValue = GetAccumulatedValue(x, lineNumber - x.LfLeft - 2);
-                    int accumulatedValue = GetAccumulatedValue(x, lineNumber - x.LfLeft - 1);
+                    int prevAccumulatedValue = GetAccumulatedValue(x, lineIndex - x.LfLeft - 1);
+                    int accumulatedValue = GetAccumulatedValue(x, lineIndex - x.LfLeft);
                     var startOffset = OffsetInBuffer(x.Piece.BufferIndex, x.Piece.Start);
                     nodeStartOffset += x.SizeLeft;
                     _searchCache.Set(new CacheEntry
                     {
                         Node = x,
                         NodeStartOffset = nodeStartOffset,
-                        NodeStartLineNumber = originalLineNumber - (lineNumber - 1 - x.LfLeft)
+                        NodeStartLineIndex = originalLineIndex - (lineIndex - x.LfLeft)
                     });
 
                     return _buffers[x.Piece.BufferIndex].Text.Slice(startOffset + prevAccumulatedValue, accumulatedValue - endOffset - prevAccumulatedValue).ToString();
                 }
-                else if (x.LfLeft + x.Piece.LineFeedCount == lineNumber - 1)
+                else if (x.LfLeft + x.Piece.LineFeedCount == lineIndex)
                 {
-                    var prevAccumulatedValue = GetAccumulatedValue(x, lineNumber - x.LfLeft - 2);
+                    var prevAccumulatedValue = GetAccumulatedValue(x, lineIndex - x.LfLeft - 1);
                     var startOffset = OffsetInBuffer(x.Piece.BufferIndex, x.Piece.Start);
 
                     ret = _buffers[x.Piece.BufferIndex].Text.Slice(startOffset + prevAccumulatedValue, x.Piece.Length - prevAccumulatedValue).ToString();
@@ -1687,7 +1687,7 @@ public class PieceTreeTextBuffer : ITextBuffer
                 }
                 else
                 {
-                    lineNumber -= x.LfLeft + x.Piece.LineFeedCount;
+                    lineIndex -= x.LfLeft + x.Piece.LineFeedCount;
                     nodeStartOffset += x.SizeLeft + x.Piece.Length;
                     x = x.Right;
                 }
@@ -1745,7 +1745,7 @@ public class PieceTreeTextBuffer : ITextBuffer
     {
         var piece = node.Piece;
         var pos = PositionInBuffer(node, accumulatedValue);
-        int lineCnt = pos.Line - piece.Start.Line;
+        int lineCnt = pos.LineIndex - piece.Start.LineIndex;
 
         if (OffsetInBuffer(piece.BufferIndex, piece.End) - OffsetInBuffer(piece.BufferIndex, piece.Start) == accumulatedValue)
         {
@@ -1758,7 +1758,7 @@ public class PieceTreeTextBuffer : ITextBuffer
             }
         }
 
-        return (lineCnt, pos.Column);
+        return (lineCnt, pos.ColumnIndex);
     }
 
     private int GetAccumulatedValue(TreeNode node, int index)
@@ -1768,11 +1768,11 @@ public class PieceTreeTextBuffer : ITextBuffer
 
         var piece = node.Piece;
         var lineStarts = _buffers[piece.BufferIndex].LineStarts;
-        int expectedLineStartIndex = piece.Start.Line + index + 1;
-        if (expectedLineStartIndex > piece.End.Line)
-            return lineStarts[piece.End.Line] + piece.End.Column - lineStarts[piece.Start.Line] - piece.Start.Column;
+        int expectedLineStartIndex = piece.Start.LineIndex + index + 1;
+        if (expectedLineStartIndex > piece.End.LineIndex)
+            return lineStarts[piece.End.LineIndex] + piece.End.ColumnIndex - lineStarts[piece.Start.LineIndex] - piece.Start.ColumnIndex;
         else
-            return lineStarts[expectedLineStartIndex] - lineStarts[piece.Start.Line] - piece.Start.Column;
+            return lineStarts[expectedLineStartIndex] - lineStarts[piece.Start.LineIndex] - piece.Start.ColumnIndex;
     }
 
     private void DeleteNodeTail(TreeNode node, BufferCursor pos)
@@ -1873,19 +1873,19 @@ public class PieceTreeTextBuffer : ITextBuffer
             // _lastChangeBufferPos is already wrong
             _lastChangeBufferPos = new BufferCursor
             {
-                Line = _lastChangeBufferPos.Line - 1,
-                Column= startOffset - prevStartOffset
+                LineIndex = _lastChangeBufferPos.LineIndex - 1,
+                ColumnIndex= startOffset - prevStartOffset
             };
         }
 
         // AppendText handles the \r\n merge of the trailing \r with the leading \n.
         changeBuffer.AppendText(value);
         int endIndex = changeBuffer.LineStarts.Length - 1;
-        int endColumn = changeBuffer.Text.Length - changeBuffer.LineStarts[endIndex];
+        int endColumnIndex = changeBuffer.Text.Length - changeBuffer.LineStarts[endIndex];
         var newEnd = new BufferCursor
         {
-            Line = endIndex,
-            Column = endColumn
+            LineIndex = endIndex,
+            ColumnIndex = endColumnIndex
         };
         int newLength = node.Piece.Length + value.Length;
         int oldLineFeedCnt = node.Piece.LineFeedCount;
@@ -1939,7 +1939,7 @@ public class PieceTreeTextBuffer : ITextBuffer
                 _searchCache.Set(new CacheEntry()
                 {
                     Node = x,
-                    NodeStartLineNumber = ret.Remainder,
+                    NodeStartLineIndex = null,
                     NodeStartOffset = ret.NodeStartOffset
                 });
                 return ret;
@@ -1955,57 +1955,57 @@ public class PieceTreeTextBuffer : ITextBuffer
         return null!;
     }
 
-    private NodePosition NodeAt2(int lineNumber, int column)
+    private NodePosition NodeAt2(int lineIndex, int columnIndex)
     {
         var x = _pieceTree.Root;
         int nodeStartOffset = 0;
 
         while (!x.IsSentinel)
         {
-            if (!x.Left.IsSentinel && x.LfLeft >= lineNumber - 1)
+            if (!x.Left.IsSentinel && x.LfLeft >= lineIndex)
             {
                 x = x.Left;
             }
-            else if (x.LfLeft + x.Piece.LineFeedCount > lineNumber - 1)
+            else if (x.LfLeft + x.Piece.LineFeedCount > lineIndex)
             {
-                int prevAccumualtedValue = GetAccumulatedValue(x, lineNumber - x.LfLeft - 2);
-                int accumulatedValue = GetAccumulatedValue(x, lineNumber - x.LfLeft - 1);
+                int prevAccumualtedValue = GetAccumulatedValue(x, lineIndex - x.LfLeft - 1);
+                int accumulatedValue = GetAccumulatedValue(x, lineIndex - x.LfLeft);
                 nodeStartOffset += x.SizeLeft;
 
                 return new NodePosition
                 {
                     Node = x,
-                    Remainder = Math.Min(prevAccumualtedValue + column - 1, accumulatedValue),
+                    Remainder = Math.Min(prevAccumualtedValue + columnIndex, accumulatedValue),
                     NodeStartOffset = nodeStartOffset
                 };
             }
-            else if (x.LfLeft + x.Piece.LineFeedCount == lineNumber - 1)
+            else if (x.LfLeft + x.Piece.LineFeedCount == lineIndex)
             {
-                var prevAccumualtedValue = GetAccumulatedValue(x, lineNumber - x.LfLeft - 2);
-                if (prevAccumualtedValue + column - 1 <= x.Piece.Length)
+                var prevAccumualtedValue = GetAccumulatedValue(x, lineIndex - x.LfLeft - 1);
+                if (prevAccumualtedValue + columnIndex <= x.Piece.Length)
                 {
                     return new NodePosition
                     {
                         Node = x,
-                        Remainder = prevAccumualtedValue + column - 1,
+                        Remainder = prevAccumualtedValue + columnIndex,
                         NodeStartOffset = nodeStartOffset
                     };
                 }
                 else
                 {
-                    column -= x.Piece.Length - prevAccumualtedValue;
+                    columnIndex -= x.Piece.Length - prevAccumualtedValue;
                     break;
                 }
             }
             else
             {
-                lineNumber -= x.LfLeft + x.Piece.LineFeedCount;
+                lineIndex -= x.LfLeft + x.Piece.LineFeedCount;
                 nodeStartOffset += x.SizeLeft + x.Piece.Length;
                 x = x.Right;
             }
         }
 
-        // search in order, to find the node contains position.column
+        // search in order, to find the node contains position.columnIndex
         x = x.Next();
         while (x != TreeNode.Sentinel)
         {
@@ -2016,24 +2016,24 @@ public class PieceTreeTextBuffer : ITextBuffer
                 return new NodePosition
                 {
                     Node = x,
-                    Remainder = Math.Min(column - 1, accumulatedValue),
+                    Remainder = Math.Min(columnIndex, accumulatedValue),
                     NodeStartOffset = OffsetOfNode(x)
                 };
             }
             else
             {
-                if (x.Piece.Length >= column - 1)
+                if (x.Piece.Length >= columnIndex)
                 {
                     return new NodePosition
                     {
                         Node = x,
-                        Remainder = column - 1,
+                        Remainder = columnIndex,
                         NodeStartOffset = OffsetOfNode(x)
                     };
                 }
                 else
                 {
-                    column -= x.Piece.Length;
+                    columnIndex -= x.Piece.Length;
                 }
             }
 
@@ -2086,8 +2086,8 @@ public class PieceTreeTextBuffer : ITextBuffer
 
         var piece = val.Piece;
         var lineStarts = _buffers[piece.BufferIndex].LineStarts;
-        int line = piece.Start.Line;
-        int startOffset = lineStarts[line] + piece.Start.Column;
+        int line = piece.Start.LineIndex;
+        int startOffset = lineStarts[line] + piece.Start.ColumnIndex;
 
         if (line == lineStarts.Length - 1)
             // last line, so there is no line feed at the end of this line
@@ -2148,13 +2148,13 @@ public class PieceTreeTextBuffer : ITextBuffer
         // update node
         var lineStarts = _buffers[prev.Piece.BufferIndex].LineStarts;
         BufferCursor newEnd;
-        if (prev.Piece.End.Column == 0)
+        if (prev.Piece.End.ColumnIndex == 0)
         {
             // it means, last line ends with \r, not \r\n
             newEnd = new BufferCursor
             {
-                Line = prev.Piece.End.Line - 1,
-                Column = lineStarts[prev.Piece.End.Line] - lineStarts[prev.Piece.End.Line - 1] - 1
+                LineIndex = prev.Piece.End.LineIndex - 1,
+                ColumnIndex = lineStarts[prev.Piece.End.LineIndex] - lineStarts[prev.Piece.End.LineIndex - 1] - 1
             };
         }
         else
@@ -2162,8 +2162,8 @@ public class PieceTreeTextBuffer : ITextBuffer
             // \r\n
             newEnd = new BufferCursor
             {
-                Line = prev.Piece.End.Line,
-                Column = prev.Piece.End.Column - 1
+                LineIndex = prev.Piece.End.LineIndex,
+                ColumnIndex = prev.Piece.End.ColumnIndex - 1
             };
         }
 
@@ -2186,8 +2186,8 @@ public class PieceTreeTextBuffer : ITextBuffer
         // update nextNode
         var newStart = new BufferCursor
         {
-            Line = next.Piece.Start.Line + 1,
-            Column = 0
+            LineIndex = next.Piece.Start.LineIndex + 1,
+            ColumnIndex = 0
         };
         int newLength = next.Piece.Length - 1;
         int newLineFeedCnt = GetLineFeedCnt(next.Piece.BufferIndex, newStart, next.Piece.End);
@@ -2235,8 +2235,8 @@ public class PieceTreeTextBuffer : ITextBuffer
                     var piece = nextNode.Piece;
                     var newStart = new BufferCursor
                     {
-                        Line = piece.Start.Line + 1,
-                        Column = 0
+                        LineIndex = piece.Start.LineIndex + 1,
+                        ColumnIndex = 0
                     };
                     var newLength = piece.Length - 1;
                     var newLineFeedCnt = GetLineFeedCnt(piece.BufferIndex, newStart, piece.End);
@@ -2300,31 +2300,31 @@ public class PieceTreeTextBuffer : ITextBuffer
     {
         var result = new TextRange[operations.Length];
 
-        int prevOpEndLineNumber = 0;
-        int prevOpEndColumn = 0;
+        int prevOpEndLineIndex = 0;
+        int prevOpEndColumnIndex = 0;
         ValidatedEditOperation? prevOp = null;
         for (int i = 0, len = operations.Length; i < len; i++)
         {
             var op = operations[i];
-            int startLineNumber, startColumn;
+            int startLineIndex, startColumnIndex;
 
             if (prevOp is not null)
             {
-                if(prevOp.Range.EndLineNumber == op.Range.StartLineNumber)
+                if(prevOp.Range.EndLineIndex == op.Range.StartLineIndex)
                 {
-                    startLineNumber = prevOpEndLineNumber;
-                    startColumn = prevOpEndColumn + (op.Range.StartColumn - prevOp.Range.EndColumn);
+                    startLineIndex = prevOpEndLineIndex;
+                    startColumnIndex = prevOpEndColumnIndex + (op.Range.StartColumnIndex - prevOp.Range.EndColumnIndex);
                 }
                 else
                 {
-                    startLineNumber = prevOpEndLineNumber + (op.Range.StartLineNumber - prevOp.Range.EndLineNumber);
-                    startColumn = op.Range.StartColumn;
+                    startLineIndex = prevOpEndLineIndex + (op.Range.StartLineIndex - prevOp.Range.EndLineIndex);
+                    startColumnIndex = op.Range.StartColumnIndex;
                 }
             }
             else
             {
-                startLineNumber = op.Range.StartLineNumber;
-                startColumn = op.Range.StartColumn;
+                startLineIndex = op.Range.StartLineIndex;
+                startColumnIndex = op.Range.StartColumnIndex;
             }
 
             TextRange resultRange;
@@ -2333,18 +2333,18 @@ public class PieceTreeTextBuffer : ITextBuffer
                 // the operation inserts something
                 int lineCount = op.EOLCount + 1;
                 if (lineCount == 1) // single line insert
-                    resultRange = new TextRange(startLineNumber, startColumn, startLineNumber, startColumn + op.FirstLineLength);
+                    resultRange = new TextRange(startLineIndex, startColumnIndex, startLineIndex, startColumnIndex + op.FirstLineLength);
                 else // multi line insert
-                    resultRange = new TextRange(startLineNumber, startColumn, startLineNumber + lineCount - 1, op.LastLineLength + 1);
+                    resultRange = new TextRange(startLineIndex, startColumnIndex, startLineIndex + lineCount - 1, op.LastLineLength);
             }
             else
             {
                 // There is nothing to insert
-                resultRange = new TextRange(startLineNumber, startColumn, startLineNumber, startColumn);
+                resultRange = new TextRange(startLineIndex, startColumnIndex, startLineIndex, startColumnIndex);
             }
 
-            prevOpEndLineNumber = resultRange.EndLineNumber;
-            prevOpEndColumn = resultRange.EndColumn;
+            prevOpEndLineIndex = resultRange.EndLineIndex;
+            prevOpEndColumnIndex = resultRange.EndColumnIndex;
 
             result[i] = resultRange;
             prevOp = op;
@@ -2393,5 +2393,5 @@ internal class CacheEntry
 {
     public required TreeNode Node { get; init; }
     public required int NodeStartOffset { get; init; }
-    public required int? NodeStartLineNumber { get; init; }
+    public required int? NodeStartLineIndex { get; init; }
 }

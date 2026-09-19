@@ -1,4 +1,4 @@
-﻿using FluidX.TextBuffers;
+using FluidX.TextBuffers;
 using FluidX.TextModels;
 using FluidX.Tokenization.TokenStores;
 
@@ -141,7 +141,7 @@ public class TokenizerSyntaxTokenBackend : SyntaxTokenBackendBase
         {
             TokensChanged?.Invoke(this, new ModelTokensChangedEventArgs(
                 false,
-                changes.Select(c => new Range(c.FromLineNumber, c.ToLineNumber + 1)).ToArray()
+                changes.Select(c => new Range(c.FromLineIndex, c.ToLineIndex + 1)).ToArray()
             ));
         }
         return changes;
@@ -160,17 +160,17 @@ public class TokenizerSyntaxTokenBackend : SyntaxTokenBackendBase
         }
     }
 
-    private void RefreshRange(int startLineNumber, int endLineNumber)
+    private void RefreshRange(int startLineIndex, int endLineIndex)
     {
         if (_tokenizer is null)
             return;
 
         int lineCount = _textModel.TextBuffer.LineCount;
-        startLineNumber = Math.Clamp(startLineNumber, 1, lineCount);
-        endLineNumber = Math.Clamp(endLineNumber, 1, lineCount);
+        startLineIndex = Math.Clamp(startLineIndex, 0, lineCount - 1);
+        endLineIndex = Math.Clamp(endLineIndex, 0, lineCount - 1);
 
         var builder = new ContiguousMultilineTokensBuilder();
-        bool heuristicTokens = _tokenizer.TokenizeHeuristically(builder, startLineNumber, endLineNumber);
+        bool heuristicTokens = _tokenizer.TokenizeHeuristically(builder, startLineIndex, endLineIndex);
         var changedTokens = SetTokens(builder.Finalize().ToArray());
         if (heuristicTokens)
         {
@@ -179,59 +179,59 @@ public class TokenizerSyntaxTokenBackend : SyntaxTokenBackendBase
             // we have to explicitly request the tokens for the changed ranges again.
             foreach (var c in changedTokens)
             {
-                _backgroundTokenizer?.RequestTokens(c.FromLineNumber, c.ToLineNumber + 1);
+                _backgroundTokenizer?.RequestTokens(c.FromLineIndex, c.ToLineIndex + 1);
             }
         }
     }
 
-    public override void ForceTokenization(int lineNumber)
+    public override void ForceTokenization(int lineIndex)
     {
         var builder = new ContiguousMultilineTokensBuilder();
         // Ensure we don't have concurrent edits
         _backgroundTokenizer?.BeginTextBufferEdit();
-        _tokenizer?.UpdateTokensUntilLine(builder, lineNumber);
+        _tokenizer?.UpdateTokensUntilLine(builder, lineIndex);
         SetTokens(builder.Finalize().ToArray());
         _backgroundTokenizer?.EndTextBufferEdit();
     }
 
-    public override bool HasAccurateTokensForLine(int lineNumber)
+    public override bool HasAccurateTokensForLine(int lineIndex)
     {
         if (_tokenizer is null)
             return true;
-        return _tokenizer.HasAccurateTokensForLine(lineNumber);
+        return _tokenizer.HasAccurateTokensForLine(lineIndex);
     }
 
-    public override bool IsCheapToTokenize(int lineNumber)
+    public override bool IsCheapToTokenize(int lineIndex)
     {
         if (_tokenizer is null)
             return true;
-        return _tokenizer.IsCheapToTokenize(lineNumber);
+        return _tokenizer.IsCheapToTokenize(lineIndex);
     }
 
     public override BackgroundTokenizationState BackgroundTokenizationState
         => _backgroundTokenizer?.BackgroundTokenizationState ?? BackgroundTokenizationState.Done;
 
-    public override LineTokens GetLineTokens(int lineNumber)
+    public override LineTokens GetLineTokens(int lineIndex)
     {
-        string lineText = _textModel.TextBuffer.GetLineContent(lineNumber);
-        return _tokens.GetTokens(LocalLanguageId, lineNumber - 1, lineText);
+        string lineText = _textModel.TextBuffer.GetLineContent(lineIndex);
+        return _tokens.GetTokens(LocalLanguageId, lineIndex, lineText);
     }
 
-    public override StandardTokenType GetTokenTypeIfInsertingCharacter(int lineNumber, int column, string character)
+    public override StandardTokenType GetTokenTypeIfInsertingCharacter(int lineIndex, int columnIndex, string character)
     {
         if (_tokenizer is null)
             return StandardTokenType.Other;
-        TextPosition position = _textModel.ValidatePosition(new(lineNumber, column));
-        ForceTokenization(lineNumber);
+        TextPosition position = _textModel.ValidatePosition(new(lineIndex, columnIndex));
+        ForceTokenization(lineIndex);
         return _tokenizer.GetTokenTypeIfInsertingCharacter(position, character);
     }
 
-    public override LineTokens[]? TokenizeLinesAt(int lineNumber, ReadOnlySpan<string> lines)
+    public override LineTokens[]? TokenizeLinesAt(int lineIndex, ReadOnlySpan<string> lines)
     {
         if (_tokenizer is null)
             return null;
-        ForceTokenization(lineNumber);
-        return _tokenizer.TokenizeLinesAt(lineNumber, lines.ToArray())?.ToArray();
+        ForceTokenization(lineIndex);
+        return _tokenizer.TokenizeLinesAt(lineIndex, lines.ToArray())?.ToArray();
     }
 }
 

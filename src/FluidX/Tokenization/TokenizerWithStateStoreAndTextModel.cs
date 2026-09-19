@@ -1,4 +1,4 @@
-﻿using FluidX.TextBuffers;
+using FluidX.TextBuffers;
 using FluidX.TextModels;
 using FluidX.Tokenization.TokenStores;
 
@@ -31,21 +31,21 @@ public class TokenizerWithStateStoreAndTextModel
         LanguageIdMapper = languageIdMapper;
     }
 
-    public ITokenizerState? GetStartState(int lineNumber)
-        => Store.GetStartState(lineNumber, _initialState);
+    public ITokenizerState? GetStartState(int lineIndex)
+        => Store.GetStartState(lineIndex, _initialState);
 
-    public (int lineNumber, ITokenizerState startState)? GetFirstInvalidLine()
+    public (int lineIndex, ITokenizerState startState)? GetFirstInvalidLine()
         => Store.GetFirstInvalidLine(_initialState);
 
-    public void UpdateTokensUntilLine(ContiguousMultilineTokensBuilder builder, int lineNumber)
+    public void UpdateTokensUntilLine(ContiguousMultilineTokensBuilder builder, int lineIndex)
     {
         var languageId = LanguageId;
         while (true)
         {
-            if (GetFirstInvalidLine() is not (int invalidLineNumber, ITokenizerState startState)
-                || invalidLineNumber > lineNumber)
+            if (GetFirstInvalidLine() is not (int invalidLineIndex, ITokenizerState startState)
+                || invalidLineIndex > lineIndex)
                 return;
-            string text = TextModel.TextBuffer.GetLineContent(invalidLineNumber);
+            string text = TextModel.TextBuffer.GetLineContent(invalidLineIndex);
             var r = SafeTokenize(languageId, _tokenizationSupport, text, true, startState);
             // Convert EncodedTokenizerToken to LineToken (StartIndex => EndOffset)
             var lineTokens = new LineToken[r.Tokens.Length];
@@ -55,23 +55,23 @@ public class TokenizerWithStateStoreAndTextModel
                 int endOffset = (i + 1 < r.Tokens.Length) ? r.Tokens[i + 1].StartIndex : text.Length;
                 lineTokens[i] = new LineToken(endOffset, token.Metadata);
             }
-            builder.Add(invalidLineNumber, lineTokens);
-            Store.SetEndState(invalidLineNumber, r.EndState);
+            builder.Add(invalidLineIndex, lineTokens);
+            Store.SetEndState(invalidLineIndex, r.EndState);
         }
     }
 
     /** assumes state is up to date */
     public StandardTokenType GetTokenTypeIfInsertingCharacter(TextPosition position, string character)
     {
-        var lineStartState = GetStartState(position.LineNumber);
+        var lineStartState = GetStartState(position.LineIndex);
         if (lineStartState is null)
             return StandardTokenType.Other;
 
         var languageId = LanguageId;
-        string lineContent = TextModel.TextBuffer.GetLineContent(position.LineNumber);
+        string lineContent = TextModel.TextBuffer.GetLineContent(position.LineIndex);
 
         // Create the text as if `character` was inserted
-        string text = $"{lineContent[0..(position.Column - 1)]}{character}{lineContent[(position.Column - 1)..]}";
+        string text = $"{lineContent[0..(position.ColumnIndex)]}{character}{lineContent[(position.ColumnIndex)..]}";
             var r = SafeTokenize(
                 languageId,
                 _tokenizationSupport,
@@ -84,14 +84,14 @@ public class TokenizerWithStateStoreAndTextModel
         if (lineTokens.Count == 0)
             return StandardTokenType.Other;
 
-        int tokenIndex = lineTokens.FindTokenIndexAtOffset(position.Column - 1);
+        int tokenIndex = lineTokens.FindTokenIndexAtOffset(position.ColumnIndex);
         return lineTokens.GetMetadata(tokenIndex).TokenType;
     }
 
     /** assumes state is up to date */
-    public List<LineTokens>? TokenizeLinesAt(int lineNumber, string[] lines)
+    public List<LineTokens>? TokenizeLinesAt(int lineIndex, string[] lines)
     {
-        var lineStartState = GetStartState(lineNumber);
+        var lineStartState = GetStartState(lineIndex);
         if (lineStartState is null)
             return null;
 
@@ -115,19 +115,19 @@ public class TokenizerWithStateStoreAndTextModel
         return result;
     }
 
-    public bool HasAccurateTokensForLine(int lineNumber)
+    public bool HasAccurateTokensForLine(int lineIndex)
     {
-        int firstInvalidLineNumber = Store.FirstInvalidEndStateLineNumberOrMax;
-        return lineNumber < firstInvalidLineNumber;
+        int firstInvalidLineIndex = Store.FirstInvalidEndStateLineIndexOrMax;
+        return lineIndex < firstInvalidLineIndex;
     }
 
-    public bool IsCheapToTokenize(int lineNumber)
+    public bool IsCheapToTokenize(int lineIndex)
     {
-        int firstInvalidLineNumber = Store.FirstInvalidEndStateLineNumberOrMax;
-        if (lineNumber < firstInvalidLineNumber)
+        int firstInvalidLineIndex = Store.FirstInvalidEndStateLineIndexOrMax;
+        if (lineIndex < firstInvalidLineIndex)
             return true;
-        if (lineNumber == firstInvalidLineNumber
-            && TextModel.TextBuffer.GetLineLength(lineNumber) < CheapTokenizationLengthLimit)
+        if (lineIndex == firstInvalidLineIndex
+            && TextModel.TextBuffer.GetLineLength(lineIndex) < CheapTokenizationLengthLimit)
             return true;
         return false;
     }
@@ -135,36 +135,36 @@ public class TokenizerWithStateStoreAndTextModel
     /**
      * The result is not cached.
      */
-    public bool TokenizeHeuristically(ContiguousMultilineTokensBuilder builder, int startLineNumber, int endLineNumber)
+    public bool TokenizeHeuristically(ContiguousMultilineTokensBuilder builder, int startLineIndex, int endLineIndex)
     {
-        if (endLineNumber <= Store.FirstInvalidEndStateLineNumberOrMax)
+        if (endLineIndex <= Store.FirstInvalidEndStateLineIndexOrMax)
             return false; // nothing to do
 
-        if (startLineNumber <= Store.FirstInvalidEndStateLineNumberOrMax)
+        if (startLineIndex <= Store.FirstInvalidEndStateLineIndexOrMax)
         {
             // tokenization has reached the viewport start...
-            UpdateTokensUntilLine(builder, endLineNumber);
+            UpdateTokensUntilLine(builder, endLineIndex);
             return false;
         }
 
-        var state = GuessStartState(startLineNumber);
+        var state = GuessStartState(startLineIndex);
         var languageId = LanguageId;
 
-        for (int lineNumber = startLineNumber; lineNumber <= endLineNumber; lineNumber++)
+        for (int lineIndex = startLineIndex; lineIndex <= endLineIndex; lineIndex++)
         {
-            string text = TextModel.TextBuffer.GetLineContent(lineNumber);
+            string text = TextModel.TextBuffer.GetLineContent(lineIndex);
             var r = SafeTokenize(languageId, _tokenizationSupport, text, true, state);
             // TODO: Confirm the definitions of EncodedTokenizerToken and LineToken are compatible
-            builder.Add(lineNumber, r.Tokens.Select(t => new LineToken(t.StartIndex, t.Metadata)).ToArray());
+            builder.Add(lineIndex, r.Tokens.Select(t => new LineToken(t.StartIndex, t.Metadata)).ToArray());
             state = r.EndState;
         }
 
         return true;
     }
 
-    public ITokenizerState GuessStartState(int lineNumber)
+    public ITokenizerState GuessStartState(int lineIndex)
     {
-        var (likelyRelevantLines, initialState) = FindLikelyRelevantLines(TextModel, lineNumber, this);
+        var (likelyRelevantLines, initialState) = FindLikelyRelevantLines(TextModel, lineIndex, this);
 
         if (initialState is null)
             initialState = _tokenizationSupport.GetInitialState();
@@ -181,22 +181,22 @@ public class TokenizerWithStateStoreAndTextModel
 
     private static (List<string> likelyRelevantLines, ITokenizerState? initialState) FindLikelyRelevantLines(
         TextModel model,
-        int lineNumber,
+        int lineIndex,
         TokenizerWithStateStoreAndTextModel? store)
     {
-        int nonWhitespaceColumn = model.TextBuffer.GetLineFirstNonWhitespaceColumn(lineNumber);
+        int nonWhitespaceColumnIndex = model.TextBuffer.GetLineFirstNonWhitespaceColumnIndex(lineIndex);
         ITokenizerState? initialState = null;
         List<string> likelyRelevantLines = [];
-        for (int i = lineNumber - 1; nonWhitespaceColumn > 1 && i >= 1; i--)
+        for (int i = lineIndex - 1; nonWhitespaceColumnIndex > 0 && i >= 0; i--)
         {
-            int newNonWhitespaceIndex = model.TextBuffer.GetLineFirstNonWhitespaceColumn(i);
+            int newNonWhitespaceIndex = model.TextBuffer.GetLineFirstNonWhitespaceColumnIndex(i);
             // Ignore lines full of whitespace
-            if (newNonWhitespaceIndex == 0)
+            if (newNonWhitespaceIndex == -1)
                 continue;
-            if (newNonWhitespaceIndex < nonWhitespaceColumn)
+            if (newNonWhitespaceIndex < nonWhitespaceColumnIndex)
             {
                 likelyRelevantLines.Add(model.TextBuffer.GetLineContent(i));
-                nonWhitespaceColumn = newNonWhitespaceIndex;
+                nonWhitespaceColumnIndex = newNonWhitespaceIndex;
                 initialState = store?.GetStartState(i);
                 if (initialState is not null)
                     break;

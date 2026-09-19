@@ -1,4 +1,4 @@
-﻿namespace FluidX.TextBuffers.PieceTree;
+namespace FluidX.TextBuffers.PieceTree;
 
 using TreeNode = FluidX.Common.DataStructures.RbTrees.RedBlackTree<PieceNodeData>.TreeNode;
 
@@ -27,16 +27,16 @@ internal class PieceTreeSearchCache
         return null;
     }
 
-    public (TreeNode node, int nodeStartOffset, int nodeStartLineNumber)? Get2(int lineNumber)
+    public (TreeNode node, int nodeStartOffset, int nodeStartLineIndex)? Get2(int lineIndex)
     {
         for (int i = _cache.Count - 1; i >= 0; i--)
         {
             CacheEntry nodePos = _cache[i];
-            if (nodePos.NodeStartLineNumber.HasValue &&
-                nodePos.NodeStartLineNumber.Value < lineNumber &&
-                nodePos.NodeStartLineNumber.Value + nodePos.Node.Piece.LineFeedCount >= lineNumber)
+            if (nodePos.NodeStartLineIndex.HasValue &&
+                nodePos.NodeStartLineIndex.Value < lineIndex &&
+                nodePos.NodeStartLineIndex.Value + nodePos.Node.Piece.LineFeedCount >= lineIndex)
             {
-                return (nodePos.Node, nodePos.NodeStartOffset, nodePos.NodeStartLineNumber.Value);
+                return (nodePos.Node, nodePos.NodeStartOffset, nodePos.NodeStartLineIndex.Value);
             }
         }
         return null;

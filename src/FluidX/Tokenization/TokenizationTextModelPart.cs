@@ -90,11 +90,11 @@ public sealed class TokenizationTextModelPart : IDisposable
         _tokens.HandleDidChangeAttached();
     }
 
-    public LineTokens GetLineTokens(int lineNumber)
+    public LineTokens GetLineTokens(int lineIndex)
     {
-        ValidateLineNumber(lineNumber);
-        var syntaxTokens = _tokens.GetLineTokens(lineNumber);
-        return _semanticTokens.AddSparseTokens(lineNumber, syntaxTokens);
+        ValidateLineIndex(lineIndex);
+        var syntaxTokens = _tokens.GetLineTokens(lineIndex);
+        return _semanticTokens.AddSparseTokens(lineIndex, syntaxTokens);
     }
 
     public void ResetTokenization()
@@ -102,41 +102,41 @@ public sealed class TokenizationTextModelPart : IDisposable
         _tokens.ResetTokenization(fireTokenChangeEvent: true);
     }
 
-    public void ForceTokenization(int lineNumber)
+    public void ForceTokenization(int lineIndex)
     {
-        ValidateLineNumber(lineNumber);
-        _tokens.ForceTokenization(lineNumber);
+        ValidateLineIndex(lineIndex);
+        _tokens.ForceTokenization(lineIndex);
     }
 
-    public bool HasAccurateTokensForLine(int lineNumber)
+    public bool HasAccurateTokensForLine(int lineIndex)
     {
-        ValidateLineNumber(lineNumber);
-        return _tokens.HasAccurateTokensForLine(lineNumber);
+        ValidateLineIndex(lineIndex);
+        return _tokens.HasAccurateTokensForLine(lineIndex);
     }
 
-    public bool IsCheapToTokenize(int lineNumber)
+    public bool IsCheapToTokenize(int lineIndex)
     {
-        ValidateLineNumber(lineNumber);
-        return _tokens.IsCheapToTokenize(lineNumber);
+        ValidateLineIndex(lineIndex);
+        return _tokens.IsCheapToTokenize(lineIndex);
     }
 
-    public void TokenizeIfCheap(int lineNumber)
+    public void TokenizeIfCheap(int lineIndex)
     {
-        ValidateLineNumber(lineNumber);
-        _tokens.TokenizeIfCheap(lineNumber);
+        ValidateLineIndex(lineIndex);
+        _tokens.TokenizeIfCheap(lineIndex);
     }
 
-    public StandardTokenType GetTokenTypeIfInsertingCharacter(int lineNumber, int column, string character)
-        => _tokens.GetTokenTypeIfInsertingCharacter(lineNumber, column, character);
+    public StandardTokenType GetTokenTypeIfInsertingCharacter(int lineIndex, int columnIndex, string character)
+        => _tokens.GetTokenTypeIfInsertingCharacter(lineIndex, columnIndex, character);
 
-    public LineTokens[]? TokenizeLinesAt(int lineNumber, ReadOnlySpan<string> lines)
-        => _tokens.TokenizeLinesAt(lineNumber, lines);
+    public LineTokens[]? TokenizeLinesAt(int lineIndex, ReadOnlySpan<string> lines)
+        => _tokens.TokenizeLinesAt(lineIndex, lines);
 
-    public GlobalLanguageId GetLanguageIdAtPosition(int lineNumber, int column)
+    public GlobalLanguageId GetLanguageIdAtPosition(int lineIndex, int columnIndex)
     {
-        var position = _textModel.ValidatePosition(new TextPosition(lineNumber, column));
-        var lineTokens = GetLineTokens(position.LineNumber);
-        var localLanguageId = lineTokens.GetLanguageId(lineTokens.FindTokenIndexAtOffset(position.Column - 1));
+        var position = _textModel.ValidatePosition(new TextPosition(lineIndex, columnIndex));
+        var lineTokens = GetLineTokens(position.LineIndex);
+        var localLanguageId = lineTokens.GetLanguageId(lineTokens.FindTokenIndexAtOffset(position.ColumnIndex));
         return _languageIdMapper.Decode(localLanguageId);
     }
 
@@ -187,10 +187,10 @@ public sealed class TokenizationTextModelPart : IDisposable
 
     #endregion
 
-    private void ValidateLineNumber(int lineNumber)
+    private void ValidateLineIndex(int lineIndex)
     {
-        if (lineNumber < 1 || lineNumber > _textModel.TextBuffer.LineCount)
-            throw new ArgumentOutOfRangeException(nameof(lineNumber));
+        if (lineIndex < 0 || lineIndex >= _textModel.TextBuffer.LineCount)
+            throw new ArgumentOutOfRangeException(nameof(lineIndex));
     }
 
     public void Dispose()

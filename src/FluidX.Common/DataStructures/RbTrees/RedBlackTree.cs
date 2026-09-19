@@ -55,6 +55,11 @@ public class RedBlackTree<TData>
 
     protected virtual void OnAfterLeftRotate(TreeNode oldParent, TreeNode newParent) { }
     protected virtual void OnAfterRightRotate(TreeNode oldParent, TreeNode newParent) { }
+    /// <summary>
+    /// Called after the node is linked into the tree and before insertion fixup can rotate it.
+    /// Subclasses can update augmented metadata required by their rotation callbacks.
+    /// </summary>
+    protected virtual void OnBeforeInsertFixup(TreeNode z) { }
     protected virtual void OnAfterInsert(TreeNode z) { }
 
     #region Insertion
@@ -96,6 +101,7 @@ public class RedBlackTree<TData>
             z.Parent = nextNode;
         }
 
+        OnBeforeInsertFixup(z);
         InsertFixup(z);
         OnAfterInsert(z);
         return z;
@@ -135,6 +141,7 @@ public class RedBlackTree<TData>
             z.Parent = prevNode;
         }
 
+        OnBeforeInsertFixup(z);
         InsertFixup(z);
         OnAfterInsert(z);
         return z;
@@ -203,8 +210,8 @@ public class RedBlackTree<TData>
 
     /// <summary>
     /// Deletes <paramref name="z"/> from the tree, maintaining red-black invariants.
-    /// Subclasses override <see cref="OnBeforeRemoval"/> and <see cref="OnAfterRemoval"/>
-    /// to handle augmented metadata.
+    /// Subclasses can override the removal hooks to maintain augmented metadata at each
+    /// structural stage before deletion fixup can rotate the tree.
     /// </summary>
     public void Delete(TreeNode z)
     {
@@ -213,11 +220,10 @@ public class RedBlackTree<TData>
 
         FindRemovalTargets(z, out var x, out var y);
         bool yWasRed = y.Color == NodeColor.Red;
+        OnBeforeRemoval(z, x, y);
 
         if (y == _root)
         {
-            OnBeforeRemoval(z, x, y);
-
             _root = x;
 
             // If x is null, we are removing the only node
@@ -230,10 +236,37 @@ public class RedBlackTree<TData>
             return;
         }
 
-        OnBeforeRemoval(z, x, y);
-        RelinkForRemoval(z, x, y);
+        // Remove y from its original location and establish x's parent before
+        // subclasses repair metadata for that path.
+        if (y == y.Parent.Left)
+            y.Parent.Left = x;
+        else
+            y.Parent.Right = x;
+
+        if (y == z)
+        {
+            x.Parent = y.Parent;
+        }
+        else if (y.Parent == z)
+        {
+            x.Parent = y;
+        }
+        else
+        {
+            x.Parent = y.Parent;
+        }
+
+        OnAfterRemovalFromOriginalPosition(z, x, y);
+
+        if (y != z)
+        {
+            RelinkSuccessor(z, y);
+            OnAfterRemovalRelink(z, x, y);
+        }
+
         z.Detach();
         OnAfterRemoval(z, x, y);
+        OnBeforeRemovalFixup(z, x, y);
 
         if (!yWasRed)
             DeleteFixup(x);
@@ -242,27 +275,46 @@ public class RedBlackTree<TData>
     }
 
     /// <summary>
-    /// Called before the structural relink. Override to transfer augmented data
-    /// from the removed node to its replacement (e.g., IntervalTree delta transfer).
+    /// Called before any structural removal changes are made.
+    /// </summary>
+    protected virtual void OnBeforeRemoval(TreeNode z, TreeNode x, TreeNode y) { }
+
+    /// <summary>
+    /// Called after the node physically removed from its original position has been
+    /// replaced by <paramref name="x"/>, but before a successor is moved into the
+    /// requested node's position.
     /// <para/>
     /// <paramref name="z"/> is the node the caller wants removed.
     /// <paramref name="y"/> is the node physically removed from its position
     /// (same as <paramref name="z"/> unless a successor swap occurs).
     /// <paramref name="x"/> is the replacement node that takes <paramref name="y"/>'s place.
     /// </summary>
-    protected virtual void OnBeforeRemoval(TreeNode z, TreeNode x, TreeNode y) { }
+    protected virtual void OnAfterRemovalFromOriginalPosition(TreeNode z, TreeNode x, TreeNode y) { }
 
     /// <summary>
-    /// Called after the structural relink and detach. Override to recompute
-    /// augmented metadata (e.g., PieceTree SizeLeft/LfLeft, IntervalTree MaxEnd).
+    /// Called after a successor has been moved into the requested node's position.
+    /// This hook is not called when <paramref name="y"/> and <paramref name="z"/> are
+    /// the same node.
     /// <para/>
-    /// <paramref name="z"/> is the node the caller wanted removed (already detached).
+    /// <paramref name="z"/> is the node the caller wants removed; it remains attached
+    /// until this hook returns so subclasses can copy its augmented metadata.
     /// <paramref name="y"/> is the node that was physically removed from its position
     /// (same as <paramref name="z"/> unless a successor swap occurred — in which case
     /// <paramref name="y"/> took <paramref name="z"/>'s position before <paramref name="z"/> was detached).
     /// <paramref name="x"/> is the replacement node that took <paramref name="y"/>'s original position.
     /// </summary>
+    protected virtual void OnAfterRemovalRelink(TreeNode z, TreeNode x, TreeNode y) { }
+
+    /// <summary>
+    /// Called after the requested node is detached and before deletion fixup.
+    /// </summary>
     protected virtual void OnAfterRemoval(TreeNode z, TreeNode x, TreeNode y) { }
+
+    /// <summary>
+    /// Called after the removed node is detached and before deletion fixup can rotate
+    /// the tree.
+    /// </summary>
+    protected virtual void OnBeforeRemovalFixup(TreeNode z, TreeNode x, TreeNode y) { }
 
     private void FindRemovalTargets(TreeNode z, out TreeNode x, out TreeNode y)
     {
@@ -283,41 +335,24 @@ public class RedBlackTree<TData>
         }
     }
 
-    private void RelinkForRemoval(TreeNode z, TreeNode x, TreeNode y)
+    private void RelinkSuccessor(TreeNode z, TreeNode y)
     {
-        if (y == y.Parent.Left)
-            y.Parent.Left = x;
+        y.Left = z.Left;
+        y.Right = z.Right;
+        y.Parent = z.Parent;
+        y.Color = z.Color;
+
+        if (z == _root)
+            _root = y;
+        else if (z == z.Parent.Left)
+            z.Parent.Left = y;
         else
-            y.Parent.Right = x;
+            z.Parent.Right = y;
 
-        if (y == z)
-        {
-            x.Parent = y.Parent;
-        }
-        else
-        {
-            if (y.Parent == z)
-                x.Parent = y;
-            else
-                x.Parent = y.Parent;
-
-            y.Left = z.Left;
-            y.Right = z.Right;
-            y.Parent = z.Parent;
-            y.Color = z.Color;
-
-            if (z == _root)
-                _root = y;
-            else if (z == z.Parent.Left)
-                z.Parent.Left = y;
-            else
-                z.Parent.Right = y;
-
-            if (y.Left != TreeNode.Sentinel)
-                y.Left.Parent = y;
-            if (y.Right != TreeNode.Sentinel)
-                y.Right.Parent = y;
-        }
+        if (y.Left != TreeNode.Sentinel)
+            y.Left.Parent = y;
+        if (y.Right != TreeNode.Sentinel)
+            y.Right.Parent = y;
     }
 
     private void DeleteFixup(TreeNode x)

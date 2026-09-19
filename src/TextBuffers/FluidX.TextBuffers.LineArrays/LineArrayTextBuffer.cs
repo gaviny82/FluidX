@@ -52,8 +52,8 @@ public class LineArrayTextBuffer : ITextBuffer
 
     public int GetOffsetAt(TextPosition position)
     {
-        int lineIndex = GetLineIndex(position.LineNumber);
-        int relativeOffset = position.Column - 1;
+        int lineIndex = GetLineIndex(position.LineIndex);
+        int relativeOffset = position.ColumnIndex;
         if (relativeOffset < 0 || relativeOffset > _lines[lineIndex].Count)
             throw new ArgumentOutOfRangeException(nameof(position));
 
@@ -73,11 +73,11 @@ public class LineArrayTextBuffer : ITextBuffer
         {
             int lineEnd = lineStart + _lines[i].Count;
             if (offset < lineEnd || i == _lines.Count - 1)
-                return new TextPosition(i + 1, offset - lineStart + 1);
+                return new TextPosition(i, offset - lineStart);
             lineStart = lineEnd;
         }
 
-        return new TextPosition(1, 1);
+        return new TextPosition(0, 0);
     }
 
     public TextRange GetRangeAt(int offset, int length)
@@ -103,60 +103,60 @@ public class LineArrayTextBuffer : ITextBuffer
     {
         string[] result = new string[_lines.Count];
         for (int i = 0; i < result.Length; i++)
-            result[i] = GetLineContent(i + 1);
+            result[i] = GetLineContent(i);
         return result;
     }
 
-    public string GetLineContent(int lineNumber)
+    public string GetLineContent(int lineIndex)
     {
-        List<char> line = _lines[GetLineIndex(lineNumber)];
+        List<char> line = _lines[GetLineIndex(lineIndex)];
         int contentLength = line.Count - GetEOLLength(line);
         return new string(CollectionsMarshal.AsSpan(line)[..contentLength]);
     }
 
-    public string GetLineEOL(int lineNumber)
+    public string GetLineEOL(int lineIndex)
     {
-        List<char> line = _lines[GetLineIndex(lineNumber)];
+        List<char> line = _lines[GetLineIndex(lineIndex)];
         int eolLength = GetEOLLength(line);
         return eolLength == 0
             ? string.Empty
             : new string(CollectionsMarshal.AsSpan(line)[^eolLength..]);
     }
 
-    public int GetLineLength(int lineNumber)
+    public int GetLineLength(int lineIndex)
     {
-        List<char> line = _lines[GetLineIndex(lineNumber)];
+        List<char> line = _lines[GetLineIndex(lineIndex)];
         return line.Count - GetEOLLength(line);
     }
 
-    public int GetLineFirstNonWhitespaceColumn(int lineNumber)
+    public int GetLineFirstNonWhitespaceColumnIndex(int lineIndex)
     {
-        List<char> line = _lines[GetLineIndex(lineNumber)];
+        List<char> line = _lines[GetLineIndex(lineIndex)];
         ReadOnlySpan<char> content = CollectionsMarshal.AsSpan(line)[..(line.Count - GetEOLLength(line))];
         for (int i = 0; i < content.Length; i++)
         {
             if (!char.IsWhiteSpace(content[i]))
-                return i + 1;
+                return i;
         }
-        return 0;
+        return -1;
     }
 
-    public int GetLineLastNonWhitespaceColumn(int lineNumber)
+    public int GetLineLastNonWhitespaceColumnIndex(int lineIndex)
     {
-        List<char> line = _lines[GetLineIndex(lineNumber)];
+        List<char> line = _lines[GetLineIndex(lineIndex)];
         ReadOnlySpan<char> content = CollectionsMarshal.AsSpan(line)[..(line.Count - GetEOLLength(line))];
         for (int i = content.Length - 1; i >= 0; i--)
         {
             if (!char.IsWhiteSpace(content[i]))
-                return i + 2;
+                return i + 1;
         }
-        return 0;
+        return -1;
     }
 
     public char GetChar(TextPosition position)
     {
-        int lineIndex = GetLineIndex(position.LineNumber);
-        int relativeOffset = position.Column - 1;
+        int lineIndex = GetLineIndex(position.LineIndex);
+        int relativeOffset = position.ColumnIndex;
         if (relativeOffset < 0 || relativeOffset >= _lines[lineIndex].Count)
             throw new ArgumentOutOfRangeException(nameof(position));
         return _lines[lineIndex][relativeOffset];
@@ -203,13 +203,13 @@ public class LineArrayTextBuffer : ITextBuffer
         List<FindMatch> result = [];
         var searcher = new Searcher(searchData.WordSeparators, searchData.Regex);
 
-        for (int lineNumber = searchRange.StartLineNumber;
-            lineNumber <= searchRange.EndLineNumber && result.Count < limitResultCount;
-            lineNumber++)
+        for (int lineIndex = searchRange.StartLineIndex;
+            lineIndex <= searchRange.EndLineIndex && result.Count < limitResultCount;
+            lineIndex++)
         {
-            string line = GetLineContent(lineNumber);
-            int start = lineNumber == searchRange.StartLineNumber ? searchRange.StartColumn - 1 : 0;
-            int end = lineNumber == searchRange.EndLineNumber ? searchRange.EndColumn - 1 : line.Length;
+            string line = GetLineContent(lineIndex);
+            int start = lineIndex == searchRange.StartLineIndex ? searchRange.StartColumnIndex : 0;
+            int end = lineIndex == searchRange.EndLineIndex ? searchRange.EndColumnIndex : line.Length;
             start = Math.Min(start, line.Length);
             end = Math.Min(end, line.Length);
             string searchedText = line[start..end];
@@ -220,10 +220,10 @@ public class LineArrayTextBuffer : ITextBuffer
             {
                 result.Add(SearchUtils.CreateFindMatch(
                     new TextRange(
-                        lineNumber,
-                        start + match.Index + 1,
-                        lineNumber,
-                        start + match.Index + match.Length + 1),
+                        lineIndex,
+                        start + match.Index,
+                        lineIndex,
+                        start + match.Index + match.Length),
                     [match],
                     captureMatches));
             }
@@ -323,6 +323,9 @@ public class LineArrayTextBuffer : ITextBuffer
         replacementText.AddRange(CollectionsMarshal.AsSpan(endLine)[end.IndexInLine..]);
 
         List<List<char>> replacementLines = SplitTextIntoLines(CollectionsMarshal.AsSpan(replacementText));
+        // The following stored line already represents the position after this EOL.
+        if (end.LineIndex < _lines.Count - 1 && replacementLines[^1].Count == 0)
+            replacementLines.RemoveAt(replacementLines.Count - 1);
         _lines.RemoveRange(start.LineIndex, end.LineIndex - start.LineIndex + 1);
         _lines.InsertRange(start.LineIndex, replacementLines);
     }
@@ -364,11 +367,11 @@ public class LineArrayTextBuffer : ITextBuffer
         return new BufferLocation(0, 0);
     }
 
-    private int GetLineIndex(int lineNumber)
+    private int GetLineIndex(int lineIndex)
     {
-        if (lineNumber < 1 || lineNumber > _lines.Count)
-            throw new ArgumentOutOfRangeException(nameof(lineNumber));
-        return lineNumber - 1;
+        if (lineIndex < 0 || lineIndex >= _lines.Count)
+            throw new ArgumentOutOfRangeException(nameof(lineIndex));
+        return lineIndex;
     }
 
     private static List<List<char>> SplitTextIntoLines(ReadOnlySpan<char> text)

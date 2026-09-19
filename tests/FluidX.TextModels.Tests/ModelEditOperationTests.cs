@@ -31,7 +31,7 @@ public class ModelEditOperationTests
     public void PlainTextModelSupportsEditUndoAndRedo()
     {
         var model = new PlainTextModel("hello", DefaultEndOfLine.LF);
-        model.Edit(new TextEdit([new TextReplacement(new TextRange(1, 6, 1, 6), " world")]));
+        model.Edit(new TextEdit([new TextReplacement(new TextRange(0, 5, 0, 5), " world")]));
 
         Assert.AreEqual("hello world", model.GetValue());
         model.Undo();
@@ -54,7 +54,7 @@ public class ModelEditOperationTests
         var model = CreateModel(new string('a', operationCount));
         var operations = Enumerable.Range(0, operationCount)
             .Select(index => new ModelEditOperation(
-                new TextRange(1, index + 1, 1, index + 2),
+                new TextRange(0, index, 0, index + 1),
                 ""))
             .ToArray();
         operations[0] = operations[0] with { IsTracked = true };
@@ -72,7 +72,7 @@ public class ModelEditOperationTests
         var model = CreateModel(new string('a', operationCount));
         var operations = Enumerable.Range(0, operationCount)
             .Select(index => new ModelEditOperation(
-                new TextRange(1, index + 1, 1, index + 2),
+                new TextRange(0, index, 0, index + 1),
                 ""))
             .ToArray();
 
@@ -88,7 +88,7 @@ public class ModelEditOperationTests
         var model = CreateModel("");
         model.PushEditOperations(
             [
-                new ModelEditOperation(new TextRange(1,1,1,1), "\n    ")
+                new ModelEditOperation(new TextRange(0, 0, 0, 0), "\n    ")
                 {
                     IsAutowhitespaceEdit = true
                 }
@@ -100,7 +100,7 @@ public class ModelEditOperationTests
 
         model.PushEditOperations(
             [
-                new ModelEditOperation(new TextRange(1,1,1,1), "x")
+                new ModelEditOperation(new TextRange(0, 0, 0, 0), "x")
             ],
             beforeCursorState: null,
             cursorStateComputer: null);
