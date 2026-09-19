@@ -232,102 +232,46 @@ public class LineArrayTextBuffer : ITextBuffer
         return result;
     }
 
-    public ApplyEditsResult ApplyEdits(TextReplacement[] replacements, bool computeUndoEdits)
+    public void ApplyEdits(TextReplacement[] replacements)
     {
-        EditInfo[] edits = replacements
-            .Select((replacement, index) =>
-            {
-                int offset = GetOffsetAt(replacement.Range.StartPosition);
-                int length = GetTextLengthInRange(replacement.Range);
-                return new EditInfo(index, replacement, offset, length, GetTextAt(offset, length));
-            })
-            .OrderBy(edit => edit.Offset + edit.Length)
-            .ThenBy(edit => edit.SortIndex)
-            .ToArray();
-
-        bool hasTouchingRanges = false;
-        for (int i = 0; i < edits.Length - 1; i++)
+        bool changed = false;
+        // Later edits leave the coordinates of earlier ranges intact.
+        for (int i = replacements.Length - 1; i >= 0; i--)
         {
-            int end = edits[i].Offset + edits[i].Length;
-            if (end > edits[i + 1].Offset)
-                throw new ArgumentException("Overlapping ranges are not allowed.", nameof(replacements));
-            if (end == edits[i + 1].Offset)
-                hasTouchingRanges = true;
-        }
-
-        LineArrayTextBuffer? resultingBuffer = computeUndoEdits ? CreateEditedCopy(edits) : null;
-        ReverseSingleEditOperation[]? reverseEdits = null;
-        if (computeUndoEdits)
-        {
-            reverseEdits = new ReverseSingleEditOperation[edits.Length];
-            int delta = 0;
-            for (int i = 0; i < edits.Length; i++)
-            {
-                EditInfo edit = edits[i];
-                int newOffset = edit.Offset + delta;
-                reverseEdits[i] = new ReverseSingleEditOperation
-                {
-                    SortIndex = edit.SortIndex,
-                    Range = resultingBuffer!.GetRangeAt(newOffset, edit.Replacement.Text.Length),
-                    Text = edit.OldText,
-                    TextChange = new TextChange(edit.Offset, edit.OldText, newOffset, edit.Replacement.Text)
-                };
-                delta += edit.Replacement.Text.Length - edit.Length;
-            }
-            if (!hasTouchingRanges)
-                Array.Sort(reverseEdits, (a, b) => a.SortIndex - b.SortIndex);
-        }
-
-        List<InternalModelContentChange> changes = [];
-        for (int i = edits.Length - 1; i >= 0; i--)
-        {
-            EditInfo edit = edits[i];
-            if (edit.Length == 0 && edit.Replacement.Text.Length == 0)
+            TextReplacement replacement = replacements[i];
+            if (replacement.IsEmpty)
                 continue;
 
-            ReplaceText(edit.Offset, edit.Length, edit.Replacement.Text);
-            changes.Add(new InternalModelContentChange
+            TextRange range = replacement.Range;
+            List<char> startLine = _lines[range.StartLineIndex];
+            List<char> endLine = _lines[range.EndLineIndex];
+            if (startLine == endLine)
             {
-                SortIndex = edit.SortIndex,
-                Range = edit.Replacement.Range,
-                RangeOffset = edit.Offset,
-                RangeLength = edit.Length,
-                Text = edit.Replacement.Text
-            });
+                startLine.RemoveRange(range.StartColumnIndex, range.EndColumnIndex - range.StartColumnIndex);
+                startLine.InsertRange(range.StartColumnIndex, replacement.Text);
+            }
+            else
+            {
+                startLine.RemoveRange(range.StartColumnIndex, startLine.Count - range.StartColumnIndex);
+                endLine.RemoveRange(0, range.EndColumnIndex);
+                startLine.AddRange(replacement.Text);
+                startLine.AddRange(CollectionsMarshal.AsSpan(endLine));
+            }
+
+            // Split the modified start line so CRLF pairs formed or broken at
+            // either replacement boundary are handled along with inserted EOLs.
+            List<List<char>> replacementLines = SplitTextIntoLines(CollectionsMarshal.AsSpan(startLine));
+            startLine.RemoveRange(replacementLines[0].Count, startLine.Count - replacementLines[0].Count);
+            replacementLines[0] = startLine;
+            // The following stored line already represents the position after this EOL.
+            if (range.EndLineIndex < _lines.Count - 1 && replacementLines[^1].Count == 0)
+                replacementLines.RemoveAt(replacementLines.Count - 1);
+            _lines.RemoveRange(range.StartLineIndex, range.EndLineIndex - range.StartLineIndex + 1);
+            _lines.InsertRange(range.StartLineIndex, replacementLines);
+            changed = true;
         }
-
-        if (changes.Count > 0)
+        if (changed)
             ContentChanged?.Invoke(this, EventArgs.Empty);
-
-        return new ApplyEditsResult { ReverseEdits = reverseEdits, Changes = changes };
-    }
-
-    private LineArrayTextBuffer CreateEditedCopy(EditInfo[] edits)
-    {
-        var result = new LineArrayTextBuffer(this);
-        for (int i = edits.Length - 1; i >= 0; i--)
-            result.ReplaceText(edits[i].Offset, edits[i].Length, edits[i].Replacement.Text);
-        return result;
-    }
-
-    private void ReplaceText(int offset, int length, string text)
-    {
-        BufferLocation start = GetLocation(offset);
-        BufferLocation end = GetLocation(offset + length);
-        List<char> startLine = _lines[start.LineIndex];
-        List<char> endLine = _lines[end.LineIndex];
-
-        var replacementText = new List<char>(start.IndexInLine + text.Length + endLine.Count - end.IndexInLine);
-        replacementText.AddRange(CollectionsMarshal.AsSpan(startLine)[..start.IndexInLine]);
-        replacementText.AddRange(text);
-        replacementText.AddRange(CollectionsMarshal.AsSpan(endLine)[end.IndexInLine..]);
-
-        List<List<char>> replacementLines = SplitTextIntoLines(CollectionsMarshal.AsSpan(replacementText));
-        // The following stored line already represents the position after this EOL.
-        if (end.LineIndex < _lines.Count - 1 && replacementLines[^1].Count == 0)
-            replacementLines.RemoveAt(replacementLines.Count - 1);
-        _lines.RemoveRange(start.LineIndex, end.LineIndex - start.LineIndex + 1);
-        _lines.InsertRange(start.LineIndex, replacementLines);
     }
 
     private string GetTextAt(int offset, int length)
@@ -408,13 +352,6 @@ public class LineArrayTextBuffer : ITextBuffer
     }
 
     private readonly record struct BufferLocation(int LineIndex, int IndexInLine);
-
-    private readonly record struct EditInfo(
-        int SortIndex,
-        TextReplacement Replacement,
-        int Offset,
-        int Length,
-        string OldText);
 
     private sealed class Snapshot(string text) : ITextSnapshot
     {
