@@ -51,7 +51,7 @@ internal static class TreeTestSupport
 
     public static void AssertInvariants<T>(RedBlackTree<T> tree, IReadOnlyCollection<RedBlackTree<T>.TreeNode>? expected = null)
     {
-        var sentinel = RedBlackTree<T>.TreeNode.Sentinel;
+        var sentinel = tree.Sentinel;
         Assert.AreEqual(NodeColor.Black, sentinel.Color);
         Assert.AreSame(sentinel, sentinel.Parent);
         Assert.AreSame(sentinel, sentinel.Left);
@@ -59,6 +59,7 @@ internal static class TreeTestSupport
 
         if (tree.Root.IsSentinel)
         {
+            Assert.AreSame(sentinel, tree.Root);
             Assert.AreEqual(0, expected?.Count ?? 0);
             return;
         }
@@ -90,7 +91,10 @@ internal static class TreeTestSupport
         HashSet<RedBlackTree<T>.TreeNode> visited)
     {
         if (node.IsSentinel)
+        {
+            Assert.AreSame(sentinel, node, "A leaf belongs to another tree.");
             return 1;
+        }
         Assert.IsTrue(visited.Add(node), "Cycle or duplicate reachable node detected.");
         if (!node.Left.IsSentinel)
             Assert.AreSame(node, node.Left.Parent);

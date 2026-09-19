@@ -86,8 +86,8 @@ public sealed class TreeConstructionAndInsertionTests
     {
         var tree = new RedBlackTree<int>();
         _ = tree.InsertRight(null, 1);
-        Assert.ThrowsExactly<ArgumentException>(() => tree.InsertLeft(RedBlackTree<int>.TreeNode.Sentinel, 0));
-        Assert.ThrowsExactly<ArgumentException>(() => tree.InsertRight(RedBlackTree<int>.TreeNode.Sentinel, 2));
+        Assert.ThrowsExactly<ArgumentException>(() => tree.InsertLeft(tree.Sentinel, 0));
+        Assert.ThrowsExactly<ArgumentException>(() => tree.InsertRight(tree.Sentinel, 2));
         TreeTestSupport.AssertInvariants(tree);
     }
 }

@@ -86,6 +86,6 @@ public sealed class TreeDeletionTests
     public void DeleteSentinel_IsRejected()
     {
         var tree = new RedBlackTree<int>();
-        Assert.ThrowsExactly<ArgumentException>(() => tree.Delete(RedBlackTree<int>.TreeNode.Sentinel));
+        Assert.ThrowsExactly<ArgumentException>(() => tree.Delete(tree.Sentinel));
     }
 }

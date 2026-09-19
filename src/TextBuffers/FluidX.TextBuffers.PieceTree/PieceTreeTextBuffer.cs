@@ -477,7 +477,7 @@ public class PieceTreeTextBuffer : ITextBuffer
         sb.Append(_buffers[x.Piece.BufferIndex].Text[(startOffset + startPosition.Remainder)..(startOffset + x.Piece.Length)]);
 
         x = x.Next();
-        while (x != TreeNode.Sentinel)
+        while (!x.IsSentinel)
         {
             startOffset = OffsetInBuffer(x.Piece.BufferIndex, x.Piece.Start);
 
@@ -1108,7 +1108,7 @@ public class PieceTreeTextBuffer : ITextBuffer
 
         // delete nodes in between
         var secondNode = startNode.Next();
-        for (var node = secondNode; node != TreeNode.Sentinel && node != endNode; node = node.Next())
+        for (var node = secondNode; !node.IsSentinel && node != endNode; node = node.Next())
         {
             nodesToDel.Add(node);
         }
@@ -1449,7 +1449,7 @@ public class PieceTreeTextBuffer : ITextBuffer
 
         // search in order, to find the node contains end column
         x = x.Next();
-        while (x != TreeNode.Sentinel)
+        while (!x.IsSentinel)
         {
             if (x.Piece.LineFeedCount > 0)
             {
@@ -1760,7 +1760,7 @@ public class PieceTreeTextBuffer : ITextBuffer
 
         // search in order, to find the node contains position.columnIndex
         x = x.Next();
-        while (x != TreeNode.Sentinel)
+        while (!x.IsSentinel)
         {
 
             if (x.Piece.LineFeedCount > 0)
@@ -1834,7 +1834,7 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     private bool StartWithLF(TreeNode val)
     {
-        if (val == TreeNode.Sentinel || val.Piece.LineFeedCount == 0)
+        if (val.IsSentinel || val.Piece.LineFeedCount == 0)
             return false;
 
         var piece = val.Piece;
@@ -1865,7 +1865,7 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     private bool EndWithCR(TreeNode val)
     {
-        if (val == TreeNode.Sentinel || val.Piece.LineFeedCount == 0)
+        if (val.IsSentinel || val.Piece.LineFeedCount == 0)
             return false;
 
         return NodeCharCodeAt(val, val.Piece.Length - 1) == '\r';
