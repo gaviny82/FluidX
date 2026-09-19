@@ -11,7 +11,7 @@ public class PieceTreeTextBuffer : ITextBuffer
 {
     private const int AverageBufferSize = 65535; // 64 * 1024
 
-    internal readonly PieceTree _pieceTree = new();
+    internal PieceTree _pieceTree = new();
 
     protected StringBufferCollection _buffers; // 0 is change buffer, others are readonly original buffer.
     protected int _lineCount;
@@ -38,6 +38,7 @@ public class PieceTreeTextBuffer : ITextBuffer
     /// </summary>
     private void Initialize(IList<InlineStringBuffer> chunks, string eol, LineStarts? initialLineStarts = null)
     {
+        _pieceTree = new PieceTree();
         _buffers = new StringBufferCollection();
         _buffers.Add(new InlineStringBuffer());
         _lastChangeBufferPos = new BufferCursor { LineIndex = 0, ColumnIndex = 0 };
@@ -223,39 +224,8 @@ public class PieceTreeTextBuffer : ITextBuffer
         if (_EOLNormalized && _EOL == eol)
             return; // already normalized to the target
 
-        int averageBufferSize = AverageBufferSize;
-        int min = averageBufferSize - averageBufferSize / 3;
-        int max = min * 2;
-
-        string tempChunk = "";
-        int tempChunkLen = 0;
-        List<InlineStringBuffer> chunks = [];
-
-        for (var iterNode = _pieceTree.Root.LeftMost(); iterNode is not null; iterNode = iterNode.Next())
-        {
-            string str = GetNodeContent(iterNode);
-            int len = str.Length;
-            if (tempChunkLen <= min || tempChunkLen + len < max)
-            {
-                tempChunk += str;
-                tempChunkLen += len;
-                continue;
-            }
-
-            // Flush anyways
-            string text = StringExtensions.EndOfLinesRegex.Replace(tempChunk, eol);
-            chunks.Add(new InlineStringBuffer(text, LineStarts.CreateFast(text)));
-            tempChunk = str;
-            tempChunkLen = len;
-        }
-
-        if (tempChunkLen > 0)
-        {
-            string text = StringExtensions.EndOfLinesRegex.Replace(tempChunk, eol);
-            chunks.Add(new InlineStringBuffer(text, LineStarts.CreateFast(text)));
-        }
-
-        Initialize(chunks, eol);
+        string normalized = StringExtensions.EndOfLinesRegex.Replace(GetRawText(), eol);
+        RebuildFromText(normalized, eol);
     }
 
     #region IReadOnlyTextBuffer Members
@@ -368,6 +338,24 @@ public class PieceTreeTextBuffer : ITextBuffer
                 Insert(edits[i].Offset, replacements[i].Text);
         }
         OnDidChangeContent?.Invoke(this, EventArgs.Empty);
+    }
+
+    private string GetRawText()
+    {
+        var result = new StringBuilder(Length);
+        PieceTree.IterateInOrder(_pieceTree.Root, node =>
+        {
+            result.Append(GetNodeContent(node));
+            return true;
+        });
+        return result.ToString();
+    }
+
+    private void RebuildFromText(string text, string eol)
+    {
+        LineStarts lineStarts = LineStarts.Create(text);
+        var buffer = new InlineStringBuffer(text.ToCharArray(), lineStarts.Starts);
+        Initialize([buffer], eol, lineStarts);
     }
 
     #endregion

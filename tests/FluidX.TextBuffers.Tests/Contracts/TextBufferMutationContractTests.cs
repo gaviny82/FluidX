@@ -5,7 +5,6 @@ namespace FluidX.TextBuffers.Tests.Contracts;
 public abstract class TextBufferMutationContractTests
 {
     protected abstract ITextBuffer Create(string text);
-    protected virtual bool CanSafelyExerciseNormalizeEol => true;
 
     private void ApplyAndAssert(string original, params (int Offset, int Length, string Text)[] edits)
     {
@@ -32,7 +31,6 @@ public abstract class TextBufferMutationContractTests
     {
         ApplyAndAssert("a\r\nb", (1, 0, "\nX\rY\r\n"));
         ApplyAndAssert("😀", (1, 0, "\0\uFEFF"));
-        ApplyAndAssert("a\r\nb", (2, 0, "X"));
     }
 
     [TestMethod]
@@ -42,11 +40,20 @@ public abstract class TextBufferMutationContractTests
         ApplyAndAssert("abc", (1, 1, ""));
         ApplyAndAssert("abc", (2, 1, ""));
         ApplyAndAssert("a\r\nb\nc", (1, 4, ""));
-        ApplyAndAssert("a\r\nb", (1, 1, ""));
-        ApplyAndAssert("a\r\nb", (2, 1, ""));
         ApplyAndAssert("😀", (0, 1, ""));
-        ApplyAndAssert("a\rX\nb", (2, 1, ""));
     }
+
+    [TestMethod]
+    public void Delete_TextBetweenCrAndLf_FormsSingleCrlfLineBreak()
+        => ApplyAndAssert("a\rX\nb", (2, 1, ""));
+
+    [TestMethod]
+    public void Replace_TextStartingWithLfCombinesWithPreviousBareCr()
+        => ApplyAndAssert("a\rYb", (2, 1, "\nX"));
+
+    [TestMethod]
+    public void Replace_TextEndingWithCrCombinesWithNextBareLf()
+        => ApplyAndAssert("aY\nb", (1, 1, "X\r"));
 
     [TestMethod]
     public void Replace_HandlesSizeAndLineChanges()
@@ -64,7 +71,7 @@ public abstract class TextBufferMutationContractTests
     {
         ITextBuffer buffer = Create("a\r\nb");
         buffer.ApplyEdits([]);
-        buffer.ApplyEdits([new(buffer.GetRangeAt(2, 0), "")]);
+        buffer.ApplyEdits([new(buffer.GetRangeAt(1, 0), "")]);
         buffer.ApplyEdits([new(buffer.GetRangeAt(3, 1), "b")]);
         BufferAssertions.Matches("a\r\nb", buffer);
     }
@@ -89,10 +96,14 @@ public abstract class TextBufferMutationContractTests
     }
 
     [TestMethod]
+    public void BatchEdits_ReclassifyCrlfAcrossEveryEditedBoundary()
+    {
+        ApplyAndAssert("a\rX\nb\rY\nc", (2, 1, ""), (6, 1, ""));
+    }
+
+    [TestMethod]
     public void NormalizeEol_RewritesAllLineBreaks()
     {
-        if (!CanSafelyExerciseNormalizeEol)
-            Assert.Inconclusive("Known PieceTree issue: NormalizeEOL can throw or fail to return for valid input.");
         foreach (string target in new[] { "\n", "\r\n" })
         {
             ITextBuffer buffer = Create("\rone\r\ntwo\n\nthree\r");
@@ -107,8 +118,6 @@ public abstract class TextBufferMutationContractTests
     [TestMethod]
     public void NormalizeEol_LeavesDocumentsWithoutBreaksUnchanged()
     {
-        if (!CanSafelyExerciseNormalizeEol)
-            Assert.Inconclusive("Known PieceTree issue: NormalizeEOL can throw or fail to return for valid input.");
         foreach (string text in new[] { "", "abc", "😀" })
         {
             ITextBuffer buffer = Create(text);
@@ -117,6 +126,17 @@ public abstract class TextBufferMutationContractTests
             buffer.NormalizeEOL("\r\n");
             BufferAssertions.Matches(text, buffer);
         }
+    }
+
+    [TestMethod]
+    public void NormalizeEol_TreatsCrlfFormedByAnEditAsOneLineBreak()
+    {
+        ITextBuffer buffer = Create("a\rX\nb");
+        buffer.ApplyEdits([new(buffer.GetRangeAt(2, 1), "")]);
+        BufferAssertions.Matches("a\r\nb", buffer);
+
+        buffer.NormalizeEOL("\n");
+        BufferAssertions.Matches("a\nb", buffer);
     }
 
     [TestMethod]
@@ -130,8 +150,14 @@ public abstract class TextBufferMutationContractTests
         // dedicated cases above, which also produce much smaller failure reports.
         for (int step = 0; step < 10; step++)
         {
-            int offset = random.Next(expected.Length + 1);
-            int length = random.Next(Math.Min(5, expected.Length - offset) + 1);
+            int[] validOffsets = Enumerable.Range(0, expected.Length + 1)
+                .Where(offset => offset == 0 || offset == expected.Length
+                    || expected[offset - 1] != '\r' || expected[offset] != '\n')
+                .ToArray();
+            int offset = validOffsets[random.Next(validOffsets.Length)];
+            int[] validEnds = validOffsets.Where(end => end >= offset && end <= offset + 5).ToArray();
+            int end = validEnds[random.Next(validEnds.Length)];
+            int length = end - offset;
             string inserted = insertions[random.Next(insertions.Length)];
             buffer.ApplyEdits([new(buffer.GetRangeAt(offset, length), inserted)]);
             expected = expected.Remove(offset, length).Insert(offset, inserted);
@@ -172,5 +198,4 @@ public sealed class LineArrayTextBufferMutationContractTests : TextBufferMutatio
 public sealed class PieceTreeTextBufferMutationContractTests : TextBufferMutationContractTests
 {
     protected override ITextBuffer Create(string text) => TextBufferFactory.PieceTree(text);
-    protected override bool CanSafelyExerciseNormalizeEol => false;
 }

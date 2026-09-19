@@ -145,6 +145,9 @@ public class PlainTextModel
     /// <param name="editOperations">The text replacements and their model-level behavior.</param>
     /// <param name="computeUndoEdits"></param>
     /// <returns>Not null when <paramref name="computeUndoEdits"/> is true</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when a range is outside the document or an endpoint lies inside a CRLF sequence.
+    /// </exception>
     public ReverseSingleEditOperation[]? ApplyEdits(
         ModelEditOperation[] editOperations,
         bool computeUndoEdits,
@@ -159,7 +162,9 @@ public class PlainTextModel
             {
                 if (position.LineIndex < 0 || position.LineIndex >= TextBuffer.LineCount
                     || position.ColumnIndex < 0 || position.ColumnIndex > TextBuffer.GetLineLength(position.LineIndex))
-                    throw new ArgumentException("Edit range is outside the document.", nameof(editOperations));
+                    throw new ArgumentException(
+                        "Edit range is outside line content or has an endpoint inside CRLF.",
+                        nameof(editOperations));
             }
         }
         ModelEditOperation[] operations = ReduceOperations(editOperations);

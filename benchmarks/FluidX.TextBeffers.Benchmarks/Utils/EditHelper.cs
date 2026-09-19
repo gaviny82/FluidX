@@ -23,7 +23,7 @@ public static class EditHelper
             var endPos = buffer.GetPositionAt(edit.InsertOffset + edit.DeleteLength);
             var range = new TextRange(startPos, endPos);
             var replacement = new TextReplacement(range, edit.Text);
-            buffer.ApplyEdits([replacement], false);
+            buffer.ApplyEdits([replacement]);
         }
     }
 

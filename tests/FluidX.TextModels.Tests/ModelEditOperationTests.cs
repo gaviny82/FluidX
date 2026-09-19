@@ -41,6 +41,52 @@ public class ModelEditOperationTests
     }
 
     [TestMethod]
+    public void PlainTextModelRejectsEditEndpointsInsideCrlfBeforeApplyingBatch()
+    {
+        var model = new PlainTextModel("a\r\nb", DefaultEndOfLine.LF);
+        ModelEditOperation[] operations =
+        [
+            new(new TextRange(0, 0, 0, 1), "A"),
+            new(new TextRange(0, 2, 0, 2), "X")
+        ];
+
+        Assert.ThrowsExactly<ArgumentException>(() => model.ApplyEdits(operations, computeUndoEdits: false));
+        Assert.AreEqual("a\r\nb", model.GetValue());
+    }
+
+    [TestMethod]
+    public void PlainTextModelRejectsEveryKindOfEndpointInsideCrlf()
+    {
+        TextRange[] invalidRanges =
+        [
+            new(0, 2, 0, 2), // insertion inside CRLF
+            new(0, 2, 1, 0), // start inside CRLF
+            new(0, 1, 0, 2)  // end inside CRLF
+        ];
+
+        foreach (TextRange range in invalidRanges)
+        {
+            var model = new PlainTextModel("a\r\nb", DefaultEndOfLine.LF);
+            Assert.ThrowsExactly<ArgumentException>(() => model.ApplyEdits(
+                [new ModelEditOperation(range, "X")],
+                computeUndoEdits: false));
+            Assert.AreEqual("a\r\nb", model.GetValue());
+        }
+    }
+
+    [TestMethod]
+    public void PlainTextModelAllowsReplacingCompleteCrlf()
+    {
+        var model = new PlainTextModel("a\r\nb", DefaultEndOfLine.LF);
+
+        model.ApplyEdits(
+            [new ModelEditOperation(new TextRange(0, 1, 1, 0), "\n")],
+            computeUndoEdits: false);
+
+        Assert.AreEqual("a\r\nb", model.GetValue());
+    }
+
+    [TestMethod]
     public void TextModelInheritsPlainTextModel()
     {
         PlainTextModel model = CreateModel("text");
