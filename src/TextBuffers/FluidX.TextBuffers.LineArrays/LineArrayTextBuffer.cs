@@ -4,9 +4,8 @@ using System.Text;
 namespace FluidX.TextBuffers.LineArray;
 
 /// <summary>
-/// A simple text buffer used by tests and benchmarks. The document remains a
-/// list of character lists, with each non-final line retaining its original
-/// end-of-line characters.
+/// A simple text buffer used by tests and benchmarks. The document is stored as
+/// a list of character lists and line structure is derived from the current raw text.
 /// </summary>
 public class LineArrayTextBuffer : ITextBuffer
 {
@@ -258,20 +257,39 @@ public class LineArrayTextBuffer : ITextBuffer
                 startLine.AddRange(CollectionsMarshal.AsSpan(endLine));
             }
 
-            // Split the modified start line so CRLF pairs formed or broken at
-            // either replacement boundary are handled along with inserted EOLs.
+            // Split the modified text and then repair the two adjacent seams. A
+            // CR and LF that become adjacent across an edit boundary form CRLF.
             List<List<char>> replacementLines = SplitTextIntoLines(CollectionsMarshal.AsSpan(startLine));
             startLine.RemoveRange(replacementLines[0].Count, startLine.Count - replacementLines[0].Count);
             replacementLines[0] = startLine;
-            // The following stored line already represents the position after this EOL.
             if (range.EndLineIndex < _lines.Count - 1 && replacementLines[^1].Count == 0)
                 replacementLines.RemoveAt(replacementLines.Count - 1);
             _lines.RemoveRange(range.StartLineIndex, range.EndLineIndex - range.StartLineIndex + 1);
             _lines.InsertRange(range.StartLineIndex, replacementLines);
+            CoalesceCrlfSeams(range.StartLineIndex - 1, range.StartLineIndex + replacementLines.Count);
             changed = true;
         }
+
         if (changed)
             ContentChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void CoalesceCrlfSeams(int firstLineIndex, int lastLineIndex)
+    {
+        for (int lineIndex = Math.Max(0, firstLineIndex);
+            lineIndex <= lastLineIndex && lineIndex < _lines.Count - 1;
+            lineIndex++)
+        {
+            List<char> previous = _lines[lineIndex];
+            List<char> next = _lines[lineIndex + 1];
+            if (previous.Count == 0 || next.Count == 0 || previous[^1] != '\r' || next[0] != '\n')
+                continue;
+
+            previous.Add('\n');
+            next.RemoveAt(0);
+            if (next.Count == 0)
+                _lines.RemoveAt(lineIndex + 1);
+        }
     }
 
     private string GetTextAt(int offset, int length)
