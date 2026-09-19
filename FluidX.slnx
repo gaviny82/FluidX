@@ -10,6 +10,7 @@
   <Folder Name="/TextBuffers/">
     <Project Path="benchmarks/FluidX.TextBeffers.Benchmarks/FluidX.TextBeffers.Benchmarks.csproj" Id="cdfc6d28-ab69-4887-95a4-c186aa3c6b77" />
     <Project Path="src/TextBuffers/FluidX.TextBuffers.LineArrays/FluidX.TextBuffers.LineArrays.csproj" Id="7fcfa0a7-15de-445a-9d7a-9cae09be6a1b" />
+    <Project Path="src/TextBuffers/FluidX.TextBuffers.PersistentPieceTree/FluidX.TextBuffers.PersistentPieceTree.csproj" />
     <Project Path="src/TextBuffers/FluidX.TextBuffers.PieceTree/FluidX.TextBuffers.PieceTree.csproj" Id="f8a280ca-77ce-4c60-a86c-f328b7115fb7" />
     <Project Path="src/TextBuffers/FluidX.TextBuffers/FluidX.TextBuffers.csproj" Id="9480a24f-e934-4a9e-92cd-b6a1c4b2a29b" />
     <Project Path="tests/FluidX.TextBuffers.Tests/FluidX.TextBuffers.Tests.csproj" Id="efa82396-d502-4d04-bdf4-72bc5a47552d" />

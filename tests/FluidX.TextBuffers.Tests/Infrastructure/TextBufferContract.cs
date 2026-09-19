@@ -5,6 +5,7 @@ namespace FluidX.TextBuffers.Tests.Infrastructure;
 
 internal static class TextBufferFactory
 {
+    public static ITextBuffer PersistentPieceTree(string text) => new FluidX.TextBuffers.PersistentPieceTree.PersistentPieceTreeTextBuffer(text);
     public static ITextBuffer LineArray(string text) => new LineArrayTextBuffer(text);
     public static ITextBuffer PieceTree(string text) => PieceTreeTextBuffer.Create(text);
 }
@@ -102,4 +103,3 @@ internal static class BufferAssertions
         }
     }
 }
-

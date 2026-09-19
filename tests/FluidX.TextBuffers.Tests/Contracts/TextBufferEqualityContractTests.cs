@@ -47,7 +47,7 @@ public sealed class TextBufferEqualityContractTests
     }
 
     private static Func<string, ITextBuffer>[] Factories() =>
-        [TextBufferFactory.LineArray, TextBufferFactory.PieceTree];
+        [TextBufferFactory.LineArray, TextBufferFactory.PieceTree, TextBufferFactory.PersistentPieceTree];
 
     [TestMethod]
     public void Equality_CrossesImplementationsAndSnapshots()
