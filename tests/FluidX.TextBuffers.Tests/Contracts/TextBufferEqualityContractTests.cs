@@ -48,4 +48,27 @@ public sealed class TextBufferEqualityContractTests
 
     private static Func<string, ITextBuffer>[] Factories() =>
         [TextBufferFactory.LineArray, TextBufferFactory.PieceTree];
+
+    [TestMethod]
+    public void Equality_CrossesImplementationsAndSnapshots()
+    {
+        foreach (string text in new[] { "", "abc\r\n😀\r" })
+        {
+            ITextBuffer[] sources = Factories().Select(create => create(text)).ToArray();
+            IReadOnlyTextBuffer[] values = [.. sources, .. sources.Select(source => source.CreateSnapshot())];
+            foreach (var left in values)
+            foreach (var right in values)
+                Assert.IsTrue(left.Equals(right));
+
+            foreach (var source in sources)
+                source.ApplyEdits([new(source.GetRangeAt(0, 0), "changed")]);
+            foreach (var source in sources)
+            foreach (var snapshot in values.OfType<ITextSnapshot>())
+            {
+                Assert.IsFalse(source.Equals(snapshot));
+                Assert.IsFalse(snapshot.Equals(source));
+                Assert.IsFalse(snapshot.Equals(null));
+            }
+        }
+    }
 }

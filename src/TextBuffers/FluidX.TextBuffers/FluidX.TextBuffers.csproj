@@ -7,4 +7,9 @@
 	<IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="FluidX.TextBuffers.PieceTree" />
+    <InternalsVisibleTo Include="FluidX.TextBuffers.LineArrays" />
+  </ItemGroup>
+
 </Project>

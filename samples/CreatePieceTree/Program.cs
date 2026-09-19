@@ -41,11 +41,11 @@ PrintAllLines();
 
 // Test 4: Snapshot
 Console.WriteLine("=== Test 4: Snapshot ===");
-var snapshot = buffer.CreateSnapshot(true);
-string? line;
-while ((line = snapshot.Read()) != null)
+var snapshot = buffer.CreateSnapshot();
+for (int line = 0; line < snapshot.LineCount; line++)
 {
-    Console.Write(line);
+    Console.Write(snapshot.GetLineContent(line));
+    Console.Write(snapshot.GetLineEOL(line));
 }
 Console.WriteLine();
 
@@ -107,7 +107,7 @@ for (int i = 0; i < 100; i++)
 {
     buffer3.ApplyEdits([new TextReplacement(
         new TextRange(buffer3.LineCount - 1, buffer3.GetLineLength(buffer3.LineCount - 1), buffer3.LineCount - 1, buffer3.GetLineLength(buffer3.LineCount - 1)),
-        $"item{i}\n")], false);
+        $"item{i}\n")]);
 }
 Console.WriteLine($"After 100 inserts: {buffer3.LineCount} lines");
 Console.WriteLine($"  First: {buffer3.GetLineContent(0)}");

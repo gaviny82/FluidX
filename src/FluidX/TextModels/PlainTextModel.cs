@@ -797,11 +797,6 @@ public class PlainTextModel
         return count;
     }
 
-    public ITextSnapshot CreateSnapshot(bool preserveBOM)
-        => preserveBOM && _bom.Length > 0
-            ? new BOMSnapshot(TextBuffer.CreateSnapshot(false), _bom)
-            : TextBuffer.CreateSnapshot(false);
-
     public IReadOnlyList<FindMatch> FindMatchesLineByLine(
         TextRange searchRange, SearchData searchData, bool captureMatches, int limitResultCount)
         => TextBuffer.FindMatchesLineByLine(searchRange, searchData, captureMatches, limitResultCount);
@@ -885,19 +880,6 @@ public class PlainTextModel
         ContentChanged?.Invoke(new(rawChange, change));
     }
 
-    private sealed class BOMSnapshot(ITextSnapshot snapshot, string bom) : ITextSnapshot
-    {
-        private bool _firstRead = true;
-
-        public string? Read()
-        {
-            string? value = snapshot.Read();
-            if (value is null) return null;
-            if (!_firstRead) return value;
-            _firstRead = false;
-            return bom + value;
-        }
-    }
 }
 
 public record struct TextModelOptions(

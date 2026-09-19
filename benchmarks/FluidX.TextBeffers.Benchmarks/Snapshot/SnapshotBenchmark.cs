@@ -39,6 +39,6 @@ public class SnapshotBenchmark
     [Benchmark]
     public ITextSnapshot CreateSnapshot()
     {
-        return _buffer.CreateSnapshot(preserveBOM: false);
+        return _buffer.CreateSnapshot();
     }
 }

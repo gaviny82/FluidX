@@ -1,13 +1,15 @@
 ﻿namespace FluidX.TextBuffers;
 
 /// <summary>
-/// Text snapshot that works like an iterator.
+/// An immutable, persistent view of the exact raw UTF-16 content captured from a text buffer.
 /// </summary>
-public interface ITextSnapshot
+/// <remarks>
+/// All text, lengths, line structure, and coordinate mappings remain fixed for the lifetime of
+/// this object, regardless of subsequent source edits, normalization, or storage replacement.
+/// The snapshot retains the storage it needs independently of the source's lifetime.
+/// Reads are repeatable and safe to call concurrently, including while the source is edited.
+/// Creating a snapshot of a snapshot may return the same instance.
+/// </remarks>
+public interface ITextSnapshot : IReadOnlyTextBuffer
 {
-    /// <summary>
-    /// Reads the next chunk of text.
-    /// </summary>
-    /// <returns>the next chunk of text or <see langword="null"/> when finished.</returns>
-    string? Read();
 }

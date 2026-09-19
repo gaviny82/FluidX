@@ -32,7 +32,9 @@ public class LineArrayTextBuffer : ITextBuffer
 
     public bool Equals(IReadOnlyTextBuffer? other)
     {
-        if (other is not LineArrayTextBuffer buffer || LineCount != buffer.LineCount)
+        if (other is not LineArrayTextBuffer buffer)
+            return TextBufferContentEquality.Equals(this, other);
+        if (LineCount != buffer.LineCount)
             return false;
 
         if (ReferenceEquals(this, buffer))
@@ -190,8 +192,15 @@ public class LineArrayTextBuffer : ITextBuffer
         }
     }
 
-    public ITextSnapshot CreateSnapshot(bool preserveBOM)
-        => new Snapshot(GetTextAt(0, Length));
+    /// <summary>
+    /// Copies the line storage in O(characters + lines) to create an independent snapshot.
+    /// </summary>
+    /// <remarks>
+    /// Callers must exclude source mutation during capture. Afterwards, the snapshot owns its
+    /// character lists and supports concurrent reads without locks, independently of source edits.
+    /// </remarks>
+    public ITextSnapshot CreateSnapshot()
+        => new FrozenTextSnapshot(this);
 
     public IReadOnlyList<FindMatch> FindMatchesLineByLine(
         TextRange searchRange,
@@ -371,16 +380,4 @@ public class LineArrayTextBuffer : ITextBuffer
 
     private readonly record struct BufferLocation(int LineIndex, int IndexInLine);
 
-    private sealed class Snapshot(string text) : ITextSnapshot
-    {
-        private bool _read;
-
-        public string? Read()
-        {
-            if (_read)
-                return null;
-            _read = true;
-            return text;
-        }
-    }
 }

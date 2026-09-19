@@ -87,15 +87,16 @@ public struct InlineStringBuffer
 
             // Note: this means the line starts are not strictly append-only. The only behavior
             // that violates the append-only assumption is that the last line start is increased
-            // by 1 when \n is appended after a trailing \r. Reference to content up to the last
-            // \r still recognizes the line break as CR, before the \n is appended, so the text
-            // buffer can still be considered append-only for all practical purposes.
+            // by 1 when \n is appended after a trailing \r. A descriptor copy shares this slot,
+            // so snapshots must preserve its original value separately: otherwise frozen piece
+            // cursors can move past their captured character extent. PieceTreeSnapshot's
+            // GetLineStartInBuffer accessor supplies this correction for change buffer 0.
 
             // AppendOnlyList provides this API internally for code reuse. Another option is to
             // create another type for this purpose or duplicate the code in this class to provide
             // a strictly append-only list.
 
-            // FUTURE: Try to avoid this case at call sites.
+            // FUTURE: Make string buffers (including line starts) strictly append-only.
             _lineStarts.RemoveLast();
         }
 

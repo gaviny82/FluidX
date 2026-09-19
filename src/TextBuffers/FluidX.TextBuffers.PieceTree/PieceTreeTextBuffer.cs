@@ -232,13 +232,13 @@ public class PieceTreeTextBuffer : ITextBuffer
 
     public event EventHandler? OnDpiChangeContent;
 
-    public ITextSnapshot CreateSnapshot(bool preserveBOM)
-        => new PieceTreeSnapshot(this);
+    public ITextSnapshot CreateSnapshot()
+        => new PieceTreeSnapshot(_pieceTree, _buffers, _length, _lineCount);
 
     public bool Equals(IReadOnlyTextBuffer? other)
     {
         if (other is not PieceTreeTextBuffer otherBuffer)
-            return false;
+            return TextBufferContentEquality.Equals(this, other);
 
         return Equals(otherBuffer);
     }

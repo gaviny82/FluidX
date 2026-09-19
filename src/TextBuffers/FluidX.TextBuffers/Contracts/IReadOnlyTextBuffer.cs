@@ -3,6 +3,14 @@ namespace FluidX.TextBuffers;
 /// <summary>
 /// Represents a read-only view of a text buffer that provides access to the raw text content of a document.
 /// </summary>
+/// <remarks>
+/// Read-only means that access through this reference cannot change the content of the text buffer,
+/// but the text buffer may still be modified through other references.
+/// Concurrent access and consistency across reads are not guaranteed; callers must synchronize access
+/// unless the implementation says otherwise.
+/// <see cref="IEquatable{T}.Equals(T)"/> compares exact raw UTF-16 content across implementations,
+/// not source identity. Object equality and hashing are not content comparisons.
+/// </remarks>
 public interface IReadOnlyTextBuffer : IEquatable<IReadOnlyTextBuffer>
 {
     /**
@@ -143,9 +151,15 @@ public interface IReadOnlyTextBuffer : IEquatable<IReadOnlyTextBuffer>
 
     #endregion
 
-    // TODO: Review
-
-    ITextSnapshot CreateSnapshot(bool preserveBOM);
+    /// <summary>
+    /// Captures the current raw characters and their line structure as an immutable snapshot.
+    /// </summary>
+    /// <remarks>
+    /// This is supposed to be a relatively cheap operation. Implementations should avoid copying
+    /// character storage where practical, but capture cost is implementation-specific, not necessarily O(1).
+    /// Retaining snapshots can retain old backing storage. A snapshot may return itself here.
+    /// </remarks>
+    ITextSnapshot CreateSnapshot();
 
     // TODO: Review
 
