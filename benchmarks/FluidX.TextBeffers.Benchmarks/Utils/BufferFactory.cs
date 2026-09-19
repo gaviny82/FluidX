@@ -8,6 +8,7 @@ namespace FluidX.TextBeffers.Benchmarks.Utils;
 public enum BufferImplementation
 {
     PieceTree,
+    PersistentPieceTree,
     LineArray
 }
 
@@ -17,6 +18,7 @@ public static class BufferFactory
     {
         return implementation switch
         {
+            BufferImplementation.PersistentPieceTree => new FluidX.TextBuffers.PersistentPieceTree.PersistentPieceTreeTextBuffer(text),
             BufferImplementation.PieceTree => CreatePieceTreeBuffer(text),
             BufferImplementation.LineArray => CreateLineArrayBuffer(text),
             _ => throw new ArgumentOutOfRangeException(nameof(implementation))
