@@ -15,6 +15,12 @@ public interface IReadOnlyTextBuffer : IEquatable<IReadOnlyTextBuffer>
      * - Offset: length of characters from the first character in the document (the first character in the document has offset 0),
      *           including end-of-line sequences in previous lines ("\r\n" has length 2, "\n" and "\r" have length 1).
      * - Character count: number of Unicode characters in a piece of text (Unicode characters outside the BMP have a count of 1).
+     * - Line breaks are derived solely from the current raw text. CRLF is recognized greedily as one line break;
+     *   a CR or LF not participating in CRLF is recognized as its own line break. Implementations do not retain
+     *   logical line identities across edits.
+     * - Every UTF-16 boundary is addressable by coordinate conversion and ranges, including the boundary between
+     *   CR and LF in a CRLF sequence. <see cref="ITextBuffer.ApplyEdits(TextReplacement[])"/> places an additional
+     *   restriction on edit endpoints at that boundary.
      */
 
     #region Document properties

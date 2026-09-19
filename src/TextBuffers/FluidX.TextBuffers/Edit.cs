@@ -14,24 +14,6 @@ public record class TextReplacement(TextRange Range, string Text)
     public bool IsEmpty => Range.IsEmpty && Text.Length == 0;
 }
 
-public class ValidatedEditOperation
-{
-    public required int SortIndex { get; init; }
-    public required TextRange Range { get; init; }
-    public required int RangeOffset { get; init; }
-    public required int RangeLength { get; init; }
-    public required string Text { get; init; }
-    public required int EOLCount { get; init; }
-    public required int FirstLineLength { get; init; }
-    public required int LastLineLength { get; init; }
-}
-
-public class ApplyEditsResult
-{
-    public required ReverseSingleEditOperation[]? ReverseEdits { get; init; }
-    public required IReadOnlyList<InternalModelContentChange> Changes { get; init; }
-}
-
 public class ReverseSingleEditOperation
 {
     /// <summary>

@@ -145,6 +145,9 @@ public class PlainTextModel
     /// <param name="editOperations">The text replacements and their model-level behavior.</param>
     /// <param name="computeUndoEdits"></param>
     /// <returns>Not null when <paramref name="computeUndoEdits"/> is true</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when a range is outside the document or an endpoint lies inside a CRLF sequence.
+    /// </exception>
     public ReverseSingleEditOperation[]? ApplyEdits(
         ModelEditOperation[] editOperations,
         bool computeUndoEdits,
@@ -153,6 +156,17 @@ public class PlainTextModel
         bool isRedoing = false)
     {
         reason ??= EditSources.CreateApplyEdits();
+        foreach (var edit in editOperations)
+        {
+            foreach (var position in new[] { edit.Range.StartPosition, edit.Range.EndPosition })
+            {
+                if (position.LineIndex < 0 || position.LineIndex >= TextBuffer.LineCount
+                    || position.ColumnIndex < 0 || position.ColumnIndex > TextBuffer.GetLineLength(position.LineIndex))
+                    throw new ArgumentException(
+                        "Edit range is outside line content or has an endpoint inside CRLF.",
+                        nameof(editOperations));
+            }
+        }
         ModelEditOperation[] operations = ReduceOperations(editOperations);
         var autoWhitespaceEdits = CaptureAutoWhitespaceEdits(operations);
 
@@ -165,8 +179,54 @@ public class PlainTextModel
 
         // TODO: Emit events
         int oldLineCount = TextBuffer.LineCount;
-        bool computeBufferUndoEdits = computeUndoEdits || autoWhitespaceEdits.Count > 0;
-        var result = TextBuffer.ApplyEdits(replacements, computeBufferUndoEdits);
+        bool needReverseEdits = computeUndoEdits || autoWhitespaceEdits.Count > 0;
+        var prepared = replacements.Select((replacement, index) => new InternalModelContentChange
+        {
+            SortIndex = index,
+            Range = replacement.Range,
+            RangeOffset = TextBuffer.GetOffsetAt(replacement.Range.StartPosition),
+            RangeLength = TextBuffer.GetTextLengthInRange(replacement.Range),
+            Text = replacement.Text
+        }).ToArray();
+        Array.Sort(prepared, (a, b) =>
+        {
+            int order = TextRange.CompareRangesUsingEnds(a.Range, b.Range);
+            return order != 0 ? order : a.SortIndex.CompareTo(b.SortIndex);
+        });
+        bool hasTouchingRanges = false;
+        for (int i = 1; i < prepared.Length; i++)
+        {
+            int previousEnd = prepared[i - 1].RangeOffset + prepared[i - 1].RangeLength;
+            if (prepared[i].RangeOffset < previousEnd)
+                throw new ArgumentException("Overlapping ranges are not allowed.", nameof(editOperations));
+            hasTouchingRanges |= prepared[i].RangeOffset == previousEnd;
+        }
+        TextChange[]? textChanges = needReverseEdits ? new TextChange[prepared.Length] : null;
+        if (textChanges is not null)
+        {
+            int delta = 0;
+            for (int i = 0; i < prepared.Length; i++)
+            {
+                var edit = prepared[i];
+                textChanges[i] = new TextChange(edit.RangeOffset, TextBuffer.GetTextInRange(edit.Range),
+                    edit.RangeOffset + delta, edit.Text);
+                delta += edit.Text.Length - edit.RangeLength;
+            }
+        }
+        TextBuffer.ApplyEdits(prepared.Select(edit => new TextReplacement(edit.Range, edit.Text)).ToArray());
+        ReverseSingleEditOperation[]? reverseEdits = null;
+        if (textChanges is not null)
+        {
+            reverseEdits = textChanges.Select((change, index) => new ReverseSingleEditOperation
+            {
+                SortIndex = prepared[index].SortIndex,
+                Range = TextBuffer.GetRangeAt(change.NewPosition, change.NewLength),
+                Text = change.OldText,
+                TextChange = change
+            }).ToArray();
+            if (!hasTouchingRanges)
+                Array.Sort(reverseEdits, (a, b) => a.SortIndex.CompareTo(b.SortIndex));
+        }
         foreach (TextReplacement replacement in replacements)
         {
             if (!MightContainNonBasicASCII && !replacement.Text.IsBasicASCII())
@@ -176,8 +236,8 @@ public class PlainTextModel
         }
         int newLineCount = TextBuffer.LineCount;
 
-        var contentChanges = result.Changes;
-        _trimAutoWhitespaceLineIndices = ComputeAutoWhitespaceLineIndices(operations, autoWhitespaceEdits, result.ReverseEdits);
+        var contentChanges = prepared.Reverse().Where(edit => !edit.Range.IsEmpty || edit.Text.Length != 0).ToList();
+        _trimAutoWhitespaceLineIndices = ComputeAutoWhitespaceLineIndices(operations, autoWhitespaceEdits, reverseEdits);
 
         if (contentChanges.Count != 0)
         {
@@ -315,7 +375,7 @@ public class PlainTextModel
             );
         }
 
-        return computeUndoEdits ? result.ReverseEdits : null;
+        return computeUndoEdits ? reverseEdits : null;
     }
 
     private ModelEditOperation[] AppendAutoWhitespaceTrimEdits(
@@ -394,8 +454,8 @@ public class PlainTextModel
         if (operations.Length < 1000 || operations.Any(operation => operation.IsTracked))
             return operations;
 
-        ModelEditOperation[] sortedOperations = [.. operations];
-        Array.Sort(sortedOperations, (a, b) => TextRange.CompareRangesUsingStarts(a.Range, b.Range));
+        ModelEditOperation[] sortedOperations = operations.OrderBy(operation => operation.Range,
+            Comparer<TextRange>.Create(TextRange.CompareRangesUsingEnds)).ToArray();
 
         for (int i = 0; i < sortedOperations.Length - 1; i++)
         {
@@ -403,8 +463,8 @@ public class PlainTextModel
                 throw new ArgumentException("Overlapping ranges are not allowed", nameof(operations));
         }
 
-        TextRange firstRange = operations[0].Range;
-        TextRange lastRange = operations[^1].Range;
+        TextRange firstRange = sortedOperations[0].Range;
+        TextRange lastRange = sortedOperations[^1].Range;
         TextRange combinedRange = new(
             firstRange.StartLineIndex,
             firstRange.StartColumnIndex,
@@ -604,7 +664,7 @@ public class PlainTextModel
         // TODO: OnEOLChanging
         string normalizedText = StringExtensions.EndOfLinesRegex.Replace(
             TextBuffer.GetTextInRange(oldFullModelRange), newEOL);
-        TextBuffer.ApplyEdits([new TextReplacement(oldFullModelRange, normalizedText)], false);
+        TextBuffer.ApplyEdits([new TextReplacement(oldFullModelRange, normalizedText)]);
         _eol = newEOL;
         _isEOLNormalized = true;
         IncreaseVersionId();

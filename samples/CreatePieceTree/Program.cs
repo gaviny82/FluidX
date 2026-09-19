@@ -13,30 +13,30 @@ Console.WriteLine(buffer.GetTextInRange(new TextRange(0, 1, 1, 1))); // ello\nw
 // Writing to the buffer
 
 // INSERT a character 'a' at (line index 1, column index 3)
-buffer.ApplyEdits([new TextReplacement(new TextRange(1, 3, 1, 3), "a")], false);
+buffer.ApplyEdits([new TextReplacement(new TextRange(1, 3, 1, 3), "a")]);
 PrintAllLines();
 
 // DELETE a character at (line index 0, column index 3)
-buffer.ApplyEdits([new TextReplacement(new TextRange(0, 3, 0, 4), "")], false);
+buffer.ApplyEdits([new TextReplacement(new TextRange(0, 3, 0, 4), "")]);
 PrintAllLines();
 
 // === More complex tests ===
 
 // Test 1: Insert multi-line text
 Console.WriteLine("=== Test 1: Insert multi-line text ===");
-buffer.ApplyEdits([new TextReplacement(new TextRange(1, 5, 1, 5), "\nfoo\nbar")], false);
+buffer.ApplyEdits([new TextReplacement(new TextRange(1, 5, 1, 5), "\nfoo\nbar")]);
 PrintAllLines();
 Console.WriteLine($"Total lines: {buffer.LineCount}");
 Console.WriteLine($"Total length: {buffer.Length}");
 
 // Test 2: Delete across lines
 Console.WriteLine("=== Test 2: Delete across lines ===");
-buffer.ApplyEdits([new TextReplacement(new TextRange(0, 3, 2, 2), "")], false);
+buffer.ApplyEdits([new TextReplacement(new TextRange(0, 3, 2, 2), "")]);
 PrintAllLines();
 
 // Test 3: Replace text
 Console.WriteLine("=== Test 3: Replace text ===");
-buffer.ApplyEdits([new TextReplacement(new TextRange(0, 0, 0, 3), "Goodbye")], false);
+buffer.ApplyEdits([new TextReplacement(new TextRange(0, 0, 0, 3), "Goodbye")]);
 PrintAllLines();
 
 // Test 4: Snapshot
@@ -59,7 +59,7 @@ for (int i = 0; i < buffer2.LineCount; i++)
 }
 
 // Delete the line at index 2
-buffer2.ApplyEdits([new TextReplacement(new TextRange(2, 0, 3, 0), "")], false);
+buffer2.ApplyEdits([new TextReplacement(new TextRange(2, 0, 3, 0), "")]);
 Console.WriteLine($"After deleting line index 2: {buffer2.LineCount} lines");
 for (int i = 0; i < buffer2.LineCount; i++)
 {
@@ -67,7 +67,7 @@ for (int i = 0; i < buffer2.LineCount; i++)
 }
 
 // Insert at beginning
-buffer2.ApplyEdits([new TextReplacement(new TextRange(0, 0, 0, 0), "NEW ")], false);
+buffer2.ApplyEdits([new TextReplacement(new TextRange(0, 0, 0, 0), "NEW ")]);
 Console.WriteLine($"After insert at beginning:");
 for (int i = 0; i < buffer2.LineCount; i++)
 {
@@ -75,7 +75,7 @@ for (int i = 0; i < buffer2.LineCount; i++)
 }
 
 // Append to end
-buffer2.ApplyEdits([new TextReplacement(new TextRange(3, 5, 3, 5), " added")], false);
+buffer2.ApplyEdits([new TextReplacement(new TextRange(3, 5, 3, 5), " added")]);
 Console.WriteLine($"After append:");
 for (int i = 0; i < buffer2.LineCount; i++)
 {

@@ -9,12 +9,19 @@ public interface ITextBuffer : IReadOnlyTextBuffer
     void NormalizeEOL(string eol);
 
     /// <summary>
-    /// Applies a set of non-overlapping text replacements to the buffer.
+    /// Applies replacement text verbatim. Ranges refer to the pre-edit document.
+    /// Callers must supply valid, non-overlapping ranges sorted ascending by
+    /// <see cref="TextRange.CompareRangesUsingEnds"/>, preserving input order for ties.
+    /// Touching ranges and empty replacements are allowed. Insertions at the same
+    /// position appear in array order. Callers must validate before calling;
+    /// violations have no guaranteed result or exception.
+    /// After applying all replacements to the raw UTF-16 content, line structure is
+    /// derived again from the final text. CRLF is recognized as one line break even
+    /// when the CR and LF became adjacent across an edit boundary. A replacement's
+    /// start or end must not be positioned between the CR and LF characters of an
+    /// existing CRLF sequence. Such input has undefined behavior and must be rejected
+    /// by the caller. Replacement text may contain arbitrary CR, LF, and CRLF sequences.
     /// </summary>
-    /// <param name="replacements">The text changes to apply.</param>
-    /// <param name="computeUndoEdits">Whether to include inverse replacements in the result.</param>
-    /// <returns>Result of the set of edit operations.</returns>
-    ApplyEditsResult ApplyEdits(
-        TextReplacement[] replacements,
-        bool computeUndoEdits);
+    /// <param name="replacements">The replacement range and text to apply.</param>
+    void ApplyEdits(TextReplacement[] replacements);
 }
