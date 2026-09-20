@@ -6,7 +6,6 @@ using FluidX.TextBuffers.LineArray;
 
 namespace FluidX.TextBeffers.Benchmarks.Read;
 
-[ShortRunJob]
 [MemoryDiagnoser]
 public class ReadLineBenchmark
 {

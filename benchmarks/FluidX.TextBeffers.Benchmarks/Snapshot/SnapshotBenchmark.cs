@@ -5,7 +5,6 @@ using FluidX.TextBeffers.Benchmarks.Utils;
 
 namespace FluidX.TextBeffers.Benchmarks.Snapshot;
 
-[ShortRunJob]
 [MemoryDiagnoser]
 public class SnapshotBenchmark
 {

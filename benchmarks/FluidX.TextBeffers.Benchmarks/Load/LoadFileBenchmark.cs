@@ -9,7 +9,6 @@ using System.Text;
 
 namespace FluidX.TextBeffers.Benchmarks.Load;
 
-[ShortRunJob]
 [MemoryDiagnoser]
 public class LoadFileBenchmark
 {

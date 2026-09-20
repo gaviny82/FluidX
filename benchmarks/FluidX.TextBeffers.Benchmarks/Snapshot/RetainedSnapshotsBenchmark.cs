@@ -5,7 +5,6 @@ using FluidX.TextBeffers.Benchmarks.Utils;
 namespace FluidX.TextBeffers.Benchmarks.Snapshot;
 
 // Includes editing and retaining every version, unlike the capture-only benchmark.
-[ShortRunJob]
 [MemoryDiagnoser]
 public class RetainedSnapshotsBenchmark
 {
