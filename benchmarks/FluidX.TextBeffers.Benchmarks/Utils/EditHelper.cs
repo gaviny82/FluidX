@@ -37,8 +37,19 @@ public static class EditHelper
             int maxOffset = Math.Max(0, docLength - editLength);
             int offset = random.Next(0, maxOffset + 1);
             int deleteLen = Math.Min(editLength, docLength - offset);
-            string insertText = GenerateRandomString(random, deleteLen);
+            // Make sure the replacement rage end points do not split a CRLF sequence
+            int candidate = offset;
+            while (SplitsCrlf(text, candidate) || SplitsCrlf(text, candidate + deleteLen))
+            {
+                candidate = candidate == maxOffset ? 0 : candidate + 1;
+                if (candidate == offset) break;
+            }
+            offset = candidate;
+            if (SplitsCrlf(text, offset)) { offset--; deleteLen++; }
+            if (SplitsCrlf(text, offset + deleteLen)) deleteLen++;
 
+            // Create edit
+            string insertText = GenerateRandomString(random, deleteLen);
             edits[i] = new PreGeneratedEdit
             {
                 InsertOffset = offset,
@@ -52,6 +63,7 @@ public static class EditHelper
     public static PreGeneratedEdit[] PreGenerateSequentialEdits(string text, Random random, int editCount = DefaultEditCount)
     {
         int offset = text.Length / 2;
+        if (SplitsCrlf(text, offset)) offset++;
         var edits = new PreGeneratedEdit[editCount];
 
         for (int i = 0; i < editCount; i++)
@@ -68,6 +80,9 @@ public static class EditHelper
         }
         return edits;
     }
+
+    private static bool SplitsCrlf(string text, int offset) =>
+        offset > 0 && offset < text.Length && text[offset - 1] == '\r' && text[offset] == '\n';
 
     public static string GenerateRandomString(Random random, int length)
     {
