@@ -59,10 +59,10 @@ internal sealed class TextStorage
 
     internal char CharAt(int offset) => _text is null ? _characters![offset] : _text[offset];
     internal int BreakStart(int index) => _breakStarts[index];
-    internal void AppendTo(StringBuilder output, int start, int length)
+    internal void CopyTo(int start, Span<char> destination)
     {
-        if (_text is null) output.Append(_characters, start, length);
-        else output.Append(_text, start, length);
+        if (_text is null) _characters.AsSpan(start, destination.Length).CopyTo(destination);
+        else _text.AsSpan(start, destination.Length).CopyTo(destination);
     }
 
     internal int LowerBound(int offset, int limit)

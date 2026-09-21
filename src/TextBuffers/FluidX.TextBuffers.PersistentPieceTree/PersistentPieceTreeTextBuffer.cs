@@ -59,12 +59,7 @@ public sealed class PersistentPieceTreeTextBuffer : ITextBuffer
             if (edit.IsEmpty) continue;
             int start = original.GetOffsetAt(edit.Range.StartPosition);
             int end = original.GetOffsetAt(edit.Range.EndPosition);
-            root = Delete(root, start, end - start);
-            if (edit.Text.Length != 0)
-            {
-                root = SplitAt(root, start);
-                root = InsertText(root, start, edit.Text);
-            }
+            root = Splice(root, start, end - start, edit.Text);
         }
         if (!ReferenceEquals(root, original.Root)) _version = new(root);
     }
@@ -106,19 +101,32 @@ public sealed class PersistentPieceTreeTextBuffer : ITextBuffer
         return PieceNode.Insert(root, piece.Slice(0, leftLength), start);
     }
 
-    private static PieceNode? Delete(PieceNode? root, int offset, int length)
+    // Replace one range after splitting its two boundaries. The resulting left and right trees are joined
+    // by inserting at the known boundary, so callers do not repeat the start-boundar search.
+    private PieceNode? Splice(PieceNode? root, int offset, int length, string replacement)
     {
-        if (length == 0) return root;
-        if (offset == 0 && length == root!.Length) return null;
+        if (length == 0)
+        {
+            if (replacement.Length == 0)
+                return root;
+
+            // An insertion has no deleted range to establish a piece boundary. Split once so insertion
+            // at the middle of a piece is after the prefix rather than before the containing piece.
+            return InsertText(SplitAt(root, offset), offset, replacement);
+        }
+        if (offset == 0 && length == root!.Length)
+            return replacement.Length == 0 ? null : InsertText(null, 0, replacement);
+
+        int remaining = length;
         root = SplitAt(root, offset + length);
         root = SplitAt(root, offset);
-        while (length > 0)
+        while (remaining > 0)
         {
             var (piece, _) = PieceNode.Find(root!, offset);
-            length -= piece.Length;
+            remaining -= piece.Length;
             root = PieceNode.Remove(root!, offset);
         }
-        return root;
+        return replacement.Length == 0 ? root : InsertText(root, offset, replacement);
     }
 
     public void NormalizeEOL(string eol)

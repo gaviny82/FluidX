@@ -169,15 +169,30 @@ internal sealed class PieceNode
         return leftLength + n.Piece.Length + BreakStart(n.Right!, index - pieceCount, n.Piece.Summary.Last == '\r');
     }
 
-    internal static void Append(PieceNode? n, int offset, int length, System.Text.StringBuilder output)
+    internal static void CopyTo(PieceNode? n, int offset, Span<char> output)
     {
-        if (n is null || length == 0) return;
+        if (n is null || output.Length == 0) return;
+        int length = output.Length;
         int left = n.Left?.Length ?? 0;
-        if (offset < left) Append(n.Left, offset, Math.Min(length, left - offset), output);
+        if (offset < left)
+        {
+            int count = Math.Min(length, left - offset);
+            CopyTo(n.Left, offset, output[..count]);
+        }
         int first = Math.Max(offset, left);
         int last = Math.Min(offset + length, left + n.Piece.Length);
-        if (first < last) n.Piece.Storage.AppendTo(output, n.Piece.Start + first - left, last - first);
+        if (first < last)
+        {
+            int count = last - first;
+            int destination = first - offset;
+            n.Piece.Storage.CopyTo(n.Piece.Start + first - left, output.Slice(destination, count));
+        }
         int end = left + n.Piece.Length;
-        if (offset + length > end) Append(n.Right, Math.Max(0, offset - end), offset + length - Math.Max(offset, end), output);
+        if (offset + length > end)
+        {
+            int rightOffset = Math.Max(0, offset - end);
+            int destination = Math.Max(0, end - offset);
+            CopyTo(n.Right, rightOffset, output[destination..]);
+        }
     }
 }

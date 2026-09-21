@@ -4,7 +4,10 @@ namespace FluidX.TextBuffers.PersistentPieceTree;
 
 internal sealed class PersistentPieceTreeSnapshot(PieceNode? root) : ITextSnapshot
 {
+    private sealed record class LastLineCacheEntry(int Line, int Start, int ContentEnd, int End, string Content);
+
     internal PieceNode? Root { get; } = root;
+    private LastLineCacheEntry? _lastLineCache = null;
     public int Length => Root?.Length ?? 0;
     public int LineCount => (Root?.Summary.Breaks ?? 0) + 1;
     public ITextSnapshot CreateSnapshot() => this;
@@ -55,9 +58,14 @@ internal sealed class PersistentPieceTreeSnapshot(PieceNode? root) : ITextSnapsh
     {
         if (length < 0 || offset < 0 || offset > Length - length) throw new ArgumentOutOfRangeException(nameof(length));
         if (length == 0) return string.Empty;
-        var result = new StringBuilder(length);
-        PieceNode.Append(Root, offset, length, result);
-        return result.ToString();
+        return string.Create(
+            length,
+            (Snapshot: this, Offset: offset),
+            static (destination, state) =>
+            {
+                state.Snapshot.CopyText(state.Snapshot.Root, state.Offset, destination);
+            }
+        );
     }
 
     private (int Start, int ContentEnd, int End) LineBounds(int line)
@@ -82,9 +90,19 @@ internal sealed class PersistentPieceTreeSnapshot(PieceNode? root) : ITextSnapsh
 
     public string GetLineContent(int lineIndex)
     {
-        var (start, end, _) = LineBounds(lineIndex);
-        return TextAt(start, end - start);
+        var cached = Volatile.Read(ref _lastLineCache);
+        if (cached is not null && cached.Line == lineIndex)
+            return cached.Content;
+
+        var (start, contentEnd, end) = LineBounds(lineIndex);
+        string content = TextAt(start, contentEnd - start);
+        var entry = new LastLineCacheEntry(lineIndex, start, contentEnd, end, content);
+        Interlocked.CompareExchange(ref _lastLineCache, entry, cached);
+        return content;
     }
+
+    private void CopyText(PieceNode? node, int offset, Span<char> destination)
+        => PieceNode.CopyTo(node, offset, destination);
 
     public string GetLineEOL(int lineIndex)
     {
