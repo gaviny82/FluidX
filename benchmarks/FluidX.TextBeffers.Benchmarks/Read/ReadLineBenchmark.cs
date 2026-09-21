@@ -2,15 +2,22 @@ using System;
 using BenchmarkDotNet.Attributes;
 using FluidX.TextBuffers;
 using FluidX.TextBeffers.Benchmarks.Utils;
-using FluidX.TextBuffers.LineArray;
 
 namespace FluidX.TextBeffers.Benchmarks.Read;
+
+public enum ReadPreparation
+{
+    None,
+    RandomEdits,
+    SequentialEdits
+}
 
 [MemoryDiagnoser]
 public class ReadLineBenchmark
 {
     private const int EditCount = 1000;
-    private const int EditLength = 10;
+    private const int ReadCount = 100;
+    private const int MaximumRangeLength = 100;
 
     [ParamsAllValues]
     public TestFileType FileType { get; set; }
@@ -18,134 +25,112 @@ public class ReadLineBenchmark
     [ParamsAllValues]
     public BufferImplementation Implementation { get; set; }
 
-    private string _fileText = null!;
-    private PreGeneratedEdit[] _randomEdits = null!;
-    private PreGeneratedEdit[] _sequentialEdits = null!;
+    [ParamsAllValues]
+    public ReadPreparation Preparation { get; set; }
+
     private ITextBuffer _buffer = null!;
     private int _lineIndex;
+    private int[] _randomLineIndices = null!;
+    private TextRange[] _randomRanges = null!;
+    private int[] _contiguousLineIndices = null!;
 
-    // Cache of line array implementation to avoid re-creating it for each benchmark iteration, as it is slow to create.
-    private static LineArrayTextBuffer s_lineArrayBufferCacheSingleEdit = null!;
-    private static LineArrayTextBuffer s_lineArrayBufferCache1000RandomEdits = null!;
-    private static LineArrayTextBuffer s_lineArrayBufferCache1000SequentialEdits = null!;
-
-    public void SetupCommon()
+    [GlobalSetup]
+    public void Setup()
     {
-        _fileText = TestFileHelper.LoadFileText(FileType);
+        string text = TestFileHelper.LoadFileText(FileType);
+        _buffer = BufferFactory.CreateBuffer(Implementation, text);
 
         var random = new Random(42);
-        _randomEdits = EditHelper.PreGenerateRandomEdits(_fileText, random, EditCount, EditLength);
-
-        random = new Random(42);
-        _sequentialEdits = EditHelper.PreGenerateSequentialEdits(_fileText, random, EditCount);
-    }
-
-    [GlobalSetup(Target = nameof(ReadLine))]
-    public void SetupForReadLine()
-    {
-        SetupCommon();
-    }
-
-    [GlobalSetup(Target = nameof(ReadLineAfterSingleEdit))]
-    public void SetupForSingleEdit()
-    {
-        SetupCommon();
-        if (Implementation != BufferImplementation.LineArray)
-            return;
-        s_lineArrayBufferCacheSingleEdit = (LineArrayTextBuffer)BufferFactory.CreateBuffer(BufferImplementation.LineArray, _fileText);
-        EditHelper.ApplyEdits(s_lineArrayBufferCacheSingleEdit, [_randomEdits[0]]);
-    }
-
-    [GlobalSetup(Target = nameof(ReadLineAfter1000RandomEdits))]
-    public void SetupFor1000RandomEdits()
-    {
-        SetupCommon();
-        if (Implementation != BufferImplementation.LineArray)
-            return;
-        s_lineArrayBufferCache1000RandomEdits = (LineArrayTextBuffer)BufferFactory.CreateBuffer(BufferImplementation.LineArray, _fileText);
-        EditHelper.ApplyEdits(s_lineArrayBufferCache1000RandomEdits, _randomEdits);
-    }
-
-    [GlobalSetup(Target = nameof(ReadLineAfter1000SequentialEdits))]
-    public void SetupFor1000SequentialEdits()
-    {
-        SetupCommon();
-        if (Implementation != BufferImplementation.LineArray)
-            return;
-        s_lineArrayBufferCache1000SequentialEdits = (LineArrayTextBuffer)BufferFactory.CreateBuffer(BufferImplementation.LineArray, _fileText);
-        EditHelper.ApplyEdits(s_lineArrayBufferCache1000SequentialEdits, _sequentialEdits);
-    }
-
-    [IterationSetup(Target = nameof(ReadLine))]
-    public void IterationSetupRead()
-    {
-        _buffer = BufferFactory.CreateBuffer(Implementation, _fileText);
-        _lineIndex = _buffer.LineCount / 2;
-    }
-
-    [IterationSetup(Target = nameof(ReadLineAfterSingleEdit))]
-    public void IterationSetupSingle()
-    {
-        if (Implementation == BufferImplementation.LineArray)
+        if (Preparation == ReadPreparation.RandomEdits)
         {
-            _buffer = s_lineArrayBufferCacheSingleEdit;
-            _lineIndex = _buffer.LineCount / 2;
-            return;
+            EditHelper.ApplyEdits(
+                _buffer,
+                EditHelper.PreGenerateRandomEdits(text, random, EditCount));
         }
-        _buffer = BufferFactory.CreateBuffer(Implementation, _fileText);
-        EditHelper.ApplyEdits(_buffer, [_randomEdits[0]]);
-        _lineIndex = _buffer.LineCount / 2;
-    }
-
-    [IterationSetup(Target = nameof(ReadLineAfter1000RandomEdits))]
-    public void IterationSetupRandom()
-    {
-        if (Implementation == BufferImplementation.LineArray)
+        else if (Preparation == ReadPreparation.SequentialEdits)
         {
-            _buffer = s_lineArrayBufferCache1000RandomEdits;
-            _lineIndex = _buffer.LineCount / 2;
-            return;
+            EditHelper.ApplyEdits(
+                _buffer,
+                EditHelper.PreGenerateSequentialEdits(text, random, EditCount));
         }
-        _buffer = BufferFactory.CreateBuffer(Implementation, _fileText);
-        EditHelper.ApplyEdits(_buffer, _randomEdits);
+
+        random = new Random(43);
         _lineIndex = _buffer.LineCount / 2;
+        _randomLineIndices = CreateRandomLineIndices(random);
+        _randomRanges = CreateRandomRanges(random);
+        _contiguousLineIndices = CreateContiguousLineIndices();
     }
 
-    [IterationSetup(Target = nameof(ReadLineAfter1000SequentialEdits))]
-    public void IterationSetupSequential()
+    private int[] CreateRandomLineIndices(Random random)
     {
-        if (Implementation == BufferImplementation.LineArray)
+        var indices = new int[ReadCount];
+        for (int i = 0; i < indices.Length; i++)
+            indices[i] = random.Next(_buffer.LineCount);
+        return indices;
+    }
+
+    private TextRange[] CreateRandomRanges(Random random)
+    {
+        var ranges = new TextRange[ReadCount];
+        for (int i = 0; i < ranges.Length; i++)
         {
-            _buffer = s_lineArrayBufferCache1000SequentialEdits;
-            _lineIndex = _buffer.LineCount / 2;
-            return;
+            int offset = random.Next(_buffer.Length);
+            int maximumLength = Math.Min(MaximumRangeLength, _buffer.Length - offset);
+            int length = random.Next(1, maximumLength + 1);
+            ranges[i] = _buffer.GetRangeAt(offset, length);
         }
-        _buffer = BufferFactory.CreateBuffer(Implementation, _fileText);
-        EditHelper.ApplyEdits(_buffer, _sequentialEdits);
-        _lineIndex = _buffer.LineCount / 2;
+        return ranges;
     }
 
-    [Benchmark]
-    public string ReadLine()
+    private int[] CreateContiguousLineIndices()
     {
-        return _buffer.GetLineContent(_lineIndex);
+        var indices = new int[ReadCount];
+        int start = Math.Clamp(
+            _lineIndex - ReadCount / 2,
+            0,
+            Math.Max(0, _buffer.LineCount - ReadCount));
+
+        for (int i = 0; i < indices.Length; i++)
+            indices[i] = (start + i) % _buffer.LineCount;
+        return indices;
     }
 
-    [Benchmark]
-    public string ReadLineAfterSingleEdit()
+    [Benchmark(Baseline = true)]
+    public string SingleLineRead() => _buffer.GetLineContent(_lineIndex);
+
+    [Benchmark(OperationsPerInvoke = ReadCount)]
+    public int RepeatedSameLineReads()
     {
-        return _buffer.GetLineContent(_lineIndex);
+        int totalLength = 0;
+        for (int i = 0; i < ReadCount; i++)
+            totalLength += _buffer.GetLineContent(_lineIndex).Length;
+        return totalLength;
     }
 
-    [Benchmark]
-    public string ReadLineAfter1000RandomEdits()
+    [Benchmark(OperationsPerInvoke = ReadCount)]
+    public int RandomLineReads()
     {
-        return _buffer.GetLineContent(_lineIndex);
+        int totalLength = 0;
+        foreach (int lineIndex in _randomLineIndices)
+            totalLength += _buffer.GetLineContent(lineIndex).Length;
+        return totalLength;
     }
 
-    [Benchmark]
-    public string ReadLineAfter1000SequentialEdits()
+    [Benchmark(OperationsPerInvoke = ReadCount)]
+    public int RandomRangeReads()
     {
-        return _buffer.GetLineContent(_lineIndex);
+        int totalLength = 0;
+        foreach (TextRange range in _randomRanges)
+            totalLength += _buffer.GetTextInRange(range).Length;
+        return totalLength;
+    }
+
+    [Benchmark(OperationsPerInvoke = ReadCount)]
+    public int ContiguousLineReads()
+    {
+        int totalLength = 0;
+        foreach (int lineIndex in _contiguousLineIndices)
+            totalLength += _buffer.GetLineContent(lineIndex).Length;
+        return totalLength;
     }
 }
