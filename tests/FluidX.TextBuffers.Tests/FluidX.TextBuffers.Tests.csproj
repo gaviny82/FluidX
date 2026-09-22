@@ -1,4 +1,4 @@
-﻿<Project Sdk="MSTest.Sdk/4.0.2">
+<Project Sdk="MSTest.Sdk/4.0.2">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -8,6 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\benchmarks\FluidX.TextBeffers.Benchmarks\FluidX.TextBeffers.Benchmarks.csproj" />
+    <ProjectReference Include="..\..\src\TextBuffers\FluidX.TextBuffers.PersistentPieceTree\FluidX.TextBuffers.PersistentPieceTree.csproj" />
     <ProjectReference Include="..\..\src\TextBuffers\FluidX.TextBuffers.LineArrays\FluidX.TextBuffers.LineArrays.csproj" />
     <ProjectReference Include="..\..\src\TextBuffers\FluidX.TextBuffers.PieceTree\FluidX.TextBuffers.PieceTree.csproj" />
     <ProjectReference Include="..\..\src\TextBuffers\FluidX.TextBuffers\FluidX.TextBuffers.csproj" />

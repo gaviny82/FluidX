@@ -5,7 +5,6 @@ using FluidX.TextBeffers.Benchmarks.Utils;
 
 namespace FluidX.TextBeffers.Benchmarks.Edit;
 
-[ShortRunJob]
 [MemoryDiagnoser]
 public class SequentialEditsBenchmark
 {

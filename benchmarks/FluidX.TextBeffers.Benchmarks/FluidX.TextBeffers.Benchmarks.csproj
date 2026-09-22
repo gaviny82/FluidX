@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFrameworks>net10.0</TargetFrameworks>
@@ -7,11 +7,13 @@
 
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageReference Include="CommandLineParser" Version="2.9.1" />
     <PackageReference Include="Microsoft.VisualStudio.DiagnosticsHub.BenchmarkDotNetDiagnosers" Version="18.7.37220.1" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\TextBuffers\FluidX.TextBuffers.LineArrays\FluidX.TextBuffers.LineArrays.csproj" />
+    <ProjectReference Include="..\..\src\TextBuffers\FluidX.TextBuffers.PersistentPieceTree\FluidX.TextBuffers.PersistentPieceTree.csproj" />
     <ProjectReference Include="..\..\src\TextBuffers\FluidX.TextBuffers.PieceTree\FluidX.TextBuffers.PieceTree.csproj" />
     <ProjectReference Include="..\..\src\TextBuffers\FluidX.TextBuffers\FluidX.TextBuffers.csproj" />
   </ItemGroup>
@@ -25,13 +27,13 @@
           Condition="!Exists('$(MSBuildProjectDirectory)\TestFiles\checker.ts') Or
                      !Exists('$(MSBuildProjectDirectory)\TestFiles\sqlite3.c') Or
                      !Exists('$(MSBuildProjectDirectory)\TestFiles\Russian-English Bilingual.dic')">
-    <DownloadFile SourceUrl="https://raw.githubusercontent.com/microsoft/TypeScript/main/src/compiler/checker.ts"
+    <DownloadFile SourceUrl="https://raw.githubusercontent.com/microsoft/TypeScript/050880ce59e30b356b686bd3144efe24f875ebc8/src/compiler/checker.ts"
                   DestinationFolder="$(MSBuildProjectDirectory)\TestFiles"
                   SkipUnchangedFiles="true" />
-    <DownloadFile SourceUrl="https://raw.githubusercontent.com/clibs/sqlite/master/sqlite3.c"
+    <DownloadFile SourceUrl="https://raw.githubusercontent.com/clibs/sqlite/8bc411b5985233d9c31c50c8f7336cb7c0411b15/sqlite3.c"
                   DestinationFolder="$(MSBuildProjectDirectory)\TestFiles"
                   SkipUnchangedFiles="true" />
-    <DownloadFile SourceUrl="https://raw.githubusercontent.com/titoBouzout/Dictionaries/master/Russian-English%20Bilingual.dic"
+    <DownloadFile SourceUrl="https://raw.githubusercontent.com/titoBouzout/Dictionaries/65e552e7216cecab2b497c898a9a7ee1e2e2de11/Russian-English%20Bilingual.dic"
                   DestinationFolder="$(MSBuildProjectDirectory)\TestFiles"
                   SkipUnchangedFiles="true" />
   </Target>

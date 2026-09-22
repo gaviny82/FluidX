@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FluidX.TextBuffers\FluidX.TextBuffers.csproj" />
+    <None Update="LICENSE.fredbuf" Pack="true" PackagePath="" />
+    <InternalsVisibleTo Include="FluidX.TextBuffers.Tests" />
+  </ItemGroup>
+
+</Project>

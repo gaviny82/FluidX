@@ -9,7 +9,6 @@ using System.Text;
 
 namespace FluidX.TextBeffers.Benchmarks.Load;
 
-[ShortRunJob]
 [MemoryDiagnoser]
 public class LoadFileBenchmark
 {
@@ -38,6 +37,6 @@ public class LoadFileBenchmark
 
         using var reader = new StreamReader(stream);
         string text = await reader.ReadToEndAsync();
-        return new LineArrayTextBuffer(text);
+        return BufferFactory.CreateBuffer(Implementation, text);
     }
 }
