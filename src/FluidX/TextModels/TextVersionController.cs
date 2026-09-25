@@ -54,7 +54,31 @@ public sealed record TextRecord(
     long SourceRecordId,
     ImmutableArray<TextChangeSpan> ChangeSpans);
 
-public class TextVersionController
+/// <summary>
+/// Represents a transition from one <see cref="TextRecord"/> to another through retained record history.
+/// Changes are oriented from <see cref="Source"/> to <see cref="Target"/>.
+/// </summary>
+/// <remarks>A reverse transition swaps each span's old and new coordinates.</remarks>
+public readonly record struct TextRecordTransition(TextRecord Source, TextRecord Target,
+    ImmutableArray<TextChangeSpan> ChangeSpans)
+{
+    /// <summary>
+    /// Reads old and new text from the snapshots when a caller needs change content.
+    /// </summary>
+    public ImmutableArray<TextChange> GetTextChanges()
+    {
+        var changes = ImmutableArray.CreateBuilder<TextChange>(ChangeSpans.Length);
+        foreach (TextChangeSpan span in ChangeSpans)
+        {
+            string oldText = Source.Snapshot.GetTextInRange(
+                Source.Snapshot.GetRangeAt(span.OldPosition, span.OldLength));
+            string newText = Target.Snapshot.GetTextInRange(
+                Target.Snapshot.GetRangeAt(span.NewPosition, span.NewLength));
+            changes.Add(new TextChange(span.OldPosition, oldText, span.NewPosition, newText));
+        }
+        return changes.MoveToImmutable();
+    }
+}
 {
 
 }
