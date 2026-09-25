@@ -8,7 +8,7 @@ namespace FluidX.TextBuffers.PersistentPieceTree;
 /// including during source edits. Writers must be externally synchronized.
 /// Each edit copies only affected tree paths; retained versions share text and other nodes.
 /// </remarks>
-public sealed class PersistentPieceTreeTextBuffer : ITextBuffer
+public sealed class PersistentPieceTreeTextBuffer : ISnapshotRestorableTextBuffer
 {
     private volatile PersistentPieceTreeSnapshot _version;
     private const int EditChunkSize = 1024;
@@ -28,6 +28,13 @@ public sealed class PersistentPieceTreeTextBuffer : ITextBuffer
     public int Length => _version.Length;
     public int LineCount => _version.LineCount;
     public ITextSnapshot CreateSnapshot() => _version;
+    public bool TryRestoreSnapshot(ITextSnapshot snapshot)
+    {
+        if (snapshot is not PersistentPieceTreeSnapshot version) return false;
+        _version = version;
+        _editStorage = null;
+        return true;
+    }
     public bool Equals(IReadOnlyTextBuffer? other) => ReferenceEquals(this, other) ||
         _version.Equals(other is PersistentPieceTreeTextBuffer buffer ? buffer._version : other);
     public int GetOffsetAt(TextPosition position) => _version.GetOffsetAt(position);

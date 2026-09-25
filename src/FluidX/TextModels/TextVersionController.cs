@@ -4,29 +4,55 @@ using System.Text;
 
 namespace FluidX.TextModels;
 
-/* Refactor: TextVersionController
- * - Use a ring buffer of TextSnapshot to store the undo/redo history text buffer snapshots.
- * - - Use a pointer into the ring buffer to track the current version.
- * - Store a monotonic linear history of TextVersion, each version stores the changes.
- * 
- * Operations:
- * - Undo: moves the pointer back to the previous snapshot, creates new TextVersion of type 'undo'
- * - Redo: moves the pointer forward to the next snapshot, creates new TextVersion of type 'redo'
- * - Edit: creates a new TextVersion of type 'edit', stores the changes, creates new snapshot (or supplied by PlainTextModel),
- *         and moves the pointer forward to the new snapshot.
- * - EOLNorm: creates a new TextVersion of type 'eolnorm', stores the changes (changed line original EOLs, new EOL), allowing reverting EOLNorm,
- *            creates new snapshot (or supplied by PlainTextModel), and moves the pointer forward to the new snapshot.
- *
- * TBD: How can we restore an abstract ITextBuffer to an ITextSnapshot? Apply reverse changes?
- *      or swap a pointer? or add ITextSnapshot.CreateBuffer() method to create a new ITextBuffer from the snapshot?
- *
- * Methods:
- * - GetHistoryStack, GetFutureStack, GetCurrentVersion, GetCurrentSnapshot, GetCurrentBuffer
- * - CanUndo, CanRedo
- * - [TBD] Query changes between any two versions?
- * - [TBD] Set the limit of versions and snapshots to keep?
- * - [TBD] allow jumpting to any history/future snapshot? or equivalent to a multi-step undo/redo? should this be O(1) direct jump, or O(N) sequential undo/redo?
- */
+/// <summary>
+/// The action that produced a new <see cref="TextVersion"/>.
+/// </summary>
+public enum TextVersionKind { Initial, Edit, EolNormalization, Replacement, Undo, Redo, Jump }
+
+/// <summary>
+/// Represents a chronological version of the <see cref="ITextBuffer"/> created by an action applied to the text model.
+/// <see cref="VersionId"/> increases monotonically from 0 for every action.
+/// <see cref="TargetRecordId"/> can return to an earlier value on undo, redo, or jump.
+/// </summary>
+/// <param name="VersionId">Monotonic ID of this version.</param>
+/// <param name="SourceRecordId">Record ID selected before the action; -1 for the initial version.</param>
+/// <param name="TargetRecordId">Record ID selected after the action.</param>
+/// <param name="Kind">The action performed that creates this version.</param>
+public sealed record TextVersion(
+    long VersionId,
+    long SourceRecordId,
+    long TargetRecordId,
+    TextVersionKind Kind);
+
+/// <summary>
+/// A span of content changed between two <see cref="TextRecord"/>s. The coordinates are
+/// measured in UTF-16 offsets in the snapshots before and after an edit.
+/// </summary>
+/// <param name="OldPosition">Start offset in the preceding record.</param>
+/// <param name="OldLength">Length removed from the preceding record.</param>
+/// <param name="NewPosition">Start offset in the new record.</param>
+/// <param name="NewLength">Length inserted in the new record.</param>
+public readonly record struct TextChangeSpan(int OldPosition, int OldLength, int NewPosition, int NewLength)
+{
+    public int OldEnd => OldPosition + OldLength;
+    public int NewEnd => NewPosition + NewLength;
+}
+
+
+/// <summary>
+/// An immutable captured buffer state with change spans from its source record. The record ID is unique and monotonically increasing from 0.
+/// A new record is only created when the buffer is mutated. Undo, redo, and jump to a different record do not create new records.
+/// </summary>
+/// <param name="RecordId">Unique ID assigned when the new buffer state was recorded.</param>
+/// <param name="Snapshot">The capture immutable state of the text buffer.</param>
+/// <param name="SourceRecordId">The record ID from which this state was created, even if it has since been evicted; -1 for the initial record.</param>
+/// <param name="ChangeSpans">Changed UTF-16 spans from <see cref="SourceRecordId"/> to this record. Change text can be
+/// retrieved from the two snapshots on demand. Empty for the initial record. </param>
+public sealed record TextRecord(
+    long RecordId,
+    ITextSnapshot Snapshot,
+    long SourceRecordId,
+    ImmutableArray<TextChangeSpan> ChangeSpans);
 
 public class TextVersionController
 {
