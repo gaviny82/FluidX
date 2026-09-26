@@ -1,6 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Collections.Immutable;
+using FluidX.Common.DataStructures;
+using FluidX.TextBuffers;
 
 namespace FluidX.TextModels;
 
@@ -126,7 +126,6 @@ public sealed class TextVersionController
         ArgumentNullException.ThrowIfNull(initialSnapshot);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(recordLimit);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(versionLimit);
-        _buffer = buffer;
         _records = new CircularBuffer<TextRecord>(recordLimit);
         _versions = new CircularBuffer<TextVersion>(versionLimit);
         _records.Append(new TextRecord(0, initialSnapshot, -1, []));
@@ -246,13 +245,177 @@ public sealed class TextVersionController
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">The record is not retained.</exception>
     public TextRecord GetRecord(long recordId) => _records[FindRecordIndex(recordId)];
+
+    /// <summary>
+    /// Returns ordered adjacent transitions from one retained record to another.
+    /// Change coordinates in each transition refer to that transition's two snapshots.
+    /// </summary>
+    /// <remarks>Returns an empty array when both IDs are equal, and throws if either record is no longer retained.</remarks>
+    public ImmutableArray<TextRecordTransition> GetTransitionsBetweenRecords(long fromRecordId, long toRecordId)
+    {
+        int from = FindRecordIndex(fromRecordId);
+        int to = FindRecordIndex(toRecordId);
+        var result = ImmutableArray.CreateBuilder<TextRecordTransition>(Math.Abs(to - from));
+        if (from < to)
+        {
+            for (int i = from + 1; i <= to; i++)
+            {
+                result.Add(new TextRecordTransition(_records[i - 1], _records[i],
+                    _records[i].ChangeSpans));
+            }
+        }
+        else
+        {
+            for (int i = from; i > to; i--)
+            {
+                // Reverse change spans for backward transitions
+                result.Add(new TextRecordTransition(_records[i], _records[i - 1],
+                    _records[i].ChangeSpans.Select(change => new TextChangeSpan(
+                        change.NewPosition, change.NewLength, change.OldPosition, change.OldLength))
+                    .ToImmutableArray()));
+            }
+        }
+        return result.MoveToImmutable();
+    }
+
     #endregion
 
-    #region Record versions and records after actions
-{
+    #region Commit versions and records after actions
+
+    /// <summary>
+    /// Commit a version after a buffer edit. This creates a record and discards redo history.
+    /// </summary>
+    /// <param name="changes">The change spans of the edit operation.</param>
+    /// <param name="snapshot">The resulting snapshot after applying the edit.</param>
+    /// <remarks>
+    /// The caller must supply ordered, nonoverlapping spans with valid UTF-16 coordinates
+    /// that describe the full change from the current snapshot to <paramref name="snapshot"/>.
+    /// Otherwise, the behavior is undefined.
+    /// </remarks>
+    public TextVersion CommitEdit(ImmutableArray<TextChangeSpan> changes, ITextSnapshot snapshot)
+    {
+        if (changes.IsDefault)
+            throw new ArgumentException("Changes must be an initialized immutable array.", nameof(changes));
+        ArgumentNullException.ThrowIfNull(snapshot);
+        return AppendRecord(TextVersionKind.Edit, changes, snapshot);
+    }
+
+    /// <summary>
+    /// Commit a version after an EOL normalization. This creates a record and discards redo history.
+    /// </summary>
+    /// <param name="changes">The change spans of the edit operation.</param>
+    /// <param name="snapshot">The resulting snapshot after applying the EOL normalization.</param>
+    /// <remarks>
+    /// The caller must supply ordered, nonoverlapping spans with valid UTF-16 coordinates
+    /// that describe the full change from the current snapshot to <paramref name="snapshot"/>.
+    /// Otherwise, the behavior is undefined.
+    /// </remarks>
+    public TextVersion CommitEolNormalization(ImmutableArray<TextChangeSpan> changes, ITextSnapshot snapshot)
+    {
+        if (changes.IsDefault)
+            throw new ArgumentException("Changes must be an initialized immutable array.", nameof(changes));
+        ArgumentNullException.ThrowIfNull(snapshot);
+        return AppendRecord(TextVersionKind.EolNormalization, changes, snapshot);
+    }
+
+    /// <summary>
+    /// Commit a version after an undo, redo, or jump to an explicity record.
+    /// </summary>
+    /// <param name="kind">The kind of navigation. Must be either <see cref="TextVersionKind.Undo"/>,
+    /// <see cref="TextVersionKind.Redo"/>, or <see cref="TextVersionKind.Jump"/>.</param>
+    /// <param name="targetRecordId">The ID of the target record to navigate to.</param>
+    /// <remarks>
+    /// Undo and redo must select the adjacent past or future record respectively; an
+    /// explicit jump may select any retained record, including an adjacent one.
+    /// A jump to the current record is a no-op.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The target record is not retained.</exception>
+    /// <exception cref="ArgumentException">The kind or target direction is invalid.</exception>
+    public TextVersion CommitNavigation(TextVersionKind kind, long targetRecordId)
+    {
+        if (kind is not (TextVersionKind.Undo or TextVersionKind.Redo or TextVersionKind.Jump))
+            throw new ArgumentException("Expected Undo, Redo, or Jump.", nameof(kind));
+
+        int target = FindRecordIndex(targetRecordId);
+        if (kind == TextVersionKind.Undo && target != _currentRecordIndex - 1 ||
+            kind == TextVersionKind.Redo && target != _currentRecordIndex + 1)
+            throw new ArgumentException("The target is not the adjacent record for this action.", nameof(targetRecordId));
+
+        if (target == _currentRecordIndex)
+            return CurrentVersion;
+
+        long sourceRecordId = RecordId;
+        _currentRecordIndex = target;
+        return AppendVersion(kind, sourceRecordId);
+    }
+
+    /// <summary>
+    /// Commit a full buffer replacement using the supplied snapshot. The caller
+    /// must restore or replace the buffer first.
+    /// </summary>
+    /// <remarks>
+    /// Redo history is discarded. The former record remains undoable while retained.
+    /// </remarks>
+    public TextVersion CommitReplacement(ITextSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        ImmutableArray<TextChangeSpan> changes =
+            [new TextChangeSpan(0, CurrentSnapshot.Length, 0, snapshot.Length)];
+        return AppendRecord(TextVersionKind.Replacement, changes, snapshot);
+    }
+
     #endregion
 
     #region Helpers
+
+    private int FindRecordIndex(long recordId)
+    {
+        const int LinearSearchThreshold = 16;
+        if (_records.Count <= LinearSearchThreshold)
+        {
+            // Linear search is faster for small collections.
+            for (int i = 0; i < _records.Count; i++)
+                if (_records[i].RecordId == recordId) return i;
+        }
+        else
+        {
+            // Record IDs increase across the retained path, including after redo history is discarded.
+            // Use O(log n) binary search for larger collections.
+            int low = 0;
+            int high = _records.Count - 1;
+            while (low <= high)
+            {
+                int middle = low + (high - low) / 2;
+                long middleId = _records[middle].RecordId;
+                if (middleId == recordId) return middle;
+                if (middleId < recordId) low = middle + 1;
+                else high = middle - 1;
+            }
+        }
+        throw new ArgumentOutOfRangeException(nameof(recordId), "The record is not in retained undo/redo history.");
+    }
+
+    private TextVersion AppendRecord(TextVersionKind kind,
+        ImmutableArray<TextChangeSpan> changes, ITextSnapshot snapshot)
+    {
+        long fromRecordId = RecordId;
+        long nextId = checked(_nextRecordId + 1);
+        // Drop redo records. External holders of their snapshots remain unaffected.
+        _records.Truncate(_currentRecordIndex + 1);
+        _records.Append(new TextRecord(nextId, snapshot, fromRecordId, changes));
+        _nextRecordId = nextId;
+        _currentRecordIndex = _records.Count - 1;
+        return AppendVersion(kind, fromRecordId);
+    }
+
+    private TextVersion AppendVersion(TextVersionKind kind, long fromRecordId)
+    {
+        long nextVersion = checked(VersionId + 1);
+        var version = new TextVersion(nextVersion, fromRecordId, RecordId, kind);
+        _versions.Append(version);
+        VersionId = nextVersion;
+        return version;
+    }
 
     #endregion
 
