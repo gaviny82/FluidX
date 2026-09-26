@@ -12,17 +12,18 @@ public class ModelEditOperationTests
     [TestMethod]
     public void PlainTextModelOwnsDocumentPolicyWhileBufferPreservesRawEOLs()
     {
-        var model = new PlainTextModel("\uFEFFone\r\ntwo\nthree\rfour", DefaultEndOfLine.LF);
+        var model = new PlainTextModel("\uFEFFone\r\ntwo\nthree\rfour", EndOfLine.LF);
 
         Assert.AreEqual("\uFEFF", model.BOM);
-        Assert.AreEqual(EndOfLineSequence.CRLF, model.EOL);
+        Assert.AreEqual(DocumentEndOfLine.Mixed, model.EOL);
+        model.DefaultEOL = EndOfLine.CRLF;
         Assert.AreEqual("one\r\ntwo\nthree\rfour", model.TextBuffer.GetTextInRange(model.GetFullModelRange()));
         Assert.AreEqual("one\r\ntwo\r\nthree\r\nfour", model.GetValue());
         Assert.AreEqual(21, model.GetValueLengthInRange(model.GetFullModelRange()));
         Assert.AreEqual(18, model.GetValueLengthInRange(model.GetFullModelRange(), EndOfLinePreference.LF));
         Assert.AreEqual("\uFEFFone\r\ntwo\r\nthree\r\nfour", model.GetValue(preserveBOM: true));
 
-        model.SetEOL(EndOfLineSequence.LF);
+        model.SetEOL(EndOfLine.LF);
 
         Assert.AreEqual("one\ntwo\nthree\nfour", model.TextBuffer.GetTextInRange(model.GetFullModelRange()));
     }
@@ -30,7 +31,7 @@ public class ModelEditOperationTests
     [TestMethod]
     public void PlainTextModelSupportsEditUndoAndRedo()
     {
-        var model = new PlainTextModel("hello", DefaultEndOfLine.LF);
+        var model = new PlainTextModel("hello", EndOfLine.LF);
         model.Edit(new TextEdit([new TextReplacement(new TextRange(0, 5, 0, 5), " world")]));
 
         Assert.AreEqual("hello world", model.GetValue());
@@ -43,7 +44,7 @@ public class ModelEditOperationTests
     [TestMethod]
     public void PlainTextModelRejectsEditEndpointsInsideCrlfBeforeApplyingBatch()
     {
-        var model = new PlainTextModel("a\r\nb", DefaultEndOfLine.LF);
+        var model = new PlainTextModel("a\r\nb", EndOfLine.LF);
         ModelEditOperation[] operations =
         [
             new(new TextRange(0, 0, 0, 1), "A"),
@@ -66,7 +67,7 @@ public class ModelEditOperationTests
 
         foreach (TextRange range in invalidRanges)
         {
-            var model = new PlainTextModel("a\r\nb", DefaultEndOfLine.LF);
+            var model = new PlainTextModel("a\r\nb", EndOfLine.LF);
             Assert.ThrowsExactly<ArgumentException>(() => model.ApplyEdits(
                 [new ModelEditOperation(range, "X")],
                 computeUndoEdits: false));
@@ -77,13 +78,13 @@ public class ModelEditOperationTests
     [TestMethod]
     public void PlainTextModelAllowsReplacingCompleteCrlf()
     {
-        var model = new PlainTextModel("a\r\nb", DefaultEndOfLine.LF);
+        var model = new PlainTextModel("a\r\nb", EndOfLine.LF);
 
         model.ApplyEdits(
             [new ModelEditOperation(new TextRange(0, 1, 1, 0), "\n")],
             computeUndoEdits: false);
 
-        Assert.AreEqual("a\r\nb", model.GetValue());
+        Assert.AreEqual("a\nb", model.GetValue());
     }
 
     [TestMethod]
@@ -155,9 +156,11 @@ public class ModelEditOperationTests
 
         model.Undo();
 
+        Assert.AreEqual("\n    ", model.GetValue());
+        model.Undo();
         Assert.AreEqual("", model.GetValue());
     }
 
     private static TextModel CreateModel(string text)
-        => new(text, DefaultEndOfLine.LF, Tokenization.GlobalLanguageId.PlainText);
+        => new(text, EndOfLine.LF, Tokenization.GlobalLanguageId.PlainText);
 }
