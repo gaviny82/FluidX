@@ -5,8 +5,12 @@ using System.Text;
 namespace FluidX.TextModels;
 
 /// <summary>
-/// The action that produced a new <see cref="TextVersion"/>.
+/// The action intent saved in a <see cref="TextVersion"/>.
 /// </summary>
+/// <remarks>
+/// <see cref="Undo"/>, <see cref="Redo"/>, and <see cref="Jump"/> remain distinct even when they select the same target record.
+/// <see cref="Initial"/> marks the starting state.
+/// </remarks>
 public enum TextVersionKind { Initial, Edit, EolNormalization, Replacement, Undo, Redo, Jump }
 
 /// <summary>
@@ -17,7 +21,8 @@ public enum TextVersionKind { Initial, Edit, EolNormalization, Replacement, Undo
 /// <param name="VersionId">Monotonic ID of this version.</param>
 /// <param name="SourceRecordId">Record ID selected before the action; -1 for the initial version.</param>
 /// <param name="TargetRecordId">Record ID selected after the action.</param>
-/// <param name="Kind">The action performed that creates this version.</param>
+/// <param name="Kind">The intent of action creating this version, or <see cref="TextVersionKind.Initial">
+/// for the initial state when the <see cref="TextVersionController"/> is created.</param>
 public sealed record TextVersion(
     long VersionId,
     long SourceRecordId,
@@ -40,8 +45,9 @@ public readonly record struct TextChangeSpan(int OldPosition, int OldLength, int
 
 
 /// <summary>
-/// An immutable captured buffer state with change spans from its source record. The record ID is unique and monotonically increasing from 0.
-/// A new record is only created when the buffer is mutated. Undo, redo, and jump to a different record do not create new records.
+/// An immutable captured buffer state with change spans from its source record. Record IDs
+/// start from 0 and increase monotonically. Edits, EOL rewrites, and explicit replacements create new records;
+/// undo, redo, and jump select existing records.
 /// </summary>
 /// <param name="RecordId">Unique ID assigned when the new buffer state was recorded.</param>
 /// <param name="Snapshot">The capture immutable state of the text buffer.</param>
@@ -87,10 +93,11 @@ public readonly record struct TextRecordTransition(TextRecord Source, TextRecord
 /// A set of spans describing the changes from the transition from the previous record is associated with each <see cref="TextRecord"/>.
 /// </summary>
 /// <remarks>
-/// This component also provides undo, redo and jump operations to restore the buffer to a previous record.
-/// Successful undo, redo, and jump operations create new versions, but do not create new records.
-/// A jump to the current record is a no-op.
-/// The controller maintains a bounded history of records and versions, discarding the oldest records and versions when the limits are exceeded.
+/// The owner applies buffer changes and restores snapshots, then records the completed
+/// operation here. Successful navigation creates a version but no new record.
+/// Old records and versions are evicted independently when their limits are exceeded.
+/// This class only manages <see cref="TextVersion"/> and <see cref="TextRecord"/> entries,
+/// and does not mutate a buffer or publish model content notifications.
 /// </remarks>
 public sealed class TextVersionController
 {
@@ -98,38 +105,38 @@ public sealed class TextVersionController
     private readonly CircularBuffer<TextVersion> _versions;
     private int _currentRecordIndex; // Logical index of the current record in the buffer, not a RecordId.
     private long _nextRecordId = 0;
-    private ITextBuffer _buffer;
 
     /// <summary>
     /// Monotonic ID of the latest version of the buffer.
     /// </summary>
     /// <remarks>
-    /// The initial version of the buffer is 0. Increases by 1 after every action given by <see cref="TextVersionKind"/>.
+    /// The initial version is 0. Each completed edit, EOL rewrite, replacement, or
+    /// navigation to another record increments it by 1.
     /// </remarks>
     public long VersionId { get; private set; }
 
     /// <summary>
     /// Creates a controller for managing the version history of the <see cref="ITextBuffer"/> provided.
     /// </summary>
-    /// <param name="buffer">The text buffer to be managed by this component.</param>
+    /// <param name="initialSnapshot">The initial buffer state when this controller is initialized.</param>
     /// <param name="recordLimit">Maximum retained records, including the current one.</param>
     /// <param name="versionLimit">Maximum retained chronological version metadata.</param>
-    public TextVersionController(ITextBuffer buffer, int recordLimit = 100, int versionLimit = 1000)
+    public TextVersionController(ITextSnapshot initialSnapshot, int recordLimit = 100, int versionLimit = 1000)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        ArgumentNullException.ThrowIfNull(initialSnapshot);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(recordLimit);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(versionLimit);
         _buffer = buffer;
         _records = new CircularBuffer<TextRecord>(recordLimit);
         _versions = new CircularBuffer<TextVersion>(versionLimit);
-        _records.Append(new TextRecord(0, buffer.CreateSnapshot(), -1, []));
+        _records.Append(new TextRecord(0, initialSnapshot, -1, []));
         _versions.Append(new TextVersion(0, -1, 0, TextVersionKind.Initial));
     }
 
     #region Accessors for record, version and snapshot
 
     /// <summary>
-    /// The record currently represented by <see cref="_buffer"/>.
+    /// The record currently selected by this controller.
     /// </summary>
     public TextRecord CurrentRecord => _records[_currentRecordIndex];
 
@@ -153,12 +160,12 @@ public sealed class TextVersionController
     #region Accessors for retained version history and records
 
     /// <summary>
-    /// <see langword="true"/> if there is a retained record before the current one that can be restored with <see cref="Undo"/>.
+    /// <see langword="true"/> if a preceding record is available for undo navigation.
     /// </summary>
     public bool CanUndo => _currentRecordIndex > 0;
 
     /// <summary>
-    /// <see langword="true"/> if there is a retained record after the current one that can be restored with <see cref="Redo"/>.
+    /// <see langword="true"/> if a following record is available for redo navigation.
     /// </summary>
     public bool CanRedo => _currentRecordIndex + 1 < _records.Count;
 
@@ -234,7 +241,76 @@ public sealed class TextVersionController
         return _records[_currentRecordIndex + 1 + index];
     }
 
+    /// <summary>
+    /// Gets a retained record by its ID on the undo/redo path.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The record is not retained.</exception>
+    public TextRecord GetRecord(long recordId) => _records[FindRecordIndex(recordId)];
     #endregion
+
+    #region Record versions and records after actions
 {
+    #endregion
+
+    #region Helpers
+
+    #endregion
 
 }
+
+/*
+ * Legacy buffer-mutating APIs, retained for reference while PlainTextModel's
+ * restoration path is designed. These are intentionally outside the controller.
+ *
+ * public TextVersion? Undo() => CanUndo ? MoveTo(_currentRecordIndex - 1, TextVersionKind.Undo) : null;
+ * public TextVersion? Redo() => CanRedo ? MoveTo(_currentRecordIndex + 1, TextVersionKind.Redo) : null;
+ *
+ * public TextVersion JumpToRecord(long recordId)
+ * {
+ *     for (int i = 0; i < _records.Count; i++)
+ *         if (_records[i].RecordId == recordId)
+ *             return MoveTo(i, TextVersionKind.Jump);
+ *     throw new ArgumentOutOfRangeException(nameof(recordId), "The record is not retained.");
+ * }
+ *
+ * public TextVersion ReplaceWithRecord(TextRecord source)
+ * {
+ *     ArgumentNullException.ThrowIfNull(source);
+ *     ITextSnapshot before = CurrentSnapshot;
+ *     if (_buffer is not ISnapshotRestorableTextBuffer restorable ||
+ *         !restorable.TryRestoreSnapshot(source.Snapshot))
+ *     {
+ *         string text = source.Snapshot.GetTextInRange(
+ *             source.Snapshot.GetRangeAt(0, source.Snapshot.Length));
+ *         _buffer.ApplyEdits([new TextReplacement(_buffer.GetRangeAt(0, _buffer.Length), text)]);
+ *     }
+ *     ITextSnapshot after = _buffer.CreateSnapshot();
+ *     ImmutableArray<TextChangeSpan> changes =
+ *         [new TextChangeSpan(0, before.Length, 0, after.Length)];
+ *     return AppendRecord(TextVersionKind.Replacement, changes, after);
+ * }
+ *
+ * private TextVersion MoveTo(int target, TextVersionKind kind)
+ * {
+ *     if (target == _currentRecordIndex) return CurrentVersion;
+ *     long fromRecordId = RecordId;
+ *     TextRecord destination = _records[target];
+ *     if (_buffer is not ISnapshotRestorableTextBuffer restorable ||
+ *         !restorable.TryRestoreSnapshot(destination.Snapshot))
+ *     {
+ *         if (target < _currentRecordIndex)
+ *             for (int i = _currentRecordIndex; i > target; i--)
+ *                 ApplyRawChanges(_records[i].Snapshot, _records[i - 1].Snapshot,
+ *                     _records[i].ChangeSpans, reverse: true);
+ *         else
+ *             for (int i = _currentRecordIndex + 1; i <= target; i++)
+ *                 ApplyRawChanges(_records[i - 1].Snapshot, _records[i].Snapshot,
+ *                     _records[i].ChangeSpans, reverse: false);
+ *     }
+ *     _currentRecordIndex = target;
+ *     return AppendVersion(kind, fromRecordId);
+ * }
+ *
+ * ApplyRawChanges and its CRLF-boundary full-replacement fallback belong in the
+ * model's restoration helper, alongside model metadata and event updates.
+ */
