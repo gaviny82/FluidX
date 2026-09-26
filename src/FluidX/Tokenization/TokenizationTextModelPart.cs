@@ -34,7 +34,6 @@ public sealed class TokenizationTextModelPart : IDisposable
         _tokens.BackgroundTokenizationStateChanged += OnBackgroundTokenizationStateChanged;
 
         _semanticTokens = new SparseTokensStore();
-        _textModel.ContentChanged += OnTextModelContentChanged;
 
         _tokens.ResetTokenization(fireTokenChangeEvent: false);
     }
@@ -46,11 +45,6 @@ public sealed class TokenizationTextModelPart : IDisposable
 
     public BackgroundTokenizationState BackgroundTokenizationState
         => _tokens.BackgroundTokenizationState;
-
-    private void OnTextModelContentChanged(TextModelContentChangedEventArgs e)
-    {
-        HandleDidChangeContent(e.ModelContentChangedEventArgs);
-    }
 
     private void OnTokensChanged(object? sender, ModelTokensChangedEventArgs e)
     {
