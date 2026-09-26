@@ -27,7 +27,7 @@ public static class BufferFactory
 
     public static PieceTreeTextBuffer CreatePieceTreeBuffer(string text)
     {
-        return PieceTreeTextBuffer.Create(text, DefaultEndOfLine.LF);
+        return PieceTreeTextBuffer.Create(text, EndOfLine.LF);
     }
 
     public static LineArrayTextBuffer CreateLineArrayBuffer(string text)

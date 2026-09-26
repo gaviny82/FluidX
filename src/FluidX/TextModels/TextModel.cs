@@ -17,7 +17,7 @@ public class TextModel : PlainTextModel, IDecorationTreesHost
 
     private readonly TextModelDecorationTrees _decorationTrees = new();
 
-    public TextModel(string source, DefaultEndOfLine eol, GlobalLanguageId languageId)
+    public TextModel(string source, EndOfLine eol, GlobalLanguageId languageId)
         : base(source, eol)
     {
         IsTooLargeForTokenization = TextBuffer.Length > LargeFileSizeThreshold
