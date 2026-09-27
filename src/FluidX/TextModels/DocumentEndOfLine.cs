@@ -1,7 +1,7 @@
 namespace FluidX.TextModels;
 
 /// <summary>
-/// Represents the current end-of-line sequence of a document.
+/// Describes the current end-of-line state of a document.
 /// </summary>
 public enum DocumentEndOfLine
 {

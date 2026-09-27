@@ -45,18 +45,24 @@ public readonly record struct TextChangeSpan(int OldPosition, int OldLength, int
 
 
 /// <summary>
-/// An immutable captured buffer state with change spans from its source record. Record IDs
-/// start from 0 and increase monotonically. Edits, EOL rewrites, and explicit replacements create new records;
-/// undo, redo, and jump select existing records.
+/// An immutable captured document state containing buffer content and document EOL state,
+/// associated with change spans from a source record. Record IDs start from 0 and increase
+/// monotonically.
 /// </summary>
+/// <remarks>
+/// Edits, EOL rewrites, and explicit replacements create new records.
+/// Undo, redo, and jump select existing records.
+/// </remarks>
 /// <param name="RecordId">Unique ID assigned when the new buffer state was recorded.</param>
-/// <param name="Snapshot">The capture immutable state of the text buffer.</param>
+/// <param name="Snapshot">The captured immutable state of the text buffer.</param>
+/// <param name="EndOfLine">The captured document EOL state.</param>
 /// <param name="SourceRecordId">The record ID from which this state was created, even if it has since been evicted; -1 for the initial record.</param>
 /// <param name="ChangeSpans">Changed UTF-16 spans from <see cref="SourceRecordId"/> to this record. Change text can be
 /// retrieved from the two snapshots on demand. Empty for the initial record. </param>
 public sealed record TextRecord(
     long RecordId,
     ITextSnapshot Snapshot,
+    DocumentEndOfLine EndOfLine,
     long SourceRecordId,
     ImmutableArray<TextChangeSpan> ChangeSpans);
 
@@ -87,8 +93,9 @@ public readonly record struct TextRecordTransition(TextRecord Source, TextRecord
 }
 
 /// <summary>
-/// A component that provides a linear monotonically increasing version history of a mutable <see cref="ITextBuffer"/>.
-/// Each version is associated with a <see cref="TextRecord"/>, which captures the states of the <see cref="ITextBuffer"/> at that point in time.
+/// A component that provides a linear monotonically increasing version history of a mutable text document.
+/// Each version is associated with a <see cref="TextRecord"/>, which captures the states of the
+/// <see cref="ITextBuffer"/> and the document end-of-line state at that point in time.
 /// Multiple versions can select the same <see cref="TextRecord"/>.
 /// A set of spans describing the changes from the transition from the previous record is associated with each <see cref="TextRecord"/>.
 /// </summary>
@@ -119,16 +126,17 @@ public sealed class TextVersionController
     /// Creates a controller for managing the version history of the <see cref="ITextBuffer"/> provided.
     /// </summary>
     /// <param name="initialSnapshot">The initial buffer state when this controller is initialized.</param>
+    /// <param name="endOfLine">Initial document end-of-line state.</param>
     /// <param name="recordLimit">Maximum retained records, including the current one.</param>
     /// <param name="versionLimit">Maximum retained chronological version metadata.</param>
-    public TextVersionController(ITextSnapshot initialSnapshot, int recordLimit = 100, int versionLimit = 1000)
+    public TextVersionController(ITextSnapshot initialSnapshot, DocumentEndOfLine endOfLine, int recordLimit = 1000, int versionLimit = 1000)
     {
         ArgumentNullException.ThrowIfNull(initialSnapshot);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(recordLimit);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(versionLimit);
         _records = new CircularBuffer<TextRecord>(recordLimit);
         _versions = new CircularBuffer<TextVersion>(versionLimit);
-        _records.Append(new TextRecord(0, initialSnapshot, -1, []));
+        _records.Append(new TextRecord(0, initialSnapshot, endOfLine, -1, []));
         _versions.Append(new TextVersion(0, -1, 0, TextVersionKind.Initial));
     }
 
@@ -286,40 +294,42 @@ public sealed class TextVersionController
     /// Commit a version after a buffer edit. This creates a record and discards redo history.
     /// </summary>
     /// <param name="changes">The change spans of the edit operation.</param>
+    /// <param name="eol">Resulting document end-of-line state.</param>
     /// <param name="snapshot">The resulting snapshot after applying the edit.</param>
     /// <remarks>
     /// The caller must supply ordered, nonoverlapping spans with valid UTF-16 coordinates
     /// that describe the full change from the current snapshot to <paramref name="snapshot"/>.
     /// Otherwise, the behavior is undefined.
     /// </remarks>
-    public TextVersion CommitEdit(ImmutableArray<TextChangeSpan> changes, ITextSnapshot snapshot)
+    public TextVersion CommitEdit(ImmutableArray<TextChangeSpan> changes, ITextSnapshot snapshot, DocumentEndOfLine eol)
     {
         if (changes.IsDefault)
             throw new ArgumentException("Changes must be an initialized immutable array.", nameof(changes));
         ArgumentNullException.ThrowIfNull(snapshot);
-        return AppendRecord(TextVersionKind.Edit, changes, snapshot);
+        return AppendRecord(TextVersionKind.Edit, changes, snapshot, eol);
     }
 
     /// <summary>
     /// Commit a version after an EOL normalization. This creates a record and discards redo history.
     /// </summary>
     /// <param name="changes">The change spans of the edit operation.</param>
+    /// <param name="eol">Resulting document end-of-line state.</param>
     /// <param name="snapshot">The resulting snapshot after applying the EOL normalization.</param>
     /// <remarks>
     /// The caller must supply ordered, nonoverlapping spans with valid UTF-16 coordinates
     /// that describe the full change from the current snapshot to <paramref name="snapshot"/>.
     /// Otherwise, the behavior is undefined.
     /// </remarks>
-    public TextVersion CommitEolNormalization(ImmutableArray<TextChangeSpan> changes, ITextSnapshot snapshot)
+    public TextVersion CommitEolNormalization(ImmutableArray<TextChangeSpan> changes, ITextSnapshot snapshot, DocumentEndOfLine eol)
     {
         if (changes.IsDefault)
             throw new ArgumentException("Changes must be an initialized immutable array.", nameof(changes));
         ArgumentNullException.ThrowIfNull(snapshot);
-        return AppendRecord(TextVersionKind.EolNormalization, changes, snapshot);
+        return AppendRecord(TextVersionKind.EolNormalization, changes, snapshot, eol);
     }
 
     /// <summary>
-    /// Commit a version after an undo, redo, or jump to an explicity record.
+    /// Commit a version after an undo, redo, or jump to an explicit record.
     /// </summary>
     /// <param name="kind">The kind of navigation. Must be either <see cref="TextVersionKind.Undo"/>,
     /// <see cref="TextVersionKind.Redo"/>, or <see cref="TextVersionKind.Jump"/>.</param>
@@ -344,6 +354,7 @@ public sealed class TextVersionController
         if (target == _currentRecordIndex)
             return CurrentVersion;
 
+        _ = checked(VersionId + 1); // Ensure version ID does not overflow before making changes.
         long sourceRecordId = RecordId;
         _currentRecordIndex = target;
         return AppendVersion(kind, sourceRecordId);
@@ -356,12 +367,12 @@ public sealed class TextVersionController
     /// <remarks>
     /// Redo history is discarded. The former record remains undoable while retained.
     /// </remarks>
-    public TextVersion CommitReplacement(ITextSnapshot snapshot)
+    public TextVersion CommitReplacement(ITextSnapshot snapshot, DocumentEndOfLine eol)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ImmutableArray<TextChangeSpan> changes =
             [new TextChangeSpan(0, CurrentSnapshot.Length, 0, snapshot.Length)];
-        return AppendRecord(TextVersionKind.Replacement, changes, snapshot);
+        return AppendRecord(TextVersionKind.Replacement, changes, snapshot, eol);
     }
 
     #endregion
@@ -396,13 +407,14 @@ public sealed class TextVersionController
     }
 
     private TextVersion AppendRecord(TextVersionKind kind,
-        ImmutableArray<TextChangeSpan> changes, ITextSnapshot snapshot)
+        ImmutableArray<TextChangeSpan> changes, ITextSnapshot snapshot, DocumentEndOfLine eol)
     {
+        _ = checked(VersionId + 1); // Ensure version ID does not overflow before creating a new record.
         long fromRecordId = RecordId;
         long nextId = checked(_nextRecordId + 1);
         // Drop redo records. External holders of their snapshots remain unaffected.
         _records.Truncate(_currentRecordIndex + 1);
-        _records.Append(new TextRecord(nextId, snapshot, fromRecordId, changes));
+        _records.Append(new TextRecord(nextId, snapshot, eol, fromRecordId, changes));
         _nextRecordId = nextId;
         _currentRecordIndex = _records.Count - 1;
         return AppendVersion(kind, fromRecordId);

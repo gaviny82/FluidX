@@ -27,12 +27,12 @@ public sealed class ZeroBasedModelTests
         try
         {
             model.Edit(new TextEdit([new(new TextRange(0, 0, 1, 3), "x\ny\nz")]));
-            Assert.AreEqual("x\ny\nz", model.GetValue());
+            Assert.AreEqual("x\ny\nz", model.GetAllText());
             Assert.AreEqual(new TextRange(0, 0, 2, 1), model.GetFullModelRange());
             model.Undo();
-            Assert.AreEqual("abc\ndef", model.GetValue());
+            Assert.AreEqual("abc\ndef", model.GetAllText());
             model.Redo();
-            Assert.AreEqual("x\ny\nz", model.GetValue());
+            Assert.AreEqual("x\ny\nz", model.GetAllText());
             Assert.IsNotNull(model.Tokenization.GetLineTokens(0));
             Assert.IsNotNull(model.Tokenization.GetLineTokens(2));
         }

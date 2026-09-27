@@ -1,88 +1,172 @@
 using System.Text;
+using System.Collections.Immutable;
 using FluidX.TextBuffers;
-using FluidX.TextBuffers.PieceTree;
+using FluidX.TextBuffers.PersistentPieceTree;
 
 namespace FluidX.TextModels;
 
+/// <summary>
+/// A plain text document model with snapshot-based, per-edit undo/redo history.
+/// </summary>
 public class PlainTextModel
 {
-    private readonly string _bom;
-    private string _eol;
-    private bool _isEOLNormalized;
+    private readonly PersistentPieceTreeTextBuffer _buffer;
+    private readonly TextVersionController _history;
+
+    // Reentrant guards to prevent subscribers from mutating the model during content change events.
+    private bool _isMutating;
+
+    private int[]? _trimAutoWhitespaceLineIndices;
+
+    #region Text Model Options
 
     /// <summary>
-    /// The underlying text buffer of this text model
+    /// Width of tab stops in columns, used to display \t and alignment.
     /// </summary>
-    public ITextBuffer TextBuffer { get; private set; }
+    public int TabSize
+    {
+        get;
+        set
+        {
+            EnsureNotMutating();
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value);
+            field = value;
+        }
+    } = 4;
 
     /// <summary>
-    /// Increases monotonically with each change
+    /// Number of columns in one indentation level for future indent/outdent commands.
     /// </summary>
-    public long VersionId { get; private set; } = 1;
+    public int IndentSize
+    {
+        get;
+        set
+        {
+            EnsureNotMutating();
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value);
+            field = value;
+        }
+    } = 4;
 
     /// <summary>
-    /// Can be reset to a stored value during undo/redo to revert back to a known baseline
+    /// Whether future Tab/indent commands should insert spaces instead of literal \t.
     /// </summary>
-    public long AlternativeVersionId { get; private set; } = 1;
+    public bool InsertSpaces
+    {
+        get;
+        set
+        {
+            EnsureNotMutating();
+            field = value;
+        }
+    } = true;
 
-    public TextModelOptions Options { get; private set; } = new(
-        TabSize: 4,
-        IndentSize: 4,
-        InsertSpaces: true,
-        DefaultEOL: DefaultEndOfLine.LF,
-        TrimAutoWhitespace: true
-    );
+    /// <summary>
+    /// Whether automatically inserted whitespace is eligible for subsequent cleanup.
+    /// </summary>
+    public bool TrimAutoWhitespace
+    {
+        get;
+        set
+        {
+            EnsureNotMutating();
+            field = value;
+            if (!value) _trimAutoWhitespaceLineIndices = null;
+        }
+    } = true;
 
-    public event TextModelModelContentChangedEventHandler? ContentChanged;
+    /// <summary>The end-of-line sequence higher-level editors should insert for Enter.</summary>
+    public EndOfLine DefaultEOL
+    {
+        get => field;
+        set
+        {
+            EnsureNotMutating();
+            if (!Enum.IsDefined(value))
+                throw new ArgumentOutOfRangeException(nameof(value), "Invalid enum value.");
+            field = value;
+        }
+    } = EndOfLine.LF;
 
-    public string BOM => _bom;
+    #endregion
+
+    #region Document Metadata
+
+    public bool HasBOM
+    {
+        get;
+        set
+        {
+            EnsureNotMutating();
+            field = value;
+        }
+    }
 
     public bool MightContainRTL { get; private set; }
 
     public bool MightContainNonBasicASCII { get; private set; }
 
-    public EndOfLineSequence EOL => _eol switch
-    {
-        "\n" => EndOfLineSequence.LF,
-        _ => EndOfLineSequence.CRLF,
-    };
+    #endregion
 
-    public bool CanUndo => _undoRedoStack.CanUndo;
-    public bool CanRedo => _undoRedoStack.CanRedo;
+    /// <summary>
+    /// An immutable read view. All mutations must go through this model.
+    /// </summary>
+    public IReadOnlyTextBuffer TextBuffer => _buffer.CreateSnapshot();
 
+    /// <summary>
+    /// Version number of the document. Starts from 0 and increases monotonically with each change.
+    /// </summary>
+    public long VersionId => _history.VersionId;
 
-    private readonly UndoRedoStack _undoRedoStack = new();
-    private int[]? _trimAutoWhitespaceLineIndices;
+    /// <summary>
+    /// Identifies the current document state. A new record is generated on each change, but undo/redo/jump can return to an earlier record.
+    /// </summary>
+    public long RecordId => _history.RecordId;
+
+    /// <summary>
+    /// The current document state, including a snapshot of the text buffer and the end-of-line state.
+    /// </summary>
+    public TextRecord CurrentRecord => _history.CurrentRecord;
+
+    /// <summary>
+    /// Current document end-of-line state.
+    /// </summary>
+    public DocumentEndOfLine EOL => CurrentRecord.EndOfLine;
+
+    /// <summary>
+    /// Whether the document can be undone by navigating to the previous record in the retained history.
+    /// </summary>
+    public bool CanUndo => _history.CanUndo;
+
+    /// <summary>
+    /// Whether the document can be redone by navigating to the next record in the retained history.
+    /// </summary>
+    public bool CanRedo => _history.CanRedo;
+
+    public event EventHandler<TextModelContentChangedEventArgs>? ContentChanged;
 
     public PlainTextModel(
         string source,
-        DefaultEndOfLine eol)
+        EndOfLine defaultEOL)
     {
-        if (source.Length > 0 && source[0] == (char)CharCode.UTF8_BOM)
-        {
-            _bom = ((char)CharCode.UTF8_BOM).ToString();
+        HasBOM = source.Length > 0 && source[0] == char.Utf8Bom;
+        if (HasBOM)
             source = source[1..];
-        }
-        else
-        {
-            _bom = string.Empty;
-        }
 
-        _eol = DetermineEOL(source, eol);
-        _isEOLNormalized = IsEOLNormalized(source, _eol);
-        Options = Options with { DefaultEOL = eol };
+        // TODO: When creating the ITextBuffer, document EOL, MightContainNonBasicASCII, and MightContainRTL
+        // can be computed at the same time. No need to scan the text twice. This requires a unified ITextBuffer
+        // creation interface or factory interface that can return the extra information. We accept the two-pass
+        // scan for now and will optimize in the future if needed.
+        DefaultEOL = defaultEOL;
         MightContainNonBasicASCII = !source.IsBasicASCII();
         MightContainRTL = MightContainNonBasicASCII && source.ContainsRTL();
 
-        TextBuffer = PieceTreeTextBuffer.Create(source, eol);
-
+        _buffer = new PersistentPieceTreeTextBuffer(source);
+        _history = new TextVersionController(_buffer.CreateSnapshot(), ClassifyEOL(_buffer));
     }
 
     public void Edit(TextEdit edit)
     {
-        // Ported from microsoft/vscode/src/vs/editor/common/model/textModel.ts
-        // This is a simplified implementation of TextModel.edit=>pushEditOperations=>_pushEditOperations=>_commandManager.pushEditOperation
-        // TODO: Emit events for ContentChanged and DecorationsChanged
         PushEditOperations(
             edit.Replacements.Select(replacement => new ModelEditOperation(replacement)).ToArray(),
             null,
@@ -382,7 +466,7 @@ public class PlainTextModel
         ModelEditOperation[] editOperations,
         Selection[]? beforeCursorState)
     {
-        if (!Options.TrimAutoWhitespace || _trimAutoWhitespaceLineIndices is null)
+        if (!TrimAutoWhitespace || _trimAutoWhitespaceLineIndices is null)
             return editOperations;
 
         int[] trimLineIndices = _trimAutoWhitespaceLineIndices;
@@ -413,7 +497,7 @@ public class PlainTextModel
         List<ModelEditOperation> result = [.. editOperations];
         foreach (int trimLineIndex in trimLineIndices)
         {
-            int maxLineColumnIndex = TextBuffer.GetLineLength(trimLineIndex);
+            int maxLineColumnIndex = _buffer.GetLineLength(trimLineIndex);
             bool allowTrimLine = true;
 
             foreach (var operation in editOperations)
@@ -448,65 +532,10 @@ public class PlainTextModel
         return result.ToArray();
     }
 
-    public ModelEditOperation[] ReduceOperations(ModelEditOperation[] operations)
-    {
-        // We know from empirical testing that a thousand edits work fine regardless of their shape.
-        if (operations.Length < 1000 || operations.Any(operation => operation.IsTracked))
-            return operations;
-
-        ModelEditOperation[] sortedOperations = operations.OrderBy(operation => operation.Range,
-            Comparer<TextRange>.Create(TextRange.CompareRangesUsingEnds)).ToArray();
-
-        for (int i = 0; i < sortedOperations.Length - 1; i++)
-        {
-            if (sortedOperations[i + 1].Range.StartPosition.IsBefore(sortedOperations[i].Range.EndPosition))
-                throw new ArgumentException("Overlapping ranges are not allowed", nameof(operations));
-        }
-
-        TextRange firstRange = sortedOperations[0].Range;
-        TextRange lastRange = sortedOperations[^1].Range;
-        TextRange combinedRange = new(
-            firstRange.StartLineIndex,
-            firstRange.StartColumnIndex,
-            lastRange.EndLineIndex,
-            lastRange.EndColumnIndex);
-        int lastEndLineIndex = firstRange.StartLineIndex;
-        int lastEndColumnIndex = firstRange.StartColumnIndex;
-        bool forceMoveMarkers = false;
-        StringBuilder text = new();
-
-        foreach (var operation in sortedOperations)
-        {
-            TextRange range = operation.Range;
-            forceMoveMarkers |= operation.ForceMoveMarkers;
-            text.Append(GetValueInRange(
-                new TextRange(
-                    lastEndLineIndex,
-                    lastEndColumnIndex,
-                    range.StartLineIndex,
-                    range.StartColumnIndex),
-                EndOfLinePreference.TextDefined));
-            text.Append(operation.Text);
-            lastEndLineIndex = range.EndLineIndex;
-            lastEndColumnIndex = range.EndColumnIndex;
-        }
-
-        // At one point, due to how events are emitted and how each operation is handled,
-        // some operations can trigger a high amount of temporary string allocations,
-        // that will immediately get edited again.
-        // e.g. a formatter inserting ridiculous amounts of \n on a model with a single line
-        // Therefore, the strategy is to collapse all the operations into a huge single edit operation
-        return [new ModelEditOperation(combinedRange, NormalizeTextEOL(text.ToString()))
-            {
-                ForceMoveMarkers = forceMoveMarkers
-            }
-        ];
-    }
-
     private List<AutoWhitespaceEdit> CaptureAutoWhitespaceEdits(ModelEditOperation[] operations)
     {
         List<AutoWhitespaceEdit> result = [];
-        if (!Options.TrimAutoWhitespace)
+        if (!TrimAutoWhitespace)
             return result;
 
         for (int i = 0; i < operations.Length; i++)
@@ -514,7 +543,7 @@ public class PlainTextModel
             var operation = operations[i];
             if (operation.IsAutowhitespaceEdit && operation.Range.IsEmpty)
             {
-                result.Add(new AutoWhitespaceEdit(i, TextBuffer.GetLineContent(operation.Range.StartLineIndex)));
+                result.Add(new AutoWhitespaceEdit(i, _buffer.GetLineContent(operation.Range.StartLineIndex)));
             }
         }
 
@@ -559,7 +588,7 @@ public class PlainTextModel
             if (i > 0 && candidates[i - 1].LineIndex == candidate.LineIndex)
                 continue;
 
-            string lineContent = TextBuffer.GetLineContent(candidate.LineIndex);
+            string lineContent = _buffer.GetLineContent(candidate.LineIndex);
             if (lineContent.Length == 0
                 || lineContent == candidate.OldContent
                 || ContainsNonWhitespace(lineContent))
@@ -706,19 +735,25 @@ public class PlainTextModel
         return new(0, 0, lineCount - 1, endColumnIndex);
     }
 
+    /// <summary>
+    /// Validates a text position, ensuring it is within the bounds of the document and not in the middle of a surrogate pair unless allowed.
+    /// </summary>
+    /// <param name="position">The text position to validate.</param>
+    /// <param name="allowInSurrogatePairs">Whether to allow positions in the middle of surrogate pairs.</param>
+    /// <returns>The nearest valid text position.</returns>
     public TextPosition ValidatePosition(TextPosition position, bool allowInSurrogatePairs = false)
     {
         int lineIndex = position.LineIndex;
         int columnIndex = position.ColumnIndex;
-        int lineCount = TextBuffer.LineCount;
+        int lineCount = _buffer.LineCount;
 
         if (lineIndex < 0)
             return new TextPosition(0, 0);
         if (lineIndex >= lineCount)
-            return new TextPosition(lineCount - 1, TextBuffer.GetLineLength(lineCount - 1));
+            return new TextPosition(lineCount - 1, _buffer.GetLineLength(lineCount - 1));
         if (columnIndex <= 0)
             return new TextPosition(lineIndex, 0);
-        int maxColumnIndex = TextBuffer.GetLineLength(lineIndex);
+        int maxColumnIndex = _buffer.GetLineLength(lineIndex);
         if (columnIndex > maxColumnIndex)
             return new TextPosition(lineIndex, maxColumnIndex);
 
@@ -726,7 +761,7 @@ public class PlainTextModel
         {
             // If the position would end up in the middle of a high-low surrogate pair,
             // we move it to before the pair. At this point, columnIndex > 0 is required.
-            char charCodeBefore = TextBuffer.GetChar(new TextPosition(lineIndex, columnIndex - 1));
+            char charCodeBefore = _buffer.GetChar(new TextPosition(lineIndex, columnIndex - 1));
             if (char.IsHighSurrogate(charCodeBefore))
                 return new TextPosition(lineIndex, columnIndex - 1);
         }
@@ -734,31 +769,40 @@ public class PlainTextModel
         return position;
     }
 
+    #region Document Read With Optional EOL Normalization
+
     /// <summary>
-    /// Get all text
+    /// Gets all text of the document, optionally normalizing line endings to the specified
+    /// <paramref name="eol"/> and preserving the UTF8 byte order mark (BOM) if requested.
     /// </summary>
-    public string GetValue(EndOfLinePreference eol = EndOfLinePreference.TextDefined, bool preserveBOM = false)
+    /// <param name="eol">The end-of-line sequence to use for normalization, or <see langword="null"> to preserve the existing line endings.</param>
+    /// <param name="preserveBOM"><see langword="true"> to include the UTF8 byte order mark (BOM) if it exists, <see langword="false"> otherwise.</param>
+    public string GetAllText(EndOfLine? eol = null, bool preserveBOM = false)
     {
-        var fullRange = GetFullModelRange();
-        var fullText = GetValueInRange(fullRange, eol);
-        string bom = preserveBOM ? _bom : "";
-        return $"{bom}{fullText}";
+        var fullRange = _buffer.GetRangeAt(0, _buffer.Length);
+        var fullText = GetTextInRange(fullRange, eol);
+        if (preserveBOM && HasBOM)
+            return $"{char.Utf8Bom}{fullText}";
+        return fullText;
     }
 
-    public string GetValueInRange(TextRange range, EndOfLinePreference eol = EndOfLinePreference.TextDefined)
-    {
-        string text = TextBuffer.GetTextInRange(range);
-        string requestedEOL = eol switch
+    /// <summary>
+    /// Gets text in a specified range, optionally normalizing line endings to the specified <paramref name="eol"/>.
+    /// </summary>
+    /// <param name="range">The range of text to retrieve.</param>
+    /// <param name="eol">The end-of-line sequence to use for normalization, or <see langword="null"> to preserve the existing line endings.</param>
+    public string GetTextInRange(TextRange range, EndOfLine? eol = null)
         {
-            EndOfLinePreference.LF => "\n",
-            EndOfLinePreference.CRLF => "\r\n",
-            EndOfLinePreference.TextDefined => _eol,
-            _ => throw new ArgumentOutOfRangeException(nameof(eol))
-        };
-        return StringExtensions.EndOfLinesRegex.Replace(text, requestedEOL);
+        string text = _buffer.GetTextInRange(range);
+        return eol is null ? text : StringExtensions.EndOfLinesRegex.Replace(text, eol.Value.AsString());
     }
 
-    public int GetValueLengthInRange(TextRange range, EndOfLinePreference eol = EndOfLinePreference.TextDefined)
+    /// <summary>
+    /// Gets the UTF-16 length of text in a specified range, optionally normalizing line endings to the specified <paramref name="eol"/>.
+    /// </summary>
+    /// <param name="range">The range of text to retrieve the length.</param>
+    /// <param name="eol">The end-of-line sequence to use for normalization, or <see langword="null"> to preserve the existing line endings.</param>
+    public int GetTextLengthInRange(TextRange range, EndOfLine? eol = null)
     {
         if (range.IsEmpty)
             return 0;
@@ -766,40 +810,49 @@ public class PlainTextModel
         if (range.StartLineIndex == range.EndLineIndex)
             return range.EndColumnIndex - range.StartColumnIndex;
 
-        int rawLength = TextBuffer.GetTextLengthInRange(range);
-        string desiredEOL = eol switch
-        {
-            EndOfLinePreference.LF => "\n",
-            EndOfLinePreference.CRLF => "\r\n",
-            EndOfLinePreference.TextDefined => _eol,
-            _ => throw new ArgumentOutOfRangeException(nameof(eol))
-        };
+        int rawLength = _buffer.GetTextLengthInRange(range);
+        if (eol is null) return rawLength;
 
-        if (_isEOLNormalized)
+        // Compensate for requested EOL normalization.
+        if (EOL == DocumentEndOfLine.Unknown)
+            return rawLength;
+        int desiredEOLLength = eol.Value.AsString().Length;
+        int storedEOLLength = EOL switch
         {
-            int eolCount = range.EndLineIndex - range.StartLineIndex;
-            return rawLength + (desiredEOL.Length - _eol.Length) * eolCount;
-        }
+            DocumentEndOfLine.CR or DocumentEndOfLine.LF => 1,
+            DocumentEndOfLine.CRLF => 2,
+            _ => -1 // Mixed
+        };
+        if (storedEOLLength >= 0)
+            return rawLength + (desiredEOLLength - storedEOLLength) * (range.EndLineIndex - range.StartLineIndex);
 
         int eolOffsetCompensation = 0;
         for (int line = range.StartLineIndex; line < range.EndLineIndex; line++)
-            eolOffsetCompensation += desiredEOL.Length - TextBuffer.GetLineEOL(line).Length;
+            eolOffsetCompensation += desiredEOLLength - _buffer.GetLineEOL(line).Length;
 
         return rawLength + eolOffsetCompensation;
     }
 
-    public int GetCharacterCountInRange(TextRange range, EndOfLinePreference eol = EndOfLinePreference.TextDefined)
+    /// <summary>
+    /// Counts the number of Unicode characters in a specified range, optionally normalizing line endings to the specified <paramref name="eol"/>.
+    /// </summary>
+    /// <param name="range">The range of text to retrieve the character count.</param>
+    /// <param name="eol">The end-of-line sequence to use for normalization, or <see langword="null"> to preserve the existing line endings.</param>
+    public int GetCharacterCountInRange(TextRange range, EndOfLine? eol = null)
     {
-        string text = GetValueInRange(range, eol);
+        string text = GetTextInRange(range, eol);
         int count = 0;
         for (int i = 0; i < text.Length; i++, count++)
             if (char.IsHighSurrogate(text[i]) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1])) i++;
         return count;
     }
 
+    #endregion
+
     public IReadOnlyList<FindMatch> FindMatchesLineByLine(
         TextRange searchRange, SearchData searchData, bool captureMatches, int limitResultCount)
-        => TextBuffer.FindMatchesLineByLine(searchRange, searchData, captureMatches, limitResultCount);
+        => _buffer.FindMatchesLineByLine(searchRange, searchData, captureMatches, limitResultCount);
+
 
     /// <summary>
     /// Normalizes the EOL form of a replacement string to the model's preferred
@@ -817,24 +870,24 @@ public class PlainTextModel
         if (actualEOL == StringEndOfLine.Unknown || actualEOL == expectedEOL)
             return text;
 
-        return StringExtensions.EndOfLinesRegex.Replace(text, preferredEOL);
-    }
+    #region Internal Helpers
 
-    private static string DetermineEOL(string text, DefaultEndOfLine defaultEOL)
+    private static DocumentEndOfLine ClassifyEOL(IReadOnlyTextBuffer buffer)
     {
-        int cr = 0, lf = 0, crlf = 0;
-        for (int i = 0; i < text.Length; i++)
+        DocumentEndOfLine result = DocumentEndOfLine.Unknown;
+        for (int line = 0; line < buffer.LineCount - 1; line++)
         {
-            if (text[i] == '\r')
+            var current = buffer.GetLineEOL(line) switch
             {
-                if (i + 1 < text.Length && text[i + 1] == '\n') { crlf++; i++; }
-                else cr++;
-            }
-            else if (text[i] == '\n') lf++;
+                "\r" => DocumentEndOfLine.CR,
+                "\n" => DocumentEndOfLine.LF,
+                _ => DocumentEndOfLine.CRLF
+            };
+            if (result != DocumentEndOfLine.Unknown && result != current)
+                return DocumentEndOfLine.Mixed;
+            result = current;
         }
-        int total = cr + lf + crlf;
-        if (total == 0) return defaultEOL == DefaultEndOfLine.LF ? "\n" : "\r\n";
-        return cr + crlf > total / 2 ? "\r\n" : "\n";
+        return result;
     }
 
     private static bool IsEOLNormalized(string text, string eol)
@@ -847,19 +900,22 @@ public class PlainTextModel
                     return false;
                 i++;
             }
-            else if (text[i] == '\n' && eol != "\n")
+
+    #region Helpers
+
+    private void UpdateCharacterFlags(string text)
             {
-                return false;
-            }
-        }
-        return true;
+        MightContainNonBasicASCII |= !text.IsBasicASCII();
+        MightContainRTL |= MightContainNonBasicASCII && text.ContainsRTL();
     }
 
-    private void IncreaseVersionId()
+    private void EnsureNotMutating()
     {
-        VersionId++;
-        AlternativeVersionId = VersionId;
+        if (_isMutating)
+            throw new InvalidOperationException("Reentrant model mutations are not supported.");
     }
+
+    #endregion
 
     /// <summary>
     /// Allows specialized models to keep model-specific decorations in sync

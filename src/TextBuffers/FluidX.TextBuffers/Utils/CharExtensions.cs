@@ -2,9 +2,14 @@
 
 public static class CharExtensions
 {
-    // IsBasicASCII
-    public static bool IsBasicASCII(this char ch)
+    extension(char ch)
     {
-        return (ch >= 0x20 && ch <= 0x7E) || ch == '\t';
+        /// <summary>The Unicode byte order mark character (U+FEFF).</summary>
+        public static char Utf8Bom => '\uFEFF';
+
+        public bool IsBasicASCII()
+        {
+            return (ch >= 0x20 && ch <= 0x7E) || ch == '\t';
+        }
     }
 }

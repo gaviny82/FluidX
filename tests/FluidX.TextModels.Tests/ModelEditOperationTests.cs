@@ -14,18 +14,33 @@ public class ModelEditOperationTests
     {
         var model = new PlainTextModel("\uFEFFone\r\ntwo\nthree\rfour", EndOfLine.LF);
 
-        Assert.AreEqual("\uFEFF", model.BOM);
+        Assert.IsTrue(model.HasBOM);
         Assert.AreEqual(DocumentEndOfLine.Mixed, model.EOL);
         model.DefaultEOL = EndOfLine.CRLF;
         Assert.AreEqual("one\r\ntwo\nthree\rfour", model.TextBuffer.GetTextInRange(model.GetFullModelRange()));
-        Assert.AreEqual("one\r\ntwo\r\nthree\r\nfour", model.GetValue());
-        Assert.AreEqual(21, model.GetValueLengthInRange(model.GetFullModelRange()));
-        Assert.AreEqual(18, model.GetValueLengthInRange(model.GetFullModelRange(), EndOfLinePreference.LF));
-        Assert.AreEqual("\uFEFFone\r\ntwo\r\nthree\r\nfour", model.GetValue(preserveBOM: true));
+        Assert.AreEqual("one\r\ntwo\nthree\rfour", model.GetAllText());
+        Assert.AreEqual("one\r\ntwo\r\nthree\r\nfour", model.GetAllText(EndOfLine.CRLF));
+        Assert.AreEqual(19, model.GetTextLengthInRange(model.GetFullModelRange()));
+        Assert.AreEqual(18, model.GetTextLengthInRange(model.GetFullModelRange(), EndOfLine.LF));
+        Assert.AreEqual(21, model.GetTextLengthInRange(model.GetFullModelRange(), EndOfLine.CRLF));
+        Assert.AreEqual("one\rtwo\rthree\rfour", model.GetTextInRange(model.GetFullModelRange(), EndOfLine.CR));
+        Assert.AreEqual(18, model.GetTextLengthInRange(model.GetFullModelRange(), EndOfLine.CR));
+        Assert.AreEqual(19, model.GetCharacterCountInRange(model.GetFullModelRange()));
+        Assert.AreEqual(18, model.GetCharacterCountInRange(model.GetFullModelRange(), EndOfLine.CR));
+        Assert.AreEqual("\uFEFFone\r\ntwo\nthree\rfour", model.GetAllText(preserveBOM: true));
+
+        model.HasBOM = false;
+        Assert.AreEqual("one\r\ntwo\nthree\rfour", model.GetAllText(preserveBOM: true));
+        model.HasBOM = true;
+        Assert.IsTrue(model.HasBOM);
+        Assert.AreEqual("\uFEFFone\r\ntwo\nthree\rfour", model.GetAllText(preserveBOM: true));
 
         model.SetEOL(EndOfLine.LF);
 
         Assert.AreEqual("one\ntwo\nthree\nfour", model.TextBuffer.GetTextInRange(model.GetFullModelRange()));
+        Assert.AreEqual(DocumentEndOfLine.LF, model.EOL);
+        Assert.AreEqual(21, model.GetTextLengthInRange(model.GetFullModelRange(), EndOfLine.CRLF));
+        Assert.AreEqual(18, model.GetTextLengthInRange(model.GetFullModelRange(), EndOfLine.CR));
     }
 
     [TestMethod]
@@ -34,11 +49,11 @@ public class ModelEditOperationTests
         var model = new PlainTextModel("hello", EndOfLine.LF);
         model.Edit(new TextEdit([new TextReplacement(new TextRange(0, 5, 0, 5), " world")]));
 
-        Assert.AreEqual("hello world", model.GetValue());
+        Assert.AreEqual("hello world", model.GetAllText());
         model.Undo();
-        Assert.AreEqual("hello", model.GetValue());
+        Assert.AreEqual("hello", model.GetAllText());
         model.Redo();
-        Assert.AreEqual("hello world", model.GetValue());
+        Assert.AreEqual("hello world", model.GetAllText());
     }
 
     [TestMethod]
@@ -52,7 +67,7 @@ public class ModelEditOperationTests
         ];
 
         Assert.ThrowsExactly<ArgumentException>(() => model.ApplyEdits(operations, computeUndoEdits: false));
-        Assert.AreEqual("a\r\nb", model.GetValue());
+        Assert.AreEqual("a\r\nb", model.GetAllText());
     }
 
     [TestMethod]
@@ -71,7 +86,7 @@ public class ModelEditOperationTests
             Assert.ThrowsExactly<ArgumentException>(() => model.ApplyEdits(
                 [new ModelEditOperation(range, "X")],
                 computeUndoEdits: false));
-            Assert.AreEqual("a\r\nb", model.GetValue());
+            Assert.AreEqual("a\r\nb", model.GetAllText());
         }
     }
 
@@ -84,14 +99,14 @@ public class ModelEditOperationTests
             [new ModelEditOperation(new TextRange(0, 1, 1, 0), "\n")],
             computeUndoEdits: false);
 
-        Assert.AreEqual("a\nb", model.GetValue());
+        Assert.AreEqual("a\nb", model.GetAllText());
     }
 
     [TestMethod]
     public void TextModelInheritsPlainTextModel()
     {
         PlainTextModel model = CreateModel("text");
-        Assert.AreEqual("text", model.GetValue());
+        Assert.AreEqual("text", model.GetAllText());
     }
 
     [TestMethod]
@@ -109,7 +124,7 @@ public class ModelEditOperationTests
         var inverseOperations = model.ApplyEdits(operations, computeUndoEdits: true);
 
         Assert.HasCount(operationCount, inverseOperations!);
-        Assert.AreEqual("", model.GetValue());
+        Assert.AreEqual("", model.GetAllText());
     }
 
     [TestMethod]
@@ -126,7 +141,7 @@ public class ModelEditOperationTests
         var inverseOperations = model.ApplyEdits(operations, computeUndoEdits: true);
 
         Assert.HasCount(1, inverseOperations!);
-        Assert.AreEqual("", model.GetValue());
+        Assert.AreEqual("", model.GetAllText());
     }
 
     [TestMethod]
@@ -143,7 +158,7 @@ public class ModelEditOperationTests
             beforeCursorState: null,
             cursorStateComputer: null);
 
-        Assert.AreEqual("\n    ", model.GetValue());
+        Assert.AreEqual("\n    ", model.GetAllText());
 
         model.PushEditOperations(
             [
@@ -152,13 +167,13 @@ public class ModelEditOperationTests
             beforeCursorState: null,
             cursorStateComputer: null);
 
-        Assert.AreEqual("x\n", model.GetValue());
+        Assert.AreEqual("x\n", model.GetAllText());
 
         model.Undo();
 
-        Assert.AreEqual("\n    ", model.GetValue());
+        Assert.AreEqual("\n    ", model.GetAllText());
         model.Undo();
-        Assert.AreEqual("", model.GetValue());
+        Assert.AreEqual("", model.GetAllText());
     }
 
     private static TextModel CreateModel(string text)

@@ -32,14 +32,6 @@ public sealed record class ModelEditOperation
     public bool IsAutowhitespaceEdit { get; init; }
 
     /// <summary>
-    /// Preserves this batch's individual operation boundaries and inverse edits. Set this when a
-    /// caller uses the corresponding inverse operation to compute cursor, selection, snippet, or
-    /// other tracked state. If any operation in a large batch is tracked, the model will not combine
-    /// that batch into a single replacement.
-    /// </summary>
-    public bool IsTracked { get; init; }
-
-    /// <summary>
     /// Gets the range replaced by this operation.
     /// </summary>
     public TextRange Range => Replacement.Range;
