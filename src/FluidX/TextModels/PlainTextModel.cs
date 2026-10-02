@@ -39,6 +39,13 @@ public class PlainTextModel
     public IReadOnlyTextBuffer TextBuffer => _buffer.CreateSnapshot();
 
     /// <summary>
+    /// Current document end-of-line state.
+    /// </summary>
+    public DocumentEndOfLine EOL => CurrentRecord.EndOfLine;
+
+    #region Forward Read-Only Version History APIs
+
+    /// <summary>
     /// Version number of the document. Starts from 0 and increases monotonically with each change.
     /// </summary>
     public long VersionId => _history.VersionId;
@@ -54,11 +61,6 @@ public class PlainTextModel
     public TextRecord CurrentRecord => _history.CurrentRecord;
 
     /// <summary>
-    /// Current document end-of-line state.
-    /// </summary>
-    public DocumentEndOfLine EOL => CurrentRecord.EndOfLine;
-
-    /// <summary>
     /// Whether the document can be undone by navigating to the previous record in the retained history.
     /// </summary>
     public bool CanUndo => _history.CanUndo;
@@ -67,6 +69,52 @@ public class PlainTextModel
     /// Whether the document can be redone by navigating to the next record in the retained history.
     /// </summary>
     public bool CanRedo => _history.CanRedo;
+
+    /// <summary>The latest chronological version, including caller-defined operation metadata.</summary>
+    public TextVersion CurrentVersion => _history.CurrentVersion;
+
+    /// <summary>Number of retained chronological versions, including the current version.</summary>
+    public int StoredVersionCount => _history.StoredVersionCount;
+
+    /// <summary>Number of retained records preceding the current record.</summary>
+    public int HistoryRecordCount => _history.HistoryRecordCount;
+
+    /// <summary>Number of retained records following the current record.</summary>
+    public int FutureRecordCount => _history.FutureRecordCount;
+
+    /// <summary>Returns retained versions in chronological order, oldest first.</summary>
+    /// <remarks>Versions and records are evicted independently. A version does not retain its referenced records.</remarks>
+    public ImmutableArray<TextVersion> GetStoredVersions() => _history.GetStoredVersions();
+
+    /// <summary>Gets a retained version by distance from the latest version; zero selects the current version.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The index is outside retained versions.</exception>
+    public TextVersion GetStoredVersion(int indexFromCurrent) => _history.GetStoredVersion(indexFromCurrent);
+
+    /// <summary>Returns retained past records, nearest first, excluding the current record.</summary>
+    public ImmutableArray<TextRecord> GetHistoryRecords() => _history.GetHistoryRecords();
+
+    /// <summary>Returns retained future records, nearest first, excluding the current record.</summary>
+    public ImmutableArray<TextRecord> GetFutureRecords() => _history.GetFutureRecords();
+
+    /// <summary>Gets a retained past record; zero selects the nearest undo record.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The index is outside retained past records.</exception>
+    public TextRecord GetHistoryRecord(int index) => _history.GetHistoryRecord(index);
+
+    /// <summary>Gets a retained future record; zero selects the nearest redo record.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The index is outside retained future records.</exception>
+    public TextRecord GetFutureRecord(int index) => _history.GetFutureRecord(index);
+
+    /// <summary>Gets a record by its ID on the retained undo/redo path.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The record is not retained.</exception>
+    public TextRecord GetRecord(long recordId) => _history.GetRecord(recordId);
+
+    /// <summary>Returns adjacent transitions in action order between two retained records.</summary>
+    /// <remarks>Each transition uses its own source/target coordinates. Equal IDs return an empty array.</remarks>
+    /// <exception cref="ArgumentOutOfRangeException">Either record is not retained.</exception>
+    public ImmutableArray<TextRecordTransition> GetTransitionsBetweenRecords(long fromRecordId, long toRecordId)
+        => _history.GetTransitionsBetweenRecords(fromRecordId, toRecordId);
+
+    #endregion
 
     public event EventHandler<TextModelContentChangedEventArgs>? ContentChanged;
 
@@ -325,18 +373,18 @@ public class PlainTextModel
                 {
                     //var injectedTextInEditedRangeQueue = new ArrayQueue(injectedTextInEditedRange);
 
-    public void Undo()
+    public void Undo(TextModelOperationMetadata? metadata = null)
                     {
         EnsureNotMutating();
         if (CanUndo)
             Navigate(TextVersionKind.Undo, _history.GetHistoryRecord(0));
                     }
 
-    public void Redo()
+    public void Redo(TextModelOperationMetadata? metadata = null)
     {
         EnsureNotMutating();
         if (CanRedo)
-            Navigate(TextVersionKind.Redo, _history.GetFutureRecord(0));
+            Navigate(TextVersionKind.Redo, _history.GetFutureRecord(0), metadata);
                 }
 
     /// <summary>Jumps to a record retained in this model's edit history.</summary>
@@ -345,16 +393,16 @@ public class PlainTextModel
     /// using the saved <see cref="TextRecord.Snapshot"/>.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">The record ID does not exist in the retained history.</exception>
-    public void JumpToRecord(long recordId)
+    public void JumpToRecord(long recordId, TextModelOperationMetadata? metadata = null)
                     {
         EnsureNotMutating();
-        Navigate(TextVersionKind.Jump, _history.GetRecord(recordId));
+        Navigate(TextVersionKind.Jump, _history.GetRecord(recordId), metadata);
         }
 
     // Preconditions:
     // The record must exist in the retrained edit history.
     // Kind must be either Undo, Redo or Jump
-    private void Navigate(TextVersionKind kind, TextRecord target)
+    private void Navigate(TextVersionKind kind, TextRecord target, TextModelOperationMetadata? metadata)
     {
         var before = CurrentRecord;
         var currentRecordId = before.RecordId;
@@ -373,7 +421,7 @@ public class PlainTextModel
                 foreach (var transition in transitions)
                     _buffer.ApplyEdits(GetTransitionEdits(transition));
         }
-            _history.CommitNavigation(kind, target.RecordId);
+            _history.CommitNavigation(kind, target.RecordId, metadata);
             PublishContentChangeEvent(transitions);
             }
         finally
@@ -403,7 +451,7 @@ public class PlainTextModel
     /// <exception cref="InvalidOperationException">
     /// CR normalization is not yet supported, or a mutation is reentrant.
     /// </exception>
-    public void NormalizeEOL(EndOfLine eol)
+    public void NormalizeEOL(EndOfLine eol, TextModelOperationMetadata? metadata = null)
     {
         var endOfLine = eol switch
         {
@@ -424,7 +472,7 @@ public class PlainTextModel
             _buffer.NormalizeEOL(eol.AsString());
             var snapshot = _buffer.CreateSnapshot();
             _history.CommitEolNormalization(
-                [new(0, before.Snapshot.Length, 0, snapshot.Length)], snapshot, endOfLine);
+                [new(0, before.Snapshot.Length, 0, snapshot.Length)], snapshot, endOfLine, metadata);
             var after = CurrentRecord;
             PublishContentChangeEvent([new(before, after, after.ChangeSpans)]);
     }
@@ -441,7 +489,7 @@ public class PlainTextModel
     /// Always commits a new record, even if the content is the same before and after the replacement.
     /// Callers should skip identical content replacement when appropriate.
     /// </remarks>
-    public void ReplaceContent(IReadOnlyTextBuffer content)
+    public void ReplaceContent(IReadOnlyTextBuffer content, TextModelOperationMetadata? metadata = null)
         {
         EnsureNotMutating();
         var before = CurrentRecord;
@@ -450,7 +498,7 @@ public class PlainTextModel
     {
             RestoreContent(content);
             var after = _buffer.CreateSnapshot();
-            _history.CommitReplacement(after, ClassifyEOL(after));
+            _history.CommitReplacement(after, ClassifyEOL(after), metadata);
             UpdateCharacterFlags(after.GetTextInRange(after.GetRangeAt(0, after.Length)));
             PublishContentChangeEvent([new(before, CurrentRecord, CurrentRecord.ChangeSpans)]);
     }
@@ -641,10 +689,9 @@ public class PlainTextModel
     /// </summary>
     protected virtual void OnContentChanged(TextModelContentChangedEventArgs change) { }
 
-    private void PublishContentChangeEvent(ImmutableArray<TextRecordTransition> transitions,
-        TextModelEditSource? reason = null)
+    private void PublishContentChangeEvent(ImmutableArray<TextRecordTransition> transitions)
     {
-        var change = new TextModelContentChangedEventArgs(_history.CurrentVersion, transitions, reason);
+        var change = new TextModelContentChangedEventArgs(_history.CurrentVersion, transitions);
         OnContentChanged(change);
         ContentChanged?.Invoke(this, change);
 }

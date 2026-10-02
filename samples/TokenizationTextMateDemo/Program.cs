@@ -54,7 +54,7 @@ var tokenizationSupport = new TextMateTokenizationSupport(grammar, globalLanguag
 LanguageRegistry.Instance.Register(globalLanguageId, tokenizationSupport);
 
 string source = File.ReadAllText(filePath);
-var model = new TextModel(source, EndOfLine.LF, globalLanguageId);
+var model = new TextModel(source, globalLanguageId);
 
 Console.WriteLine($"File: {filePath}");
 Console.WriteLine($"Language: {languageName}");

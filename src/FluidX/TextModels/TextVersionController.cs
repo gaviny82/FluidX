@@ -23,11 +23,13 @@ public enum TextVersionKind { Initial, Edit, EolNormalization, Replacement, Undo
 /// <param name="TargetRecordId">Record ID selected after the action.</param>
 /// <param name="Kind">The intent of action creating this version, or <see cref="TextVersionKind.Initial">
 /// for the initial state when the <see cref="TextVersionController"/> is created.</param>
+/// <param name="Metadata">Optional caller-defined metadata for the operation that creates this version.</param>
 public sealed record TextVersion(
     long VersionId,
     long SourceRecordId,
     long TargetRecordId,
-    TextVersionKind Kind);
+    TextVersionKind Kind,
+    TextModelOperationMetadata? Metadata = null);
 
 /// <summary>
 /// A span of content changed between two <see cref="TextRecord"/>s. The coordinates are
@@ -301,12 +303,13 @@ public sealed class TextVersionController
     /// that describe the full change from the current snapshot to <paramref name="snapshot"/>.
     /// Otherwise, the behavior is undefined.
     /// </remarks>
-    public TextVersion CommitEdit(ImmutableArray<TextChangeSpan> changes, ITextSnapshot snapshot, DocumentEndOfLine eol)
+    public TextVersion CommitEdit(ImmutableArray<TextChangeSpan> changes, ITextSnapshot snapshot, DocumentEndOfLine eol,
+        TextModelOperationMetadata? metadata = null)
     {
         if (changes.IsDefault)
             throw new ArgumentException("Changes must be an initialized immutable array.", nameof(changes));
         ArgumentNullException.ThrowIfNull(snapshot);
-        return AppendRecord(TextVersionKind.Edit, changes, snapshot, eol);
+        return AppendRecord(TextVersionKind.Edit, changes, snapshot, eol, metadata);
     }
 
     /// <summary>
@@ -320,12 +323,13 @@ public sealed class TextVersionController
     /// that describe the full change from the current snapshot to <paramref name="snapshot"/>.
     /// Otherwise, the behavior is undefined.
     /// </remarks>
-    public TextVersion CommitEolNormalization(ImmutableArray<TextChangeSpan> changes, ITextSnapshot snapshot, DocumentEndOfLine eol)
+    public TextVersion CommitEolNormalization(ImmutableArray<TextChangeSpan> changes, ITextSnapshot snapshot, DocumentEndOfLine eol,
+        TextModelOperationMetadata? metadata = null)
     {
         if (changes.IsDefault)
             throw new ArgumentException("Changes must be an initialized immutable array.", nameof(changes));
         ArgumentNullException.ThrowIfNull(snapshot);
-        return AppendRecord(TextVersionKind.EolNormalization, changes, snapshot, eol);
+        return AppendRecord(TextVersionKind.EolNormalization, changes, snapshot, eol, metadata);
     }
 
     /// <summary>
@@ -341,7 +345,7 @@ public sealed class TextVersionController
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">The target record is not retained.</exception>
     /// <exception cref="ArgumentException">The kind or target direction is invalid.</exception>
-    public TextVersion CommitNavigation(TextVersionKind kind, long targetRecordId)
+    public TextVersion CommitNavigation(TextVersionKind kind, long targetRecordId, TextModelOperationMetadata? metadata = null)
     {
         if (kind is not (TextVersionKind.Undo or TextVersionKind.Redo or TextVersionKind.Jump))
             throw new ArgumentException("Expected Undo, Redo, or Jump.", nameof(kind));
@@ -357,7 +361,7 @@ public sealed class TextVersionController
         _ = checked(VersionId + 1); // Ensure version ID does not overflow before making changes.
         long sourceRecordId = RecordId;
         _currentRecordIndex = target;
-        return AppendVersion(kind, sourceRecordId);
+        return AppendVersion(kind, sourceRecordId, metadata);
     }
 
     /// <summary>
@@ -367,12 +371,12 @@ public sealed class TextVersionController
     /// <remarks>
     /// Redo history is discarded. The former record remains undoable while retained.
     /// </remarks>
-    public TextVersion CommitReplacement(ITextSnapshot snapshot, DocumentEndOfLine eol)
+    public TextVersion CommitReplacement(ITextSnapshot snapshot, DocumentEndOfLine eol, TextModelOperationMetadata? metadata = null)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ImmutableArray<TextChangeSpan> changes =
             [new TextChangeSpan(0, CurrentSnapshot.Length, 0, snapshot.Length)];
-        return AppendRecord(TextVersionKind.Replacement, changes, snapshot, eol);
+        return AppendRecord(TextVersionKind.Replacement, changes, snapshot, eol, metadata);
     }
 
     #endregion
@@ -407,7 +411,8 @@ public sealed class TextVersionController
     }
 
     private TextVersion AppendRecord(TextVersionKind kind,
-        ImmutableArray<TextChangeSpan> changes, ITextSnapshot snapshot, DocumentEndOfLine eol)
+        ImmutableArray<TextChangeSpan> changes, ITextSnapshot snapshot, DocumentEndOfLine eol,
+        TextModelOperationMetadata? metadata)
     {
         _ = checked(VersionId + 1); // Ensure version ID does not overflow before creating a new record.
         long fromRecordId = RecordId;
@@ -417,13 +422,13 @@ public sealed class TextVersionController
         _records.Append(new TextRecord(nextId, snapshot, eol, fromRecordId, changes));
         _nextRecordId = nextId;
         _currentRecordIndex = _records.Count - 1;
-        return AppendVersion(kind, fromRecordId);
+        return AppendVersion(kind, fromRecordId, metadata);
     }
 
-    private TextVersion AppendVersion(TextVersionKind kind, long fromRecordId)
+    private TextVersion AppendVersion(TextVersionKind kind, long fromRecordId, TextModelOperationMetadata? metadata)
     {
         long nextVersion = checked(VersionId + 1);
-        var version = new TextVersion(nextVersion, fromRecordId, RecordId, kind);
+        var version = new TextVersion(nextVersion, fromRecordId, RecordId, kind, metadata);
         _versions.Append(version);
         VersionId = nextVersion;
         return version;
@@ -432,60 +437,3 @@ public sealed class TextVersionController
     #endregion
 
 }
-
-/*
- * Legacy buffer-mutating APIs, retained for reference while PlainTextModel's
- * restoration path is designed. These are intentionally outside the controller.
- *
- * public TextVersion? Undo() => CanUndo ? MoveTo(_currentRecordIndex - 1, TextVersionKind.Undo) : null;
- * public TextVersion? Redo() => CanRedo ? MoveTo(_currentRecordIndex + 1, TextVersionKind.Redo) : null;
- *
- * public TextVersion JumpToRecord(long recordId)
- * {
- *     for (int i = 0; i < _records.Count; i++)
- *         if (_records[i].RecordId == recordId)
- *             return MoveTo(i, TextVersionKind.Jump);
- *     throw new ArgumentOutOfRangeException(nameof(recordId), "The record is not retained.");
- * }
- *
- * public TextVersion ReplaceWithRecord(TextRecord source)
- * {
- *     ArgumentNullException.ThrowIfNull(source);
- *     ITextSnapshot before = CurrentSnapshot;
- *     if (_buffer is not ISnapshotRestorableTextBuffer restorable ||
- *         !restorable.TryRestoreSnapshot(source.Snapshot))
- *     {
- *         string text = source.Snapshot.GetTextInRange(
- *             source.Snapshot.GetRangeAt(0, source.Snapshot.Length));
- *         _buffer.ApplyEdits([new TextReplacement(_buffer.GetRangeAt(0, _buffer.Length), text)]);
- *     }
- *     ITextSnapshot after = _buffer.CreateSnapshot();
- *     ImmutableArray<TextChangeSpan> changes =
- *         [new TextChangeSpan(0, before.Length, 0, after.Length)];
- *     return AppendRecord(TextVersionKind.Replacement, changes, after);
- * }
- *
- * private TextVersion MoveTo(int target, TextVersionKind kind)
- * {
- *     if (target == _currentRecordIndex) return CurrentVersion;
- *     long fromRecordId = RecordId;
- *     TextRecord destination = _records[target];
- *     if (_buffer is not ISnapshotRestorableTextBuffer restorable ||
- *         !restorable.TryRestoreSnapshot(destination.Snapshot))
- *     {
- *         if (target < _currentRecordIndex)
- *             for (int i = _currentRecordIndex; i > target; i--)
- *                 ApplyRawChanges(_records[i].Snapshot, _records[i - 1].Snapshot,
- *                     _records[i].ChangeSpans, reverse: true);
- *         else
- *             for (int i = _currentRecordIndex + 1; i <= target; i++)
- *                 ApplyRawChanges(_records[i - 1].Snapshot, _records[i].Snapshot,
- *                     _records[i].ChangeSpans, reverse: false);
- *     }
- *     _currentRecordIndex = target;
- *     return AppendVersion(kind, fromRecordId);
- * }
- *
- * ApplyRawChanges and its CRLF-boundary full-replacement fallback belong in the
- * model's restoration helper, alongside model metadata and event updates.
- */
