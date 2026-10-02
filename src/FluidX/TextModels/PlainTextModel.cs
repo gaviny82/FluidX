@@ -1,4 +1,3 @@
-using System.Text;
 using System.Collections.Immutable;
 using FluidX.TextBuffers;
 using FluidX.TextBuffers.PersistentPieceTree;
@@ -10,85 +9,11 @@ namespace FluidX.TextModels;
 /// </summary>
 public class PlainTextModel
 {
-    private readonly PersistentPieceTreeTextBuffer _buffer;
+    private readonly ITextBuffer _buffer;
     private readonly TextVersionController _history;
 
     // Reentrant guards to prevent subscribers from mutating the model during content change events.
     private bool _isMutating;
-
-    private int[]? _trimAutoWhitespaceLineIndices;
-
-    #region Text Model Options
-
-    /// <summary>
-    /// Width of tab stops in columns, used to display \t and alignment.
-    /// </summary>
-    public int TabSize
-    {
-        get;
-        set
-        {
-            EnsureNotMutating();
-            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value);
-            field = value;
-        }
-    } = 4;
-
-    /// <summary>
-    /// Number of columns in one indentation level for future indent/outdent commands.
-    /// </summary>
-    public int IndentSize
-    {
-        get;
-        set
-        {
-            EnsureNotMutating();
-            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value);
-            field = value;
-        }
-    } = 4;
-
-    /// <summary>
-    /// Whether future Tab/indent commands should insert spaces instead of literal \t.
-    /// </summary>
-    public bool InsertSpaces
-    {
-        get;
-        set
-        {
-            EnsureNotMutating();
-            field = value;
-        }
-    } = true;
-
-    /// <summary>
-    /// Whether automatically inserted whitespace is eligible for subsequent cleanup.
-    /// </summary>
-    public bool TrimAutoWhitespace
-    {
-        get;
-        set
-        {
-            EnsureNotMutating();
-            field = value;
-            if (!value) _trimAutoWhitespaceLineIndices = null;
-        }
-    } = true;
-
-    /// <summary>The end-of-line sequence higher-level editors should insert for Enter.</summary>
-    public EndOfLine DefaultEOL
-    {
-        get => field;
-        set
-        {
-            EnsureNotMutating();
-            if (!Enum.IsDefined(value))
-                throw new ArgumentOutOfRangeException(nameof(value), "Invalid enum value.");
-            field = value;
-        }
-    } = EndOfLine.LF;
-
-    #endregion
 
     #region Document Metadata
 
@@ -145,9 +70,7 @@ public class PlainTextModel
 
     public event EventHandler<TextModelContentChangedEventArgs>? ContentChanged;
 
-    public PlainTextModel(
-        string source,
-        EndOfLine defaultEOL)
+    public PlainTextModel(string source)
     {
         HasBOM = source.Length > 0 && source[0] == char.Utf8Bom;
         if (HasBOM)
@@ -157,7 +80,6 @@ public class PlainTextModel
         // can be computed at the same time. No need to scan the text twice. This requires a unified ITextBuffer
         // creation interface or factory interface that can return the extra information. We accept the two-pass
         // scan for now and will optimize in the future if needed.
-        DefaultEOL = defaultEOL;
         MightContainNonBasicASCII = !source.IsBasicASCII();
         MightContainRTL = MightContainNonBasicASCII && source.ContainsRTL();
 
@@ -403,336 +325,139 @@ public class PlainTextModel
                 {
                     //var injectedTextInEditedRangeQueue = new ArrayQueue(injectedTextInEditedRange);
 
-                    // Must insert some lines
-                    int spliceLineIndex = startLineIndex + editingLinesCnt;
-                    int cnt = insertingLinesCnt - editingLinesCnt;
-                    int fromLineIndex = newLineCount - lineCount - cnt + spliceLineIndex + 1;
-                    //LineInjectedText[]?[] injectedTexts = [];
-                    string[] newLines = new string[cnt];
-                    for (int j = 0; j < cnt; j++)
-                    {
-                        int lineIndex = fromLineIndex + j;
-                        newLines[j] = TextBuffer.GetLineContent(lineIndex);
-
-                        //injectedTextInEditedRangeQueue.takeWhile(r => r.lineIndex < lineIndex);
-                        //injectedTexts[i] = injectedTextInEditedRangeQueue.takeWhile(r => r.lineIndex === lineIndex);
-                    }
-
-                    rawContentChanges.Add(
-                        new ModelRawLinesInserted(
-                            spliceLineIndex + 1,
-                            startLineIndex + insertingLinesCnt,
-                            newLines
-                        //injectedTexts // Not implemented yet
-                        )
-                    );
-                }
-
-                lineCount += changeLineCountDelta;
-            }
-
-            // Fire ContentChanged Event
-            OnContentChanged(
-                new ModelRawContentChangedEventArgs(
-                    rawContentChanges,
-                    VersionId,
-                    isUndoing,
-                    isRedoing
-                ),
-                new ModelContentChangedEventArgs(
-                    contentChanges.Select(c => new ModelContentChange
-                    {
-                        Range = c.Range,
-                        RangeLength = c.RangeLength,
-                        RangeOffset = c.RangeOffset,
-                        Text = c.Text
-                    }).ToList(),
-                    _eol,
-                    VersionId,
-                    isUndoing,
-                    isRedoing,
-                    false,
-                    false,
-                    [reason],
-                    [contentChanges.Count]
-                )
-            );
-        }
-
-        return computeUndoEdits ? reverseEdits : null;
-    }
-
-    private ModelEditOperation[] AppendAutoWhitespaceTrimEdits(
-        ModelEditOperation[] editOperations,
-        Selection[]? beforeCursorState)
-    {
-        if (!TrimAutoWhitespace || _trimAutoWhitespaceLineIndices is null)
-            return editOperations;
-
-        int[] trimLineIndices = _trimAutoWhitespaceLineIndices;
-        _trimAutoWhitespaceLineIndices = null;
-
-        bool editsAreNearCursors = true;
-        if (beforeCursorState is not null)
-        {
-            foreach (var selection in beforeCursorState)
-            {
-                int selectionStartLine = Math.Min(selection.SelectionStartLineIndex, selection.PositionLineIndex);
-                int selectionEndLine = Math.Max(selection.SelectionStartLineIndex, selection.PositionLineIndex);
-                bool foundNearbyEdit = editOperations.Any(operation =>
-                    operation.Range.StartLineIndex <= selectionEndLine
-                    && operation.Range.EndLineIndex >= selectionStartLine);
-                if (!foundNearbyEdit)
-                {
-                    editsAreNearCursors = false;
-                    break;
-                }
-            }
-        }
-
-        // If the edits are not near the cursors, we don't trim auto whitespace
-        if (!editsAreNearCursors)
-            return editOperations;
-
-        List<ModelEditOperation> result = [.. editOperations];
-        foreach (int trimLineIndex in trimLineIndices)
-        {
-            int maxLineColumnIndex = _buffer.GetLineLength(trimLineIndex);
-            bool allowTrimLine = true;
-
-            foreach (var operation in editOperations)
-            {
-                TextRange editRange = operation.Range;
-                if (trimLineIndex < editRange.StartLineIndex || trimLineIndex > editRange.EndLineIndex)
-                    continue;
-
-                bool insertsLineAfter = editRange.IsEmpty
-                    && editRange.StartLineIndex == trimLineIndex
-                    && editRange.StartColumnIndex == maxLineColumnIndex
-                    && StartsWithLineBreak(operation.Text);
-                bool insertsLineBefore = editRange.IsEmpty
-                    && editRange.StartLineIndex == trimLineIndex
-                    && editRange.StartColumnIndex == 0
-                    && EndsWithLineBreak(operation.Text);
-                if (insertsLineAfter || insertsLineBefore)
-                    continue;
-
-                allowTrimLine = false;
-                break;
-            }
-
-            if (allowTrimLine)
-            {
-                result.Add(new ModelEditOperation(
-                    new TextRange(trimLineIndex, 0, trimLineIndex, maxLineColumnIndex),
-                    ""));
-            }
-        }
-
-        return result.ToArray();
-    }
-
-    private List<AutoWhitespaceEdit> CaptureAutoWhitespaceEdits(ModelEditOperation[] operations)
-    {
-        List<AutoWhitespaceEdit> result = [];
-        if (!TrimAutoWhitespace)
-            return result;
-
-        for (int i = 0; i < operations.Length; i++)
-        {
-            var operation = operations[i];
-            if (operation.IsAutowhitespaceEdit && operation.Range.IsEmpty)
-            {
-                result.Add(new AutoWhitespaceEdit(i, _buffer.GetLineContent(operation.Range.StartLineIndex)));
-            }
-        }
-
-        return result;
-    }
-
-    private int[]? ComputeAutoWhitespaceLineIndices(
-        ModelEditOperation[] operations,
-        List<AutoWhitespaceEdit> autoWhitespaceEdits,
-        ReverseSingleEditOperation[]? reverseOperations)
-    {
-        if (autoWhitespaceEdits.Count == 0 || reverseOperations is null)
-            return null;
-
-        Dictionary<int, ReverseSingleEditOperation> reverseOperationsByIndex =
-            reverseOperations.ToDictionary(op => op.SortIndex);
-        List<(int LineIndex, string OldContent)> candidates = [];
-
-        foreach (var edit in autoWhitespaceEdits)
-        {
-            if (!reverseOperationsByIndex.TryGetValue(edit.SortIndex, out var reverseOperation))
-                continue;
-
-            for (int lineIndex = reverseOperation.Range.StartLineIndex;
-                lineIndex <= reverseOperation.Range.EndLineIndex;
-                lineIndex++)
-            {
-                string oldContent = lineIndex == reverseOperation.Range.StartLineIndex
-                    ? edit.OldLineContent
-                    : "";
-                if (lineIndex == reverseOperation.Range.StartLineIndex && ContainsNonWhitespace(oldContent))
-                    continue;
-                candidates.Add((lineIndex, oldContent));
-            }
-        }
-
-        candidates.Sort((a, b) => b.LineIndex - a.LineIndex);
-        List<int> result = [];
-        for (int i = 0; i < candidates.Count; i++)
-        {
-            var candidate = candidates[i];
-            if (i > 0 && candidates[i - 1].LineIndex == candidate.LineIndex)
-                continue;
-
-            string lineContent = _buffer.GetLineContent(candidate.LineIndex);
-            if (lineContent.Length == 0
-                || lineContent == candidate.OldContent
-                || ContainsNonWhitespace(lineContent))
-            {
-                continue;
-            }
-            result.Add(candidate.LineIndex);
-        }
-
-        return result.Count == 0 ? null : result.ToArray();
-    }
-
-    private static bool ContainsNonWhitespace(string text)
-        => text.Any(ch => ch is not (' ' or '\t'));
-
-    private static bool StartsWithLineBreak(string text)
-        => text.StartsWith('\n') || text.StartsWith("\r");
-
-    private static bool EndsWithLineBreak(string text)
-        => text.EndsWith('\n') || text.EndsWith("\r");
-
-    private readonly record struct AutoWhitespaceEdit(int SortIndex, string OldLineContent);
-
     public void Undo()
-    {
-        if (_undoRedoStack.GetClosestPastElement() is not IUndoRedoElement element)
-            return;
-        _undoRedoStack.MoveBackward(element);
-        element.Undo();
-    }
-
-    public void ApplyUndo(TextChange[] changes, EndOfLineSequence eol, long resultingAltVersionId, Selection[]? resultingSelection)
-    {
-        var edits = changes.Select(change =>
-        {
-            var rangeStart = TextBuffer.GetPositionAt(change.NewPosition);
-            var rangeEnd = TextBuffer.GetPositionAt(change.NewEnd);
-            return new ModelEditOperation(
-                new TextRange(
-                    rangeStart.LineIndex,
-                    rangeStart.ColumnIndex,
-                    rangeEnd.LineIndex,
-                    rangeEnd.ColumnIndex
-                ),
-                change.OldText);
-        }).ToArray();
-
-        // TODO: Emit events
-
-        ApplyEdits(edits, false, null, true, false);
-        SetEOL(eol);
-        AlternativeVersionId = resultingAltVersionId;
-    }
-
-    public void ApplyRedo(TextChange[] changes, EndOfLineSequence eol, long resultingAltVersionId, Selection[]? resultingSelection)
-    {
-        var edits = changes.Select(change =>
-        {
-            var rangeStart = TextBuffer.GetPositionAt(change.OldPosition);
-            var rangeEnd = TextBuffer.GetPositionAt(change.OldEnd);
-            return new ModelEditOperation(
-                new TextRange(
-                    rangeStart.LineIndex,
-                    rangeStart.ColumnIndex,
-                    rangeEnd.LineIndex,
-                    rangeEnd.ColumnIndex
-                ),
-                change.NewText);
-        }).ToArray();
-
-        // TODO: Emit events
-
-        ApplyEdits(edits, false, null, false, true);
-        SetEOL(eol);
-        AlternativeVersionId = resultingAltVersionId;
-    }
+                    {
+        EnsureNotMutating();
+        if (CanUndo)
+            Navigate(TextVersionKind.Undo, _history.GetHistoryRecord(0));
+                    }
 
     public void Redo()
     {
-        if (_undoRedoStack.GetClosestFutureElement() is not IUndoRedoElement element)
-            return;
-        _undoRedoStack.MoveForward(element);
-        element.Redo();
+        EnsureNotMutating();
+        if (CanRedo)
+            Navigate(TextVersionKind.Redo, _history.GetFutureRecord(0));
+                }
+
+    /// <summary>Jumps to a record retained in this model's edit history.</summary>
+    /// <remarks>
+    /// To recover an unretained record, call <see cref="ReplaceContent"/>
+    /// using the saved <see cref="TextRecord.Snapshot"/>.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The record ID does not exist in the retained history.</exception>
+    public void JumpToRecord(long recordId)
+                    {
+        EnsureNotMutating();
+        Navigate(TextVersionKind.Jump, _history.GetRecord(recordId));
+        }
+
+    // Preconditions:
+    // The record must exist in the retrained edit history.
+    // Kind must be either Undo, Redo or Jump
+    private void Navigate(TextVersionKind kind, TextRecord target)
+    {
+        var before = CurrentRecord;
+        var currentRecordId = before.RecordId;
+        if (target.RecordId == currentRecordId)
+            return; // no-op
+
+        _isMutating = true;
+        try
+        {
+            // Both records are retained and distinct, so adjacent transitions are always available.
+            var transitions = _history.GetTransitionsBetweenRecords(currentRecordId, target.RecordId);
+            // Tries to retore a snapshot if the text buffer supports this.
+            // Otherwise, apply a sequence of edits to restore the text buffer to the provided state.
+            if (!TryRestoreSnapshot(target.Snapshot))
+            {
+                foreach (var transition in transitions)
+                    _buffer.ApplyEdits(GetTransitionEdits(transition));
+        }
+            _history.CommitNavigation(kind, target.RecordId);
+            PublishContentChangeEvent(transitions);
+            }
+        finally
+            {
+            _isMutating = false;
+        }
     }
 
-    public void SetEOL(EndOfLineSequence eol)
+    // Used for explicit content replacements.
+    private void RestoreContent(IReadOnlyTextBuffer content)
     {
-        string newEOL = eol switch
+        if (content is ITextSnapshot snapshot && TryRestoreSnapshot(snapshot))
+            return;
+        string text = content.GetTextInRange(content.GetRangeAt(0, content.Length));
+        _buffer.ApplyEdits([new(_buffer.GetRangeAt(0, _buffer.Length), text)]);
+            }
+
+    /// <summary>Normalize line endings of the whole document as one undoable edit.</summary>
+    /// <remarks>
+    /// This is a no-op if the current <see cref="PlainTextModel.EOL"/> is <see cref="DocumentEndOfLine.Unknown"/>
+    /// or matches <paramref name="eol"/>. Edit history and the redo path is unchanged and no events are published.<br/>
+    /// Calls <see cref="ITextBuffer.NormalizeEOL"/> and records one whole-document change span,
+    /// without computing a diff. Before/after snapshots preserve the exact content for history
+    /// consumers that need more precise changes.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The EOL enum value is invalid.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// CR normalization is not yet supported, or a mutation is reentrant.
+    /// </exception>
+    public void NormalizeEOL(EndOfLine eol)
+    {
+        var endOfLine = eol switch
         {
-            EndOfLineSequence.LF => "\n",
-            _ => "\r\n",
+            EndOfLine.LF => DocumentEndOfLine.LF,
+            EndOfLine.CRLF => DocumentEndOfLine.CRLF,
+            // TODO: Support CR normalization once ITextBuffer.NormalizeEOL and its implementations support it.
+            EndOfLine.CR => throw new InvalidOperationException("CR normalization is not yet supported by text buffers."),
+            _ => throw new ArgumentOutOfRangeException(nameof(eol))
         };
 
-        // Set EOL only if different
-        if (_eol == newEOL) return;
-
-        var oldFullModelRange = GetFullModelRange();
-        int oldModelValueLength = TextBuffer.GetTextLengthInRange(oldFullModelRange);
-        int endLineIndex = TextBuffer.LineCount - 1;
-        int endColumnIndex = TextBuffer.GetLineLength(endLineIndex);
-
-        // TODO: OnEOLChanging
-        string normalizedText = StringExtensions.EndOfLinesRegex.Replace(
-            TextBuffer.GetTextInRange(oldFullModelRange), newEOL);
-        TextBuffer.ApplyEdits([new TextReplacement(oldFullModelRange, normalizedText)]);
-        _eol = newEOL;
-        _isEOLNormalized = true;
-        IncreaseVersionId();
-        // TODO: OnEOLChanged
-
-        OnContentChanged(
-            new ModelRawContentChangedEventArgs(
-                [new ModelRawEOLChanged()],
-                VersionId,
-                false,
-                false
-            ),
-            new ModelContentChangedEventArgs(
-                Changes: [
-                    new ModelContentChange
-                    {
-                        Range = new TextRange(0, 0, endLineIndex, endColumnIndex),
-                        RangeOffset = 0,
-                        RangeLength = oldModelValueLength,
-                        Text = GetValue()
-                    }
-                ],
-                _eol,
-                VersionId: VersionId,
-                IsUndoing: false,
-                IsRedoing: false,
-                IsFlush: false,
-                IsEolChange: true,
-                DetailedReasons: [EditSources.CreateEOLChange()],
-                DetailedReasonsChangeLengths: [1]
-            )
-        );
+        EnsureNotMutating();
+        var before = CurrentRecord;
+        if (before.EndOfLine == endOfLine || before.EndOfLine == DocumentEndOfLine.Unknown)
+            return;
+        _isMutating = true;
+        try
+            {
+            _buffer.NormalizeEOL(eol.AsString());
+            var snapshot = _buffer.CreateSnapshot();
+            _history.CommitEolNormalization(
+                [new(0, before.Snapshot.Length, 0, snapshot.Length)], snapshot, endOfLine);
+            var after = CurrentRecord;
+            PublishContentChangeEvent([new(before, after, after.ChangeSpans)]);
+    }
+        finally
+    {
+            _isMutating = false;
+    }
     }
 
-    public TextRange GetFullModelRange()
+    /// <summary>
+    /// Replaces the entire document with the supplied content.
+    /// </summary>
+    /// <remarks>
+    /// Always commits a new record, even if the content is the same before and after the replacement.
+    /// Callers should skip identical content replacement when appropriate.
+    /// </remarks>
+    public void ReplaceContent(IReadOnlyTextBuffer content)
+        {
+        EnsureNotMutating();
+        var before = CurrentRecord;
+        _isMutating = true;
+        try
     {
-        int lineCount = TextBuffer.LineCount;
-        int endColumnIndex = TextBuffer.GetLineLength(lineCount - 1);
-        return new(0, 0, lineCount - 1, endColumnIndex);
+            RestoreContent(content);
+            var after = _buffer.CreateSnapshot();
+            _history.CommitReplacement(after, ClassifyEOL(after));
+            UpdateCharacterFlags(after.GetTextInRange(after.GetRangeAt(0, after.Length)));
+            PublishContentChangeEvent([new(before, CurrentRecord, CurrentRecord.ChangeSpans)]);
+    }
+        finally
+                    {
+            _isMutating = false;
+    }
     }
 
     /// <summary>
@@ -853,6 +578,7 @@ public class PlainTextModel
         TextRange searchRange, SearchData searchData, bool captureMatches, int limitResultCount)
         => _buffer.FindMatchesLineByLine(searchRange, searchData, captureMatches, limitResultCount);
 
+    #region Internal Helpers
 
     /// <summary>
     /// Normalizes the EOL form of a replacement string to the model's preferred
@@ -890,19 +616,6 @@ public class PlainTextModel
         return result;
     }
 
-    private static bool IsEOLNormalized(string text, string eol)
-    {
-        for (int i = 0; i < text.Length; i++)
-        {
-            if (text[i] == '\r')
-            {
-                if (eol != "\r\n" || i + 1 >= text.Length || text[i + 1] != '\n')
-                    return false;
-                i++;
-            }
-
-    #region Helpers
-
     private void UpdateCharacterFlags(string text)
             {
         MightContainNonBasicASCII |= !text.IsBasicASCII();
@@ -915,39 +628,24 @@ public class PlainTextModel
             throw new InvalidOperationException("Reentrant model mutations are not supported.");
     }
 
+    private bool TryRestoreSnapshot(ITextSnapshot snapshot) =>
+        _buffer is ISnapshotRestorableTextBuffer restorable && restorable.TryRestoreSnapshot(snapshot);
+    private static bool InsideCrLf(IReadOnlyTextBuffer snapshot, int offset) =>
+        offset > 0 && offset < snapshot.Length
+        && snapshot.GetChar(offset - 1) == '\r' && snapshot.GetChar(offset) == '\n';
+
     #endregion
 
     /// <summary>
-    /// Allows specialized models to keep model-specific decorations in sync
-    /// with text edits. Plain text models do not maintain decorations.
+    /// Called before invoking the public <see cref="ContentChanged"/> event.
     /// </summary>
-    protected virtual void AcceptDecorationReplace(
-        int offset,
-        int length,
-        int textLength,
-        bool forceMoveMarkers)
-    {
-    }
+    protected virtual void OnContentChanged(TextModelContentChangedEventArgs change) { }
 
-    private void OnContentChanged(
-        ModelRawContentChangedEventArgs rawChange,
-        ModelContentChangedEventArgs change)
+    private void PublishContentChangeEvent(ImmutableArray<TextRecordTransition> transitions,
+        TextModelEditSource? reason = null)
     {
-        ContentChanged?.Invoke(new(rawChange, change));
-    }
-
+        var change = new TextModelContentChangedEventArgs(_history.CurrentVersion, transitions, reason);
+        OnContentChanged(change);
+        ContentChanged?.Invoke(this, change);
 }
-
-public record struct TextModelOptions(
-    int TabSize,
-    int IndentSize,
-    bool InsertSpaces,
-    DefaultEndOfLine DefaultEOL,
-    bool TrimAutoWhitespace
-);
-
-public enum EndOfLineSequence
-{
-    LF = 0,
-    CRLF = 1,
 }
