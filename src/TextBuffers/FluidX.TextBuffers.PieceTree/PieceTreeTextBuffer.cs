@@ -127,7 +127,7 @@ public class PieceTreeTextBuffer : ITextBuffer
     /// <param name="defaultEOL">Fallback end-of-line used when the text contains no line breaks.</param>
     public static PieceTreeTextBuffer Create(
         ReadOnlySpan<char> text,
-        DefaultEndOfLine defaultEOL = DefaultEndOfLine.LF)
+        EndOfLine defaultEOL = EndOfLine.LF)
     {
         char[] content = text.ToArray();
 
@@ -144,7 +144,7 @@ public class PieceTreeTextBuffer : ITextBuffer
     /// <param name="cancellationToken">Cancellation token for the read.</param>
     public static async Task<PieceTreeTextBuffer> CreateAsync(
         Stream stream,
-        DefaultEndOfLine defaultEOL = DefaultEndOfLine.LF,
+        EndOfLine defaultEOL = EndOfLine.LF,
         CancellationToken cancellationToken = default)
     {
         using var reader = new StreamReader(
@@ -178,7 +178,7 @@ public class PieceTreeTextBuffer : ITextBuffer
     /// <summary>
     private static PieceTreeTextBuffer CreateCore(
         char[] content,
-        DefaultEndOfLine defaultEOL)
+        EndOfLine defaultEOL)
     {
         // Step 3: Count CR/LF/CRLF EOLs
         var lineStarts = LineStarts.Create(content);
@@ -196,12 +196,12 @@ public class PieceTreeTextBuffer : ITextBuffer
             lineStarts);
     }
 
-    private static string DetermineEOL(DefaultEndOfLine defaultEOL, int cr, int lf, int crlf)
+    private static string DetermineEOL(EndOfLine defaultEOL, int cr, int lf, int crlf)
     {
         int totalEOLCount = cr + lf + crlf;
         int totalCRCount = cr + crlf;
         if (totalEOLCount == 0)
-            return defaultEOL == DefaultEndOfLine.LF ? "\n" : "\r\n";
+            return defaultEOL.AsString();
         if (totalCRCount > totalEOLCount / 2)
             return "\r\n";
         return "\n";

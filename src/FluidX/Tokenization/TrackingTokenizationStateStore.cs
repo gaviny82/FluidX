@@ -1,4 +1,3 @@
-using FluidX.TextModels;
 using System.Runtime.InteropServices;
 
 namespace FluidX.Tokenization;
@@ -64,18 +63,6 @@ public class TrackingTokenizationStateStore
         }
     }
 
-    private void AcceptChangesInternal(ReadOnlySpan<ModelContentChange> changes)
-    {
-        foreach (var c in changes)
-        {
-            int eolCount = FluidX.TextBuffers.EOLCounter.CountEOL(c.Text).eolCount;
-            AcceptChangeInternal(
-                new(c.Range.StartLineIndex, c.Range.EndLineIndex + 1),
-                eolCount + 1
-            );
-        }
-    }
-
     #endregion
 
     /// <summary>
@@ -101,15 +88,6 @@ public class TrackingTokenizationStateStore
         _lineCount += newLineCount - lineRange.Length;
         AcceptChangeInternal(lineRange, newLineCount);
         _invalidEndStatesLineIndices.AddRangeAndResize(lineRange, newLineCount);
-    }
-
-    public void AcceptChanges(ReadOnlySpan<ModelContentChange> changes)
-    {
-        foreach (var c in changes)
-        {
-            int eolCount = FluidX.TextBuffers.EOLCounter.CountEOL(c.Text).eolCount;
-            AcceptChange(new(c.Range.StartLineIndex, c.Range.EndLineIndex + 1), eolCount + 1);
-        }
     }
 
     public void InvalidateEndStateRange(Range lineRange)

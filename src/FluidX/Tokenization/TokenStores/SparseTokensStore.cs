@@ -25,7 +25,7 @@ public class SparseTokensStore
         IsComplete = false;
     }
 
-    public void Set(List<SparseMultilineTokens>? pieces, bool isComplete, TextModel? textModel)
+    public void Set(List<SparseMultilineTokens>? pieces, bool isComplete, CodeTextModel? textModel)
     {
         // TODO: Use ITextModel
         _pieces = pieces ?? [];

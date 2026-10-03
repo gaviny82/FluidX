@@ -6,10 +6,11 @@ namespace FluidX.Tokenization;
 
 public sealed class TokenizationTextModelPart : IDisposable
 {
-    private readonly TextModel _textModel;
+    private readonly CodeTextModel _textModel;
     private readonly ModelLanguageIdMapper _languageIdMapper;
     private readonly SparseTokensStore _semanticTokens;
     private SyntaxTokenBackendBase _tokens;
+    private bool _isDisposed;
 
     public GlobalLanguageId LanguageId { get; private set; }
 
@@ -22,7 +23,7 @@ public sealed class TokenizationTextModelPart : IDisposable
     public event EventHandler? BackgroundTokenizationStateChanged;
 
     public TokenizationTextModelPart(
-        TextModel textModel,
+        CodeTextModel textModel,
         GlobalLanguageId languageId)
     {
         _textModel = textModel;
@@ -34,7 +35,6 @@ public sealed class TokenizationTextModelPart : IDisposable
         _tokens.BackgroundTokenizationStateChanged += OnBackgroundTokenizationStateChanged;
 
         _semanticTokens = new SparseTokensStore();
-        _textModel.ContentChanged += OnTextModelContentChanged;
 
         _tokens.ResetTokenization(fireTokenChangeEvent: false);
     }
@@ -47,11 +47,6 @@ public sealed class TokenizationTextModelPart : IDisposable
     public BackgroundTokenizationState BackgroundTokenizationState
         => _tokens.BackgroundTokenizationState;
 
-    private void OnTextModelContentChanged(TextModelContentChangedEventArgs e)
-    {
-        HandleDidChangeContent(e.ModelContentChangedEventArgs);
-    }
-
     private void OnTokensChanged(object? sender, ModelTokensChangedEventArgs e)
     {
         TokensChanged?.Invoke(this, e);
@@ -62,23 +57,16 @@ public sealed class TokenizationTextModelPart : IDisposable
         BackgroundTokenizationStateChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    public void HandleDidChangeContent(ModelContentChangedEventArgs e)
+    public void HandleDidChangeContent(TextModelContentChangedEventArgs e)
     {
-        if (e.IsFlush)
+        if (_isDisposed) return;
+        foreach (var transition in e.Transitions)
         {
-            _semanticTokens.Flush();
-        }
-        else if (!e.IsEolChange)
-        {
-            foreach (var c in e.Changes)
+            foreach (var edit in TokenizationEdits.GetEdits(transition))
             {
-                var (eolCount, firstLineLength, lastLineLength, _) = EOLCounter.CountEOL(c.Text);
-                _semanticTokens.AcceptEdit(
-                    c.Range,
-                    eolCount,
-                    firstLineLength,
-                    lastLineLength,
-                    c.Text.Length > 0 ? c.Text[0] : '\0');
+                var (eolCount, firstLineLength, lastLineLength, _) = EOLCounter.CountEOL(edit.Text);
+                _semanticTokens.AcceptEdit(edit.Range, eolCount, firstLineLength, lastLineLength,
+                    edit.Text.Length > 0 ? edit.Text[0] : '\0');
             }
         }
 
@@ -195,7 +183,8 @@ public sealed class TokenizationTextModelPart : IDisposable
 
     public void Dispose()
     {
-        _textModel.ContentChanged -= OnTextModelContentChanged;
+        if (_isDisposed) return;
+        _isDisposed = true;
         _tokens.TokensChanged -= OnTokensChanged;
         _tokens.BackgroundTokenizationStateChanged -= OnBackgroundTokenizationStateChanged;
         _tokens.Dispose();

@@ -522,9 +522,9 @@ public class SparseMultilineTokenStorage
             eolCount == 0
             && firstLineLength == 1
             && (
-                (firstCharCode >= (char)CharCode.Digit0 && firstCharCode <= (char)CharCode.Digit9)
-                || (firstCharCode >= (char)CharCode.A && firstCharCode <= (char)CharCode.Z)
-                || (firstCharCode >= (char)CharCode.a && firstCharCode <= (char)CharCode.z)
+                (firstCharCode >= '0' && firstCharCode <= '9')
+                || (firstCharCode >= 'A' && firstCharCode <= 'Z')
+                || (firstCharCode >= 'a' && firstCharCode <= 'z')
             ));
         var tokens = _tokens;
         int tokenCount = TokenCount;

@@ -187,7 +187,7 @@ public class ContiguousTokensStore
     }
 
     // TODO: Use ITextModel
-    public LineTokenChangeRange[] SetMultilineTokens(ContiguousMultilineTokens[] tokens, TextModel textModel)
+    public LineTokenChangeRange[] SetMultilineTokens(ContiguousMultilineTokens[] tokens, CodeTextModel textModel)
     {
         if (tokens.Length == 0)
             return [];
