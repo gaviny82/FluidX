@@ -10,23 +10,23 @@ public sealed class ZeroBasedModelTests
     [TestMethod]
     public void ValidationClampsToZeroBasedDocumentAndSurrogateBoundaries()
     {
-        var model = new PlainTextModel("😀\nabc", EndOfLine.LF);
+        var model = new PlainTextModel("😀\nabc");
         Assert.AreEqual(new TextRange(0, 0, 1, 3), model.GetFullModelRange());
         Assert.AreEqual(default(TextPosition), model.ValidatePosition(new(-1, 9)));
         Assert.AreEqual(new TextPosition(1, 3), model.ValidatePosition(new(2, 0)));
         Assert.AreEqual(new TextPosition(1, 0), model.ValidatePosition(new(1, -1)));
         Assert.AreEqual(default(TextPosition), model.ValidatePosition(new(0, 1)));
         Assert.AreEqual(new TextPosition(0, 1), model.ValidatePosition(new(0, 1), true));
-        Assert.AreEqual(default(TextRange), new PlainTextModel("", EndOfLine.LF).GetFullModelRange());
+        Assert.AreEqual(default(TextRange), new PlainTextModel("").GetFullModelRange());
     }
 
     [TestMethod]
     public void TextModelEditsFirstAndLastLinesAndRestoresThem()
     {
-        var model = new TextModel("abc\ndef", EndOfLine.LF, GlobalLanguageId.PlainText);
+        var model = new TextModel("abc\ndef", GlobalLanguageId.PlainText);
         try
         {
-            model.Edit(new TextEdit([new(new TextRange(0, 0, 1, 3), "x\ny\nz")]));
+            model.ApplyEdits([new(new TextRange(0, 0, 1, 3), "x\ny\nz")]);
             Assert.AreEqual("x\ny\nz", model.GetAllText());
             Assert.AreEqual(new TextRange(0, 0, 2, 1), model.GetFullModelRange());
             model.Undo();

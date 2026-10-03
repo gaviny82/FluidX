@@ -90,9 +90,15 @@ internal static class BufferAssertions
             Assert.AreEqual(expected.Lines[line].Eol, actual.GetLineEOL(line), $"Line {line} EOL");
         }
 
+        int expectedLineIndex = 0;
         for (int offset = 0; offset <= expectedText.Length; offset++)
         {
-            TextPosition position = expected.PositionAt(offset);
+            // Offsets increase monotonically, so each reference line is visited only once.
+            // Advancing at the next line's start preserves positions inside CRLF pairs.
+            while (expectedLineIndex + 1 < expected.Lines.Count
+                && offset >= expected.Lines[expectedLineIndex + 1].Start)
+                expectedLineIndex++;
+            TextPosition position = new(expectedLineIndex, offset - expected.Lines[expectedLineIndex].Start);
             Assert.AreEqual(position, actual.GetPositionAt(offset), $"Position at offset {offset}");
             Assert.AreEqual(offset, actual.GetOffsetAt(position), $"Offset at position {position}");
             if (offset < expectedText.Length)

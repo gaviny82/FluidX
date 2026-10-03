@@ -23,7 +23,7 @@ public abstract class SyntaxTokenBackendBase : IDisposable
 
     public abstract void HandleDidChangeAttached();
 
-    public abstract void HandleDidChangeContent(ModelContentChangedEventArgs e);
+    public abstract void HandleDidChangeContent(TextModelContentChangedEventArgs e);
 
     public abstract void ForceTokenization(int lineIndex);
 
