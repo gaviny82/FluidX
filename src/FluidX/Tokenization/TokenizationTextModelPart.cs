@@ -10,6 +10,7 @@ public sealed class TokenizationTextModelPart : IDisposable
     private readonly ModelLanguageIdMapper _languageIdMapper;
     private readonly SparseTokensStore _semanticTokens;
     private SyntaxTokenBackendBase _tokens;
+    private bool _isDisposed;
 
     public GlobalLanguageId LanguageId { get; private set; }
 
@@ -56,23 +57,16 @@ public sealed class TokenizationTextModelPart : IDisposable
         BackgroundTokenizationStateChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    public void HandleDidChangeContent(ModelContentChangedEventArgs e)
+    public void HandleDidChangeContent(TextModelContentChangedEventArgs e)
     {
-        if (e.IsFlush)
+        if (_isDisposed) return;
+        foreach (var transition in e.Transitions)
         {
-            _semanticTokens.Flush();
-        }
-        else if (!e.IsEolChange)
-        {
-            foreach (var c in e.Changes)
+            foreach (var edit in TokenizationEdits.GetEdits(transition))
             {
-                var (eolCount, firstLineLength, lastLineLength, _) = EOLCounter.CountEOL(c.Text);
-                _semanticTokens.AcceptEdit(
-                    c.Range,
-                    eolCount,
-                    firstLineLength,
-                    lastLineLength,
-                    c.Text.Length > 0 ? c.Text[0] : '\0');
+                var (eolCount, firstLineLength, lastLineLength, _) = EOLCounter.CountEOL(edit.Text);
+                _semanticTokens.AcceptEdit(edit.Range, eolCount, firstLineLength, lastLineLength,
+                    edit.Text.Length > 0 ? edit.Text[0] : '\0');
             }
         }
 
@@ -189,7 +183,8 @@ public sealed class TokenizationTextModelPart : IDisposable
 
     public void Dispose()
     {
-        _textModel.ContentChanged -= OnTextModelContentChanged;
+        if (_isDisposed) return;
+        _isDisposed = true;
         _tokens.TokensChanged -= OnTokensChanged;
         _tokens.BackgroundTokenizationStateChanged -= OnBackgroundTokenizationStateChanged;
         _tokens.Dispose();

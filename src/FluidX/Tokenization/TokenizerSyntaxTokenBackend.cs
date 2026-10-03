@@ -109,28 +109,25 @@ public class TokenizerSyntaxTokenBackend : SyntaxTokenBackendBase
         // TODO:
     }
 
-    public override void HandleDidChangeContent(ModelContentChangedEventArgs e)
+    public override void HandleDidChangeContent(TextModelContentChangedEventArgs e)
     {
-        if (e.IsFlush)
+        _backgroundTokenizer?.BeginTextBufferEdit();
+        try
         {
-            ResetTokenization(); // Don't fire the event, as the view might not have got the text c event yet
-        }
-        else if (!e.IsEolChange) // We don't have to do anything on an EOL change
-        {
-            _backgroundTokenizer?.BeginTextBufferEdit();
-            try
+            foreach (var transition in e.Transitions)
             {
-                foreach (var c in e.Changes)
+                foreach (var edit in TokenizationEdits.GetEdits(transition))
                 {
-                    (int eolCount, int firstLineLength, _, _) = EOLCounter.CountEOL(c.Text);
-                    _tokens.AcceptEdit(c.Range, eolCount, firstLineLength);
+                    (int eolCount, int firstLineLength, _, _) = EOLCounter.CountEOL(edit.Text);
+                    _tokens.AcceptEdit(edit.Range, eolCount, firstLineLength);
+                    _tokenizer?.Store.AcceptChange(
+                        new(edit.Range.StartLineIndex, edit.Range.EndLineIndex + 1), eolCount + 1);
                 }
-                _tokenizer?.Store.AcceptChanges([..e.Changes]);
             }
-            finally
-            {
-                _backgroundTokenizer?.EndTextBufferEdit();
-            }
+        }
+        finally
+        {
+            _backgroundTokenizer?.EndTextBufferEdit();
         }
     }
 
