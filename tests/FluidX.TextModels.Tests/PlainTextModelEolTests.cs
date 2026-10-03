@@ -10,7 +10,7 @@ public class PlainTextModelEolTests
     [TestMethod]
     public void MixedPersistsUntilNormalizationOrSingleLineAndHistoryRestoresState()
     {
-        var model = new PlainTextModel("a\nb");
+        var model = new TextModel("a\nb");
         var normalized = model.CurrentRecord;
         model.ApplyEdits([new(new TextRange(1, 1, 1, 1), "\r")]);
         Assert.AreEqual(DocumentEndOfLine.Mixed, model.EOL);
@@ -45,7 +45,7 @@ public class PlainTextModelEolTests
     public void InsertedEndingsUseFinalBoundaryContext(string source, int offset, string text,
         DocumentEndOfLine expected)
     {
-        var model = new PlainTextModel(source);
+        var model = new TextModel(source);
         Assert.IsTrue(model.ApplyEdits([new(model.TextBuffer.GetRangeAt(offset, 0), text)]).Succeeded);
         Assert.AreEqual(expected, model.EOL);
     }
@@ -53,7 +53,7 @@ public class PlainTextModelEolTests
     [TestMethod]
     public void AdjacentEditsClassifyTheirCombinedFinalEndings()
     {
-        var model = new PlainTextModel("abc");
+        var model = new TextModel("abc");
         model.ApplyEdits([
             new(new TextRange(0, 2, 0, 2), "\n"),
             new(new TextRange(0, 1, 0, 1), "\r"),
@@ -69,7 +69,7 @@ public class PlainTextModelEolTests
     [TestMethod]
     public void ReplacingAllEndingsWithAnotherKindIsConservativelyMixed()
     {
-        var model = new PlainTextModel("a\nb");
+        var model = new TextModel("a\nb");
         model.ApplyEdits([new(new TextRange(0, 1, 1, 0), "\r\n")]);
         Assert.AreEqual("a\r\nb", model.GetAllText());
         Assert.AreEqual(DocumentEndOfLine.Mixed, model.EOL);
@@ -84,7 +84,7 @@ public class PlainTextModelEolTests
     public void NormalizationRecordsWholeDocumentAndNavigates(string source, EndOfLine eol,
         string expected, DocumentEndOfLine classification)
     {
-        var model = new TextModel(source, GlobalLanguageId.PlainText);
+        var model = new CodeTextModel(source, GlobalLanguageId.PlainText);
         try
         {
             var before = model.CurrentRecord;
@@ -124,7 +124,7 @@ public class PlainTextModelEolTests
     [DataRow("a\r\nb", EndOfLine.CRLF)]
     public void NoOpPreservesRecordSnapshotVersionAndRedo(string source, EndOfLine eol)
     {
-        var model = new PlainTextModel(source);
+        var model = new TextModel(source);
         model.ApplyEdits([new(new TextRange(0, 0, 0, 0), "x")]);
         model.Undo();
         var before = model.CurrentRecord;
@@ -148,7 +148,7 @@ public class PlainTextModelEolTests
     [DataRow("a\nb")]
     public void UnsupportedAndInvalidRequestsDoNotChangeState(string source)
     {
-        var model = new PlainTextModel(source);
+        var model = new TextModel(source);
         var before = model.CurrentRecord;
         int events = 0;
         model.ContentChanged += (_, _) => events++;

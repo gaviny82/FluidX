@@ -13,7 +13,7 @@ public class PlainTextModelTests
     [TestMethod]
     public void PlainTextModelOwnsDocumentPolicyWhileBufferPreservesRawEOLs()
     {
-        var model = new PlainTextModel("\uFEFFone\r\ntwo\nthree\rfour");
+        var model = new TextModel("\uFEFFone\r\ntwo\nthree\rfour");
 
         Assert.IsTrue(model.HasBOM);
         Assert.AreEqual(DocumentEndOfLine.Mixed, model.EOL);
@@ -46,7 +46,7 @@ public class PlainTextModelTests
     [TestMethod]
     public void PlainTextModelSupportsEditUndoAndRedo()
     {
-        var model = new PlainTextModel("hello");
+        var model = new TextModel("hello");
         model.ApplyEdits([new TextReplacement(new TextRange(0, 5, 0, 5), " world")]);
 
         Assert.AreEqual("hello world", model.GetAllText());
@@ -59,7 +59,7 @@ public class PlainTextModelTests
     [TestMethod]
     public void PlainTextModelRejectsEditEndpointsInsideCrlfBeforeApplyingBatch()
     {
-        var model = new PlainTextModel("a\r\nb");
+        var model = new TextModel("a\r\nb");
         TextReplacement[] operations =
         [
             new(new TextRange(0, 0, 0, 1), "A"),
@@ -82,7 +82,7 @@ public class PlainTextModelTests
 
         foreach (TextRange range in invalidRanges)
         {
-            var model = new PlainTextModel("a\r\nb");
+            var model = new TextModel("a\r\nb");
             Assert.IsFalse(model.ApplyEdits([new TextReplacement(range, "X")]).Succeeded);
             Assert.AreEqual("a\r\nb", model.GetAllText());
         }
@@ -91,7 +91,7 @@ public class PlainTextModelTests
     [TestMethod]
     public void PlainTextModelAllowsReplacingCompleteCrlf()
     {
-        var model = new PlainTextModel("a\r\nb");
+        var model = new TextModel("a\r\nb");
 
         model.ApplyEdits(
             [new TextReplacement(new TextRange(0, 1, 1, 0), "\n")]);
@@ -102,7 +102,7 @@ public class PlainTextModelTests
     [TestMethod]
     public void TextModelInheritsPlainTextModel()
     {
-        PlainTextModel model = CreateModel("text");
+        TextModel model = CreateModel("text");
         Assert.AreEqual("text", model.GetAllText());
     }
 
@@ -189,6 +189,6 @@ public class PlainTextModelTests
         Assert.AreEqual("", model.GetAllText());
     }
 
-    private static TextModel CreateModel(string text)
+    private static CodeTextModel CreateModel(string text)
         => new(text, Tokenization.GlobalLanguageId.PlainText);
 }

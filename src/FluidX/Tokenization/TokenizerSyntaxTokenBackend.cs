@@ -21,7 +21,7 @@ public class TokenizerSyntaxTokenBackend : SyntaxTokenBackendBase
     public override bool HasTokens => _tokens.HasTokens;
 
     public TokenizerSyntaxTokenBackend(
-        TextModel textModel,
+        CodeTextModel textModel,
         GlobalLanguageId languageId,
         ModelLanguageIdMapper languageIdMapper)
         : base(textModel)

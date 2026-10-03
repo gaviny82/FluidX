@@ -8,7 +8,7 @@ public interface ITokenizationSupport
     ITokenizerState GetInitialState();
     TokenizationResult Tokenize(string line, bool hasEOL, ITokenizerState state);
     EncodedTokenizationResult TokenizeEncoded(string line, bool hasEOL, ITokenizerState state);
-    IBackgroundTokenizer CreateBackgroundTokenizer(TextModel textModel, IBackgroundTokenizationStore store); // TODO: Use ITextModel
+    IBackgroundTokenizer CreateBackgroundTokenizer(CodeTextModel textModel, IBackgroundTokenizationStore store); // TODO: Use ITextModel
 }
 
 public interface IBackgroundTokenizer : IDisposable

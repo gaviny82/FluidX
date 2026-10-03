@@ -5,7 +5,7 @@ namespace FluidX.Tokenization;
 
 public abstract class SyntaxTokenBackendBase : IDisposable
 {
-    protected readonly TextModel _textModel;
+    protected readonly CodeTextModel _textModel;
 
     public abstract BackgroundTokenizationState BackgroundTokenizationState { get; }
 
@@ -14,7 +14,7 @@ public abstract class SyntaxTokenBackendBase : IDisposable
     internal EventHandler? BackgroundTokenizationStateChanged;
     internal EventHandler<ModelTokensChangedEventArgs>? TokensChanged;
 
-    public SyntaxTokenBackendBase(TextModel textModel)
+    public SyntaxTokenBackendBase(CodeTextModel textModel)
     {
         _textModel = textModel;
     }

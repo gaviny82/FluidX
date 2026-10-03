@@ -6,7 +6,7 @@ namespace FluidX.Tokenization;
 
 public sealed class TokenizationTextModelPart : IDisposable
 {
-    private readonly TextModel _textModel;
+    private readonly CodeTextModel _textModel;
     private readonly ModelLanguageIdMapper _languageIdMapper;
     private readonly SparseTokensStore _semanticTokens;
     private SyntaxTokenBackendBase _tokens;
@@ -23,7 +23,7 @@ public sealed class TokenizationTextModelPart : IDisposable
     public event EventHandler? BackgroundTokenizationStateChanged;
 
     public TokenizationTextModelPart(
-        TextModel textModel,
+        CodeTextModel textModel,
         GlobalLanguageId languageId)
     {
         _textModel = textModel;

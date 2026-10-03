@@ -14,7 +14,7 @@ public class PlainTextModelHistoryTests
     [TestMethod]
     public void EveryOperationRetainsItsOwnMetadataOnThePublishedVersion()
     {
-        var model = new PlainTextModel("a\nb");
+        var model = new TextModel("a\nb");
         var initial = model.CurrentVersion;
         Assert.IsNull(initial.Metadata);
         var notifications = new List<TextModelContentChangedEventArgs>();
@@ -56,7 +56,7 @@ public class PlainTextModelHistoryTests
     [TestMethod]
     public void NoOpsDoNotStoreMetadataOrPublishVersions()
     {
-        var model = new PlainTextModel("a\nb");
+        var model = new TextModel("a\nb");
         var metadata = new CommandMetadata("no-op");
         var initial = model.CurrentVersion;
         int events = 0;
@@ -83,7 +83,7 @@ public class PlainTextModelHistoryTests
     [TestMethod]
     public void ReadOnlyHistoryQueriesDescribeNavigationAndRetainedSnapshots()
     {
-        var model = new PlainTextModel("abc");
+        var model = new TextModel("abc");
         var initial = model.CurrentRecord;
         model.ApplyEdits([new(new TextRange(0, 0, 0, 1), "XY")]);
         var first = model.CurrentRecord;
@@ -120,7 +120,7 @@ public class PlainTextModelHistoryTests
     [TestMethod]
     public void SpanSlicePreservesInputOrderWithoutIncludingOtherArrayEntries()
     {
-        var model = new PlainTextModel("abcd");
+        var model = new TextModel("abcd");
         TextReplacement[] edits =
         [
             null!,

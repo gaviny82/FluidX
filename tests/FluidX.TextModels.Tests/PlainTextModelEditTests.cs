@@ -17,7 +17,7 @@ public class PlainTextModelEditTests
     [TestMethod]
     public void UnsortedBatchReturnsOldAndNewSpansInInputOrder()
     {
-        var model = new PlainTextModel("abcdef");
+        var model = new TextModel("abcdef");
         var result = model.ApplyEdits([Replace(4, 6, "Z"), Replace(0, 1, "XY"), Replace(2, 3, "")]);
         Assert.AreEqual("XYbdZ", model.GetAllText());
         CollectionAssert.AreEqual(new[] { new TextChangeSpan(4, 2, 4, 1), new TextChangeSpan(0, 1, 0, 2), new TextChangeSpan(2, 1, 3, 0) }, result.ChangeSpans.ToArray());
@@ -30,7 +30,7 @@ public class PlainTextModelEditTests
     [TestMethod]
     public void BoundaryInsertionsPreserveInputOrderAroundTouchingReplacements()
     {
-        var model = new PlainTextModel("abcd");
+        var model = new TextModel("abcd");
         TextReplacement[] edits = [Replace(1, 3, "X"), Replace(3, 3, "E"), Replace(1, 1, "A"), Replace(1, 1, "B"), Replace(3, 4, "Y")];
         var result = model.ApplyEdits(edits);
         Assert.AreEqual("aABXEY", model.GetAllText());
@@ -46,7 +46,7 @@ public class PlainTextModelEditTests
     [TestMethod]
     public void EmptyBatchPreservesRecordVersionAndRedo()
     {
-        var model = new PlainTextModel("ab");
+        var model = new TextModel("ab");
         model.ApplyEdits([Replace(2, 2, "c")]);
         model.Undo();
         var record = model.CurrentRecord;
@@ -83,7 +83,7 @@ public class PlainTextModelEditTests
         ];
         for (int i = 0; i < batches.Length; i++)
         {
-            var model = new PlainTextModel("ab");
+            var model = new TextModel("ab");
             model.ApplyEdits([Replace(2, 2, "c")]);
             model.Undo();
             var before = model.CurrentRecord;
@@ -118,7 +118,7 @@ public class PlainTextModelEditTests
     [TestMethod]
     public void EffectiveBatchPublishesOneTransitionAndKeepsUnchangedResultEntries()
     {
-        var model = new PlainTextModel("abc");
+        var model = new TextModel("abc");
         var before = model.CurrentRecord;
         var metadata = new CommandMetadata("test command");
         var notifications = new List<TextModelContentChangedEventArgs>();
@@ -150,7 +150,7 @@ public class PlainTextModelEditTests
         ];
         foreach (var batch in batches)
         {
-            var model = new PlainTextModel("abcd");
+            var model = new TextModel("abcd");
             model.ApplyEdits([Replace(4, 4, "!")]);
             model.Undo();
             var before = model.CurrentRecord;
@@ -177,7 +177,7 @@ public class PlainTextModelEditTests
     [TestMethod]
     public void ResultsDescribeExactTextAcrossMultilineAndCrlfSeams()
     {
-        var model = new PlainTextModel("ab");
+        var model = new TextModel("ab");
         var result = model.ApplyEdits([Replace(1, 1, "\r"), Replace(1, 1, "\nX\n")]);
         Assert.AreEqual("a\r\nX\nb", model.GetAllText());
         CollectionAssert.AreEqual(new[] { new TextChangeSpan(1, 0, 1, 1), new TextChangeSpan(1, 0, 2, 3) }, result.ChangeSpans.ToArray());
@@ -200,7 +200,7 @@ public class PlainTextModelEditTests
     [TestMethod]
     public void NotificationRejectsReentrancyAndSubscriberFailureDoesNotRollback()
     {
-        var model = new PlainTextModel("a");
+        var model = new TextModel("a");
         EventHandler<TextModelContentChangedEventArgs> subscriber = (_, _) =>
         {
             Assert.AreEqual("ab", model.GetAllText());

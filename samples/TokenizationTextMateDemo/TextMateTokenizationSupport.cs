@@ -68,7 +68,7 @@ internal sealed class TextMateTokenizationSupport : ITokenizationSupport
             new TextMateTokenizerState(result.RuleStack));
     }
 
-    public IBackgroundTokenizer CreateBackgroundTokenizer(TextModel textModel, IBackgroundTokenizationStore store)
+    public IBackgroundTokenizer CreateBackgroundTokenizer(CodeTextModel textModel, IBackgroundTokenizationStore store)
         => new NoOpBackgroundTokenizer();
 
     private sealed class NoOpBackgroundTokenizer : IBackgroundTokenizer

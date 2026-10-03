@@ -9,9 +9,9 @@ namespace FluidX.TextModels.Tests;
 [TestClass]
 public class PlainTextModelBufferTests
 {
-    private static (PlainTextModel Model, RecordingBuffer Proxy) Create(string text, bool? restore = null)
+    private static (TextModel Model, RecordingBuffer Proxy) Create(string text, bool? restore = null)
     {
-        var model = new PlainTextModel(text);
+        var model = new TextModel(text);
         ITextBuffer buffer = restore.HasValue
             ? DispatchProxy.Create<ISnapshotRestorableTextBuffer, RecordingBuffer>()
             : DispatchProxy.Create<ITextBuffer, RecordingBuffer>();
@@ -19,7 +19,7 @@ public class PlainTextModelBufferTests
         proxy.Inner = new PersistentPieceTreeTextBuffer(text);
         proxy.Restore = restore == true;
         // Exercise alternate capabilities without introducing a production injection API.
-        typeof(PlainTextModel).GetField("_buffer", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(model, buffer);
+        typeof(TextModel).GetField("_buffer", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(model, buffer);
         return (model, proxy);
     }
 

@@ -10,7 +10,7 @@ public class TokenizerWithStateStoreAndTextModel
     private readonly ITokenizationSupport _tokenizationSupport;
 
     public TrackingTokenizationStateStore Store { get; }
-    public TextModel TextModel { get; } // TODO: use ITextModel
+    public CodeTextModel TextModel { get; } // TODO: use ITextModel
     public GlobalLanguageId LanguageId => TextModel.LanguageId;
     public ModelLanguageIdMapper LanguageIdMapper { get; }
 
@@ -21,7 +21,7 @@ public class TokenizerWithStateStoreAndTextModel
     public TokenizerWithStateStoreAndTextModel(
         int lineCount,
         ITokenizationSupport tokenizationSupport,
-        TextModel textModel,
+        CodeTextModel textModel,
         ModelLanguageIdMapper languageIdMapper)
     {
         _tokenizationSupport = tokenizationSupport;
@@ -180,7 +180,7 @@ public class TokenizerWithStateStoreAndTextModel
     }
 
     private static (List<string> likelyRelevantLines, ITokenizerState? initialState) FindLikelyRelevantLines(
-        TextModel model,
+        CodeTextModel model,
         int lineIndex,
         TokenizerWithStateStoreAndTextModel? store)
     {
