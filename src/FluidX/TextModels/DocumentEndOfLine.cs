@@ -10,6 +10,6 @@ public enum DocumentEndOfLine
     CR,
     LF,
     CRLF,
-    /// <summary>More than one kind of line ending is present in the document.</summary>
+    /// <summary>The document might contain more than one kind of line ending.</summary>
     Mixed
 }

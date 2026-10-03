@@ -2,7 +2,11 @@ using System.Collections.Immutable;
 
 namespace FluidX.TextModels;
 
-/// <summary>The change of content of the text model due to an action.</summary>
+/// <summary>A committed content operation on the text model.</summary>
+/// <remarks>
+/// A committed operation does not guarantee different character content.
+/// A non-empty edit batch could result in unchanged content before and after applying the edits.
+/// </remarks>
 public sealed class TextModelContentChangedEventArgs : EventArgs
 {
     internal TextModelContentChangedEventArgs(TextVersion version,

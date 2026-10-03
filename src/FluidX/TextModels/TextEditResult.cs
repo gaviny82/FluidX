@@ -3,16 +3,27 @@ using System.Collections.Immutable;
 namespace FluidX.TextModels;
 
 /// <summary>
-/// The outcome of a text model edit batch.
+/// The outcome of a text model batch edit operation.
 /// </summary>
-/// <param name="Transition">The committed transition, or null when the batch leaves content unchanged.</param>
-/// <param name="EditSpans">One span per input replacement, in input order, including unchanged
-/// replacements and batches that leave content unchanged.</param>
-/// <remarks>
-/// <paramref name="EditSpans"/> coordinates are exact UTF-16 offsets and may end
-/// inside a newly formed CRLF pair; they are not necessarily valid caret positions
-/// or edit endpoints. These per-input mappings are distinct from committed change spans.
-/// </remarks>
+/// <param name="Source">The text document state before the operation.</param>
+/// <param name="Target">The text document state after the operation.</param>
+/// <param name="ChangeSpans">
+/// On success, one change span per input text replacement in input order.
+/// Old coordinates refer to <paramref name="Source"/> and new coordinates to <paramref name="Target"/>.
+/// Empty for an empty batch or validation failure.<br/><br/>
+/// Coordinates may start or end inside a newly formed CRLF pair; they are not necessarily valid caret positions
+/// or edit endpoints.
+/// </param>
+/// <param name="Error">A validation error message, or null on success. Messages are descriptive
+/// text, not stable error codes.</param>
 public sealed record TextEditResult(
-    TextRecordTransition? Transition,
-    ImmutableArray<TextChangeSpan> EditSpans);
+    TextRecord Source,
+    TextRecord Target,
+    ImmutableArray<TextChangeSpan> ChangeSpans,
+    string? Error)
+{
+    /// <summary>
+    /// Whether the edit batch is applied successfully.
+    /// </summary>
+    public bool Succeeded => Error is null;
+}

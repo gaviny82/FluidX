@@ -41,6 +41,10 @@ public class PlainTextModel
     /// <summary>
     /// Current document end-of-line state.
     /// </summary>
+    /// <remarks>The <see cref="DocumentEndOfLine.Mixed"/> is conservative. It can change to <see cref="DocumentEndOfLine.Unknown"/> if
+    /// the document only has one line after a change.
+    /// The only way to change from <see cref="DocumentEndOfLine.Mixed"/> to a normalized state is by calling <see cref="NormalizeEOL"/>.
+    /// </remarks>
     public DocumentEndOfLine EOL => CurrentRecord.EndOfLine;
 
     #region Forward Read-Only Version History APIs
@@ -135,257 +139,124 @@ public class PlainTextModel
         _history = new TextVersionController(_buffer.CreateSnapshot(), ClassifyEOL(_buffer));
     }
 
-    public void Edit(TextEdit edit)
-    {
-        PushEditOperations(
-            edit.Replacements.Select(replacement => new ModelEditOperation(replacement)).ToArray(),
-            null,
-            null
-        );
-    }
-
-    public Selection[]? PushEditOperations(
-        ModelEditOperation[] editOperations,
-        Selection[]? beforeCursorState,
-        Func<ReverseSingleEditOperation[]?, Selection[]?>? cursorStateComputer
-        )
-    {
-        // Ported from microsoft/vscode/src/vs/editor/common/model/editStack.ts
-
-        // Get or create an edit stack element
-        SingleModelEditStackElement editStackElement;
-        if (_undoRedoStack.GetLastElement() is SingleModelEditStackElement lastElement)
-        {
-            editStackElement = lastElement;
-        }
-        else
-        {
-            editStackElement = new SingleModelEditStackElement(this, beforeCursorState);
-            _undoRedoStack.PushElement(editStackElement);
-        }
-
-        editOperations = AppendAutoWhitespaceTrimEdits(editOperations, beforeCursorState);
-
-        // Apply the edits to the text buffer
-        var inverseEditOperations = ApplyEdits(editOperations, true)!;
-
-        // Compute the resulting cursor state
-        var afterCursorState = cursorStateComputer?.Invoke(inverseEditOperations);
-
-        // Coalesce changes by appending to the edit stack element
-        var textChanges = inverseEditOperations
-            .Select(e => e.TextChange)
-            .Index()
-            .ToArray();
-        textChanges.Sort((a, b) =>
-        {
-            if (a.Item.OldPosition == b.Item.OldPosition)
-                return a.Index - b.Index;
-            return a.Item.OldPosition - b.Item.OldPosition;
-        });
-        editStackElement.Append(
-            textChanges.Select(i => i.Item).ToArray(),
-            EOL,
-            AlternativeVersionId,
-            afterCursorState);
-
-        return afterCursorState;
-    }
-
-
     /// <summary>
-    /// Applies model edit operations without adding them to the undostack.
+    /// Applies a batch of explicit text replacements and returns each input's old and new span.
+    /// Validation failure leaves content, history, and notifications untouched. An empty batch
+    /// succeeds without committing, clearing redo path, or publishing an event. A non-empty
+    /// successful edit commits a new version and record, and publishes <see cref="ContentChanged"/>,
+    /// even when the content is unchanged before and after the edit.
     /// </summary>
-    /// <param name="editOperations">The text replacements and their model-level behavior.</param>
-    /// <param name="computeUndoEdits"></param>
-    /// <returns>Not null when <paramref name="computeUndoEdits"/> is true</returns>
-    /// <exception cref="ArgumentException">
-    /// Thrown when a range is outside the document or an endpoint lies inside a CRLF sequence.
-    /// </exception>
-    public ReverseSingleEditOperation[]? ApplyEdits(
-        ModelEditOperation[] editOperations,
-        bool computeUndoEdits,
-        TextModelEditSource? reason = null,
-        bool isUndoing = false,
-        bool isRedoing = false)
+    /// <remarks>
+    /// 1. Ranges of each <see cref="TextReplacement"/> refer to the same pre-edit snapshot.<br/>
+    /// 2. Overlapping replacements and insertions inside a replaced range are rejected.<br/>
+    /// 3. Invalid endpoints, overlapping edits, return a failed result before mutation.
+    /// 4. Edit precedance:<br/>
+    ///    4a. Insertions at a replacement start precede its replacement text.<br/>
+    ///    4b. Insertions at a replacement end follow the replacement text.<br/>
+    ///    4c. Same-position insertions appear in input order.<br/>
+    /// 5. Replacement text is applied verbatim.<br/>
+    /// 6. Input range endpoints must not lie between CR and LF in an existing CRLF pair.<br/>
+    /// 7. Replacement text may begin with LF or end with CR, forming a new CRLF pair with
+    ///    surrounding text or another replacement. Deleting text between CR and LF can also
+    ///    form a pair.<br/>
+    /// 8. Returned edit spans and committed change spans describe exact UTF-16 extents, whose
+    ///    new starts or ends may lie inside a newly formed CRLF pair.<br/>
+    /// </remarks>
+    public TextEditResult ApplyEdits(ReadOnlySpan<TextReplacement> edits, TextModelOperationMetadata? metadata = null)
     {
-        reason ??= EditSources.CreateApplyEdits();
-        foreach (var edit in editOperations)
+        EnsureNotMutating();
+        _isMutating = true;
+        try
         {
-            foreach (var position in new[] { edit.Range.StartPosition, edit.Range.EndPosition })
-            {
-                if (position.LineIndex < 0 || position.LineIndex >= TextBuffer.LineCount
-                    || position.ColumnIndex < 0 || position.ColumnIndex > TextBuffer.GetLineLength(position.LineIndex))
-                    throw new ArgumentException(
-                        "Edit range is outside line content or has an endpoint inside CRLF.",
-                        nameof(editOperations));
-            }
+            return ApplyEditsCore(edits, metadata);
         }
-        ModelEditOperation[] operations = ReduceOperations(editOperations);
-        var autoWhitespaceEdits = CaptureAutoWhitespaceEdits(operations);
-
-        // Normalize replacement text to the model's EOL before handing it to
-        // the buffer. The buffer applies replacements verbatim, so TextModel
-        // owns the EOL policy and keeps the buffer in normalized (fast) mode.
-        var replacements = operations
-            .Select(operation => new TextReplacement(operation.Range, NormalizeTextEOL(operation.Text)))
-            .ToArray();
-
-        // TODO: Emit events
-        int oldLineCount = TextBuffer.LineCount;
-        bool needReverseEdits = computeUndoEdits || autoWhitespaceEdits.Count > 0;
-        var prepared = replacements.Select((replacement, index) => new InternalModelContentChange
+        finally
         {
-            SortIndex = index,
-            Range = replacement.Range,
-            RangeOffset = TextBuffer.GetOffsetAt(replacement.Range.StartPosition),
-            RangeLength = TextBuffer.GetTextLengthInRange(replacement.Range),
-            Text = replacement.Text
-        }).ToArray();
+            _isMutating = false;
+        }
+    }
+
+    private TextEditResult ApplyEditsCore(ReadOnlySpan<TextReplacement> edits, TextModelOperationMetadata? metadata)
+    {
+        TextRecord before = CurrentRecord;
+        // An empty input batch is a no-op
+        if (edits.IsEmpty)
+            return new(before, before, [], null);
+
+        // This checks if line and column indices are within the document. GetLineLength excludes the EOL and also covers checks if the position is inside CRLF.
+        static bool IsValidEndpoint(ITextSnapshot snapshot, TextPosition position) =>
+            position.LineIndex >= 0 && position.LineIndex < snapshot.LineCount
+            && position.ColumnIndex >= 0 && position.ColumnIndex <= snapshot.GetLineLength(position.LineIndex);
+
+        // Capture inputs and validate the complete batch before touching the buffer.
+        var prepared = new PreparedEdit[edits.Length];
+        for (int i = 0; i < edits.Length; i++)
+        {
+            var edit = edits[i];
+            if (!IsValidEndpoint(before.Snapshot, edit.Range.StartPosition)
+                || !IsValidEndpoint(before.Snapshot, edit.Range.EndPosition))
+                return new(before, before, [], "Edit range is outside line content or has an endpoint inside CRLF.");
+            prepared[i] = new(i, edit.Range, edit.Text,
+                before.Snapshot.GetOffsetAt(edit.Range.StartPosition), before.Snapshot.GetTextLengthInRange(edit.Range));
+        }
         Array.Sort(prepared, (a, b) =>
         {
-            int order = TextRange.CompareRangesUsingEnds(a.Range, b.Range);
-            return order != 0 ? order : a.SortIndex.CompareTo(b.SortIndex);
+            int order = a.RangeOffset.CompareTo(b.RangeOffset);
+            if (order == 0) order = a.RangeLength.CompareTo(b.RangeLength);
+            return order != 0 ? order : a.InputIndex.CompareTo(b.InputIndex);
         });
-        bool hasTouchingRanges = false;
         for (int i = 1; i < prepared.Length; i++)
+            if (prepared[i].RangeOffset < prepared[i - 1].RangeOffset + prepared[i - 1].RangeLength)
+                return new(before, before, [], "Overlapping edits are not allowed.");
+
+        // Apply validated prepared edits and record change spans
+        var spans = ImmutableArray.CreateBuilder<TextChangeSpan>(prepared.Length);
+        var inputSpans = ImmutableArray.CreateBuilder<TextChangeSpan>(prepared.Length);
+        inputSpans.Count = prepared.Length; // sets count for indexed writes
+        int delta = 0;
+        for (int i = 0; i < prepared.Length; i++)
         {
-            int previousEnd = prepared[i - 1].RangeOffset + prepared[i - 1].RangeLength;
-            if (prepared[i].RangeOffset < previousEnd)
-                throw new ArgumentException("Overlapping ranges are not allowed.", nameof(editOperations));
-            hasTouchingRanges |= prepared[i].RangeOffset == previousEnd;
+            var edit = prepared[i];
+            var span = new TextChangeSpan(edit.RangeOffset, edit.RangeLength, edit.RangeOffset + delta, edit.Text.Length);
+            spans.Add(span);
+            inputSpans[edit.InputIndex] = span;
+            delta += edit.Text.Length - edit.RangeLength;
         }
-        TextChange[]? textChanges = needReverseEdits ? new TextChange[prepared.Length] : null;
-        if (textChanges is not null)
-        {
-            int delta = 0;
-            for (int i = 0; i < prepared.Length; i++)
-            {
-                var edit = prepared[i];
-                textChanges[i] = new TextChange(edit.RangeOffset, TextBuffer.GetTextInRange(edit.Range),
-                    edit.RangeOffset + delta, edit.Text);
-                delta += edit.Text.Length - edit.RangeLength;
-            }
-        }
-        TextBuffer.ApplyEdits(prepared.Select(edit => new TextReplacement(edit.Range, edit.Text)).ToArray());
-        ReverseSingleEditOperation[]? reverseEdits = null;
-        if (textChanges is not null)
-        {
-            reverseEdits = textChanges.Select((change, index) => new ReverseSingleEditOperation
-            {
-                SortIndex = prepared[index].SortIndex,
-                Range = TextBuffer.GetRangeAt(change.NewPosition, change.NewLength),
-                Text = change.OldText,
-                TextChange = change
-            }).ToArray();
-            if (!hasTouchingRanges)
-                Array.Sort(reverseEdits, (a, b) => a.SortIndex.CompareTo(b.SortIndex));
-        }
-        foreach (TextReplacement replacement in replacements)
-        {
-            if (!MightContainNonBasicASCII && !replacement.Text.IsBasicASCII())
-                MightContainNonBasicASCII = true;
-            if (!MightContainRTL && !replacement.Text.IsBasicASCII() && replacement.Text.ContainsRTL())
-                MightContainRTL = true;
-        }
-        int newLineCount = TextBuffer.LineCount;
+        _buffer.ApplyEdits(prepared.Select(edit => new TextReplacement(edit.Range, edit.Text)).ToArray());
 
-        var contentChanges = prepared.Reverse().Where(edit => !edit.Range.IsEmpty || edit.Text.Length != 0).ToList();
-        _trimAutoWhitespaceLineIndices = ComputeAutoWhitespaceLineIndices(operations, autoWhitespaceEdits, reverseEdits);
+        // Update edit history
+        var snapshot = _buffer.CreateSnapshot();
+        var historySpans = spans.MoveToImmutable();
+        var editSpans = inputSpans.MoveToImmutable();
+        _history.CommitEdit(historySpans, snapshot, ClassifyEOLAfterEdit(before, snapshot, prepared, historySpans), metadata);
 
-        if (contentChanges.Count != 0)
-        {
-            // TODO: Use events or otherwise to decouple this from PlainTextModel.
-            // TODO: Update decorations, injected text and compute event args
+        // Update document flags
+        foreach (var edit in prepared)
+            UpdateCharacterFlags(edit.Text);
 
-            // We do a first pass to update decorations
-            // because we want to read decorations in the second pass
-            // where we will emit content change events
-            // and we want to read the final decorations
-            for (int i = 0, len = contentChanges.Count; i < len; i++)
-            {
-                var change = contentChanges[i];
-                var operation = operations[change.SortIndex];
-                AcceptDecorationReplace(
-                    change.RangeOffset,
-                    change.RangeLength,
-                    change.Text.Length,
-                    operation.ForceMoveMarkers);
-            }
+        // Publish event and return result
+        var transition = new TextRecordTransition(before, CurrentRecord, CurrentRecord.ChangeSpans);
+        var result = new TextEditResult(before, CurrentRecord, editSpans, null);
+        PublishContentChangeEvent([transition]);
+        return result;
+    }
 
-            IncreaseVersionId();
-
-            List<ModelRawChange> rawContentChanges = [];
-            int lineCount = oldLineCount;
-            for (int i = 0; i < contentChanges.Count; i++)
-            {
-                var change = contentChanges[i];
-                int eolCount = EOLCounter.CountEOL(change.Text).eolCount;
-                //this._onDidChangeDecorations.fire();
-
-                int startLineIndex = change.Range.StartLineIndex;
-                int endLineIndex = change.Range.EndLineIndex;
-
-                int deletingLinesCnt = endLineIndex - startLineIndex;
-                int insertingLinesCnt = eolCount;
-                int editingLinesCnt = Math.Min(deletingLinesCnt, insertingLinesCnt);
-
-                int changeLineCountDelta = (insertingLinesCnt - deletingLinesCnt);
-
-                int currentEditStartLineIndex = newLineCount - lineCount - changeLineCountDelta + startLineIndex;
-                int firstEditLineIndex = currentEditStartLineIndex;
-                int lastInsertedLineIndex = currentEditStartLineIndex + insertingLinesCnt;
-
-                //var decorationsWithInjectedTextInEditedRange = this._decorationsTree.getInjectedTextInInterval(
-                //    this,
-                //    TextBuffer.GetOffsetAt(new TextPosition(firstEditLineIndex, 0)),
-                //    TextBuffer.GetOffsetAt(new TextPosition(lastInsertedLineIndex, TextBuffer.GetLineMaxColumnIndex(lastInsertedLineIndex))),
-                //    0
-                //);
-
-                //var injectedTextInEditedRange = LineInjectedText.fromDecorations(decorationsWithInjectedTextInEditedRange);
-                //var injectedTextInEditedRangeQueue = new ArrayQueue(injectedTextInEditedRange);
-
-                for (int j = editingLinesCnt; j >= 0; j--)
-                {
-                    int editLineIndex = startLineIndex + j;
-                    int currentEditLineIndex = currentEditStartLineIndex + j;
-
-                    //injectedTextInEditedRangeQueue.takeFromEndWhile(r => r.lineIndex > currentEditLineIndex);
-                    //var decorationsInCurrentLine = injectedTextInEditedRangeQueue.takeFromEndWhile(r => r.lineIndex === currentEditLineIndex);
-
-                    rawContentChanges.Add(
-                        new ModelRawLineChanged(
-                            editLineIndex,
-                            TextBuffer.GetLineContent(currentEditLineIndex)
-                        //decorationsInCurrentLine // Not implemented yet
-                        ));
-                }
-
-                if (editingLinesCnt < deletingLinesCnt)
-                {
-                    // Must delete some lines
-                    int spliceStartLineIndex = startLineIndex + editingLinesCnt;
-                    rawContentChanges.Add(new ModelRawLinesDeleted(spliceStartLineIndex + 1, endLineIndex));
-                }
-
-                if (editingLinesCnt < insertingLinesCnt)
-                {
-                    //var injectedTextInEditedRangeQueue = new ArrayQueue(injectedTextInEditedRange);
+    private readonly record struct PreparedEdit(
+        int InputIndex, TextRange Range, string Text, int RangeOffset, int RangeLength);
 
     public void Undo(TextModelOperationMetadata? metadata = null)
-                    {
+    {
         EnsureNotMutating();
         if (CanUndo)
-            Navigate(TextVersionKind.Undo, _history.GetHistoryRecord(0));
-                    }
+            Navigate(TextVersionKind.Undo, _history.GetHistoryRecord(0), metadata);
+    }
 
     public void Redo(TextModelOperationMetadata? metadata = null)
     {
         EnsureNotMutating();
         if (CanRedo)
             Navigate(TextVersionKind.Redo, _history.GetFutureRecord(0), metadata);
-                }
+    }
 
     /// <summary>Jumps to a record retained in this model's edit history.</summary>
     /// <remarks>
@@ -394,10 +265,10 @@ public class PlainTextModel
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">The record ID does not exist in the retained history.</exception>
     public void JumpToRecord(long recordId, TextModelOperationMetadata? metadata = null)
-                    {
+    {
         EnsureNotMutating();
         Navigate(TextVersionKind.Jump, _history.GetRecord(recordId), metadata);
-        }
+    }
 
     // Preconditions:
     // The record must exist in the retrained edit history.
@@ -420,12 +291,12 @@ public class PlainTextModel
             {
                 foreach (var transition in transitions)
                     _buffer.ApplyEdits(GetTransitionEdits(transition));
-        }
+            }
             _history.CommitNavigation(kind, target.RecordId, metadata);
             PublishContentChangeEvent(transitions);
-            }
+        }
         finally
-            {
+        {
             _isMutating = false;
         }
     }
@@ -437,7 +308,7 @@ public class PlainTextModel
             return;
         string text = content.GetTextInRange(content.GetRangeAt(0, content.Length));
         _buffer.ApplyEdits([new(_buffer.GetRangeAt(0, _buffer.Length), text)]);
-            }
+    }
 
     /// <summary>Normalize line endings of the whole document as one undoable edit.</summary>
     /// <remarks>
@@ -468,18 +339,18 @@ public class PlainTextModel
             return;
         _isMutating = true;
         try
-            {
+        {
             _buffer.NormalizeEOL(eol.AsString());
             var snapshot = _buffer.CreateSnapshot();
             _history.CommitEolNormalization(
                 [new(0, before.Snapshot.Length, 0, snapshot.Length)], snapshot, endOfLine, metadata);
             var after = CurrentRecord;
             PublishContentChangeEvent([new(before, after, after.ChangeSpans)]);
-    }
+        }
         finally
-    {
+        {
             _isMutating = false;
-    }
+        }
     }
 
     /// <summary>
@@ -490,22 +361,22 @@ public class PlainTextModel
     /// Callers should skip identical content replacement when appropriate.
     /// </remarks>
     public void ReplaceContent(IReadOnlyTextBuffer content, TextModelOperationMetadata? metadata = null)
-        {
+    {
         EnsureNotMutating();
         var before = CurrentRecord;
         _isMutating = true;
         try
-    {
+        {
             RestoreContent(content);
             var after = _buffer.CreateSnapshot();
             _history.CommitReplacement(after, ClassifyEOL(after), metadata);
             UpdateCharacterFlags(after.GetTextInRange(after.GetRangeAt(0, after.Length)));
             PublishContentChangeEvent([new(before, CurrentRecord, CurrentRecord.ChangeSpans)]);
-    }
+        }
         finally
-                    {
+        {
             _isMutating = false;
-    }
+        }
     }
 
     /// <summary>
@@ -565,7 +436,7 @@ public class PlainTextModel
     /// <param name="range">The range of text to retrieve.</param>
     /// <param name="eol">The end-of-line sequence to use for normalization, or <see langword="null"> to preserve the existing line endings.</param>
     public string GetTextInRange(TextRange range, EndOfLine? eol = null)
-        {
+    {
         string text = _buffer.GetTextInRange(range);
         return eol is null ? text : StringExtensions.EndOfLinesRegex.Replace(text, eol.Value.AsString());
     }
@@ -628,23 +499,50 @@ public class PlainTextModel
 
     #region Internal Helpers
 
-    /// <summary>
-    /// Normalizes the EOL form of a replacement string to the model's preferred
-    /// EOL. The text buffers apply replacements verbatim, so this keeps the
-    /// buffer content in a single-EOL form and its fast read paths engaged.
-    /// </summary>
-    private string NormalizeTextEOL(string text)
+    private static DocumentEndOfLine ClassifyEOLAfterEdit(TextRecord before, ITextSnapshot after,
+        PreparedEdit[] edits, ImmutableArray<TextChangeSpan> spans)
     {
-        if (string.IsNullOrEmpty(text))
-            return text;
+        if (after.LineCount == 1) return DocumentEndOfLine.Unknown;
+        if (before.EndOfLine == DocumentEndOfLine.Mixed) return DocumentEndOfLine.Mixed;
 
-        string preferredEOL = _eol;
-        var (_, _, _, actualEOL) = EOLCounter.CountEOL(text);
-        StringEndOfLine expectedEOL = preferredEOL == "\r\n" ? StringEndOfLine.CRLF : StringEndOfLine.LF;
-        if (actualEOL == StringEndOfLine.Unknown || actualEOL == expectedEOL)
-            return text;
+        // Conservatively retain the previous kind. Only inserted text and final edit
+        // boundaries can introduce a different kind.
+        var result = before.EndOfLine;
+        for (int i = 0; i < edits.Length; i++)
+        {
+            string text = edits[i].Text;
+            var span = spans[i];
+            if (text.Length == 0 && InsideCrLf(after, span.NewPosition))
+            {
+                if (result != DocumentEndOfLine.Unknown && result != DocumentEndOfLine.CRLF)
+                    return DocumentEndOfLine.Mixed;
+                result = DocumentEndOfLine.CRLF;
+            }
+            for (int j = 0; j < text.Length; j++)
+            {
+                DocumentEndOfLine kind;
+                if (text[j] == '\r')
+                {
+                    bool followedByLf = j + 1 < text.Length ? text[j + 1] == '\n'
+                        : span.NewEnd < after.Length && after.GetChar(span.NewEnd) == '\n';
+                    kind = followedByLf ? DocumentEndOfLine.CRLF : DocumentEndOfLine.CR;
+                    if (followedByLf && j + 1 < text.Length) j++;
+                }
+                else if (text[j] == '\n')
+                {
+                    bool precededByCr = j == 0 && span.NewPosition > 0
+                        && after.GetChar(span.NewPosition - 1) == '\r';
+                    kind = precededByCr ? DocumentEndOfLine.CRLF : DocumentEndOfLine.LF;
+                }
+                else continue;
 
-    #region Internal Helpers
+                if (result != DocumentEndOfLine.Unknown && result != kind)
+                    return DocumentEndOfLine.Mixed;
+                result = kind;
+            }
+        }
+        return result;
+    }
 
     private static DocumentEndOfLine ClassifyEOL(IReadOnlyTextBuffer buffer)
     {
@@ -665,7 +563,7 @@ public class PlainTextModel
     }
 
     private void UpdateCharacterFlags(string text)
-            {
+    {
         MightContainNonBasicASCII |= !text.IsBasicASCII();
         MightContainRTL |= MightContainNonBasicASCII && text.ContainsRTL();
     }
@@ -678,6 +576,37 @@ public class PlainTextModel
 
     private bool TryRestoreSnapshot(ITextSnapshot snapshot) =>
         _buffer is ISnapshotRestorableTextBuffer restorable && restorable.TryRestoreSnapshot(snapshot);
+
+    private static TextReplacement[] GetTransitionEdits(TextRecordTransition transition)
+    {
+        var source = transition.Source.Snapshot;
+        var target = transition.Target.Snapshot;
+        var spans = transition.ChangeSpans;
+        var edits = new List<TextReplacement>(spans.Length);
+        for (int i = 0; i < spans.Length; i++)
+        {
+            var first = spans[i];
+            var last = first;
+            // Undo can put endpoints inside a newly formed CRLF. Expand to include the
+            // whole pair, merging touching edits so borrowed characters are unchanged.
+            int start = first.OldPosition - (InsideCrLf(source, first.OldPosition) ? 1 : 0);
+            int end = last.OldEnd + (InsideCrLf(source, last.OldEnd) ? 1 : 0);
+            while (i + 1 < spans.Length)
+            {
+                var next = spans[i + 1];
+                int nextStart = next.OldPosition - (InsideCrLf(source, next.OldPosition) ? 1 : 0);
+                if (nextStart > end) break;
+                last = spans[++i];
+                end = last.OldEnd + (InsideCrLf(source, last.OldEnd) ? 1 : 0);
+            }
+            int newStart = first.NewPosition - (first.OldPosition - start);
+            int newEnd = last.NewEnd + (end - last.OldEnd);
+            edits.Add(new(source.GetRangeAt(start, end - start),
+                target.GetTextInRange(target.GetRangeAt(newStart, newEnd - newStart))));
+        }
+        return edits.ToArray();
+    }
+
     private static bool InsideCrLf(IReadOnlyTextBuffer snapshot, int offset) =>
         offset > 0 && offset < snapshot.Length
         && snapshot.GetChar(offset - 1) == '\r' && snapshot.GetChar(offset) == '\n';
@@ -694,5 +623,5 @@ public class PlainTextModel
         var change = new TextModelContentChangedEventArgs(_history.CurrentVersion, transitions);
         OnContentChanged(change);
         ContentChanged?.Invoke(this, change);
-}
+    }
 }

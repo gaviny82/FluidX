@@ -73,6 +73,15 @@ public sealed record TextRecord(
 /// Changes are oriented from <see cref="Source"/> to <see cref="Target"/>.
 /// </summary>
 /// <remarks>A reverse transition swaps each span's old and new coordinates.</remarks>
+/// <param name="Source">The document state before the transition.</param>
+/// <param name="Target">The document state after the transition.</param>
+/// <param name="ChangeSpans">
+/// Changed spans of text in the document due to the action that creates this transition.<br/><br/>
+/// Valid input replacements can form CRLF pairs across their boundaries, so a span's new start or
+/// end may lie between CR and LF. Hence, these extents are not necessarily valid caret positions
+/// or replacement ranges; consumers replaying them as edits must validate any boundaries inside
+/// CRLF pairs.
+/// </param>
 public readonly record struct TextRecordTransition(TextRecord Source, TextRecord Target,
     ImmutableArray<TextChangeSpan> ChangeSpans)
 {
